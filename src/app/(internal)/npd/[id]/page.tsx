@@ -412,61 +412,10 @@ export default function NpdDetailView() {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    <div className="p-4 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                      <div>
-                         <div className="flex justify-between items-center mb-2">
-                           <h4 className="font-bold text-slate-800">Price (25%)</h4>
-                           <Badge variant="outline">Score: 8/10</Badge>
-                         </div>
-                         <p className="text-xs text-slate-500">Quoted cost vs AICM target.</p>
-                      </div>
-                      <div className="mt-4 pt-4 border-t text-sm font-medium text-blue-900 border-slate-100">
-                        Target met comfortably
-                      </div>
-                    </div>
-                    <div className="p-4 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                      <div>
-                         <div className="flex justify-between items-center mb-2">
-                           <h4 className="font-bold text-slate-800">Reliability (30%)</h4>
-                           <Badge variant="outline">Score: 9/10</Badge>
-                         </div>
-                         <p className="text-xs text-slate-500">Dimensional + Performance test pass rate.</p>
-                      </div>
-                      <div className="mt-4 pt-4 border-t text-sm font-medium text-blue-900 border-slate-100">
-                        EDOF/26/112 attached. All limits clear.
-                      </div>
-                    </div>
-                    <div className="p-4 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                      <div>
-                         <div className="flex justify-between items-center mb-2">
-                           <h4 className="font-bold text-slate-800">Time / TAT (20%)</h4>
-                           <Badge variant="outline">Score: 7/10</Badge>
-                         </div>
-                         <p className="text-xs text-slate-500">Actual TAT vs 45-day target.</p>
-                      </div>
-                      <div className="mt-4 pt-4 border-t text-sm font-medium text-blue-900 border-slate-100">
-                        System calculated: 43 Days
-                      </div>
-                    </div>
-                    <div className="p-4 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                      <div>
-                         <div className="flex justify-between items-center mb-2">
-                           <h4 className="font-bold text-slate-800">Delivery (25%)</h4>
-                           <Badge variant="outline">Score: 8/10</Badge>
-                         </div>
-                         <p className="text-xs text-slate-500">Packaging quality, docs accuracy.</p>
-                      </div>
-                      <div className="mt-4 pt-4 border-t text-sm font-medium text-blue-900 border-slate-100">
-                        Packaging intact.
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-8 flex flex-col md:flex-row items-center justify-between bg-blue-50 p-6 rounded-lg border border-blue-100 gap-6">
+                  <div className="flex flex-col md:flex-row items-center justify-between bg-blue-50 p-6 rounded-lg border border-blue-100 gap-6 mt-2">
                     <div>
-                      <p className="text-sm font-medium text-blue-800 uppercase tracking-widest">Composite Score</p>
-                      <p className="text-4xl font-extrabold text-blue-900 mt-1">8.0 <span className="text-lg text-blue-700 font-medium">/ 10</span></p>
+                      <p className="text-sm font-bold text-blue-900">Sample Evaluation Actions</p>
+                      <p className="text-xs text-blue-700 mt-1">Please review the physical sample and documentation before rendering a final decision.</p>
                     </div>
                     
                     {tqrStatus === 'pending' && (currentRole.startsWith('rnd') || currentRole === 'super_admin') ? (
