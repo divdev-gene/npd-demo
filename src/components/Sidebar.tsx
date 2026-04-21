@@ -1,15 +1,22 @@
 "use client"
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from "react"
 import { LayoutDashboard, FilePlus, Archive, CheckCircle, BarChart3, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function Sidebar() {
   const pathname = usePathname()
+  const [currentRole, setCurrentRole] = useState("rnd_user")
+
+  useEffect(() => {
+    const stored = localStorage.getItem('poc_role')
+    if (stored) setCurrentRole(stored)
+  }, [])
 
   const links = [
     { href: '/', label: 'My Pipeline Board', icon: LayoutDashboard },
-    { href: '/npd/new', label: 'Create Request', icon: FilePlus },
+    { href: '/npd/new', label: 'Create Request', icon: FilePlus, restrictedTo: ['rnd_user', 'rnd_head', 'super_admin'] },
     { href: '/dashboard/lead', label: 'Lead Dashboard', icon: BarChart3 },
     { href: '/archive', label: 'All NPDs', icon: Archive },
     { href: '/approvals', label: 'Approvals', icon: CheckCircle },
@@ -19,14 +26,11 @@ export function Sidebar() {
   return (
     <div className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white tour-sidebar">
       <div className="flex h-16 items-center px-6 border-b border-slate-200">
-        <span className="text-xl font-bold tracking-tight">
-          <span className="text-blue-600">Amber</span> 
-          <span className="text-slate-900 ml-1">NPD</span>
-        </span>
+        <img src="/amber-logo.png" alt="Amber Logo" className="h-8 w-auto object-contain" />
       </div>
       <div className="flex-1 overflow-y-auto py-4">
         <nav className="space-y-1 px-3">
-          {links.map((link) => {
+          {links.filter(link => !link.restrictedTo || link.restrictedTo.includes(currentRole)).map((link) => {
             const Icon = link.icon
             const isActive = pathname === link.href
             return (

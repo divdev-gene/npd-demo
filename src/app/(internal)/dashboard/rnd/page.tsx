@@ -25,14 +25,14 @@ export default function RndPocDashboard() {
         <h2 className="text-lg font-bold text-slate-900 mt-2">R&D View Under Construction</h2>
         <p className="text-slate-600 max-w-md">
           The Sourcing SPOC and Sourcing Lead views were prioritized for Phase 1. 
-          The PRTD Testing & Verdict queues will be implemented in subsequent phases.
+          The TQR Testing & Verdict queues will be implemented in subsequent phases.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 opacity-60">
          <Card className="shadow-none border-dashed bg-slate-50">
             <CardHeader className="pb-2">
-               <CardTitle className="text-sm flex items-center text-slate-600"><Timer className="w-4 h-4 mr-2"/> GRN Cleared - Awaiting Test</CardTitle>
+               <CardTitle className="text-sm flex items-center text-slate-600"><Timer className="w-4 h-4 mr-2"/> Sample Receipt / MRN Cleared - Awaiting Test</CardTitle>
             </CardHeader>
             <CardContent>
                <p className="text-2xl font-bold text-slate-400">14 Samples</p>

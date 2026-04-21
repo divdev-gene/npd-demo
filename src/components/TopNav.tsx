@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, Bell, AlertTriangle, FileText, CheckCircle } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 
@@ -8,24 +8,28 @@ export function TopNav() {
   const pathname = usePathname()
   const [showNotifs, setShowNotifs] = useState(false)
 
-  // Determine role based on current route
-  let currentRole = "spoc"
-  if (pathname.includes("/dashboard/lead")) {
-    currentRole = "lead"
-  } else if (pathname.includes("/dashboard/rnd")) {
-    currentRole = "rnd"
-  } else if (pathname.includes("/approvals") || pathname.includes("/archive")) {
-    currentRole = "lead" // Assume Lead if in these areas for purpose of POC
-  }
+  const [currentRole, setCurrentRole] = useState("st_one")
+
+
+
+  useEffect(() => {
+    const stored = localStorage.getItem('poc_role')
+    if (stored) setCurrentRole(stored)
+  }, [])
 
   const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newRole = e.target.value
-    if (newRole === "spoc") {
-      router.push("/")
-    } else if (newRole === "lead") {
-      router.push("/dashboard/lead")
-    } else if (newRole === "rnd") {
+    setCurrentRole(newRole)
+    localStorage.setItem('poc_role', newRole)
+    
+    if (newRole.startsWith("rnd")) {
       router.push("/dashboard/rnd")
+    } else if (newRole === "super_admin") {
+      router.push("/settings")
+    } else if (newRole === "sourcing_head") {
+      router.push("/dashboard/lead")
+    } else {
+      router.push("/")
     }
   }
 
@@ -50,9 +54,18 @@ export function TopNav() {
           onChange={handleRoleChange}
           className="text-sm rounded-md border-slate-300 py-1 pl-3 pr-8 focus:ring-blue-900 focus:border-blue-900 bg-slate-50 font-medium text-slate-700 tour-role-selector"
         >
-          <option value="spoc">SPOC (Commodity)</option>
-          <option value="lead">Sourcing Lead</option>
-          <option value="rnd">R&D Engineer</option>
+          <optgroup label="R&D Team">
+             <option value="rnd_user">R&D User</option>
+             <option value="rnd_head">R&D Head</option>
+          </optgroup>
+          <optgroup label="Sourcing Team">
+             <option value="st_one">Sourcing Team I (ST I)</option>
+             <option value="st_two">Sourcing Team II (ST II)</option>
+             <option value="sourcing_head">Sourcing Head</option>
+          </optgroup>
+          <optgroup label="Administration">
+             <option value="super_admin">Super Admin</option>
+          </optgroup>
         </select>
 
         <div className="relative tour-notifications">
@@ -86,7 +99,7 @@ export function TopNav() {
                  <div className="p-4 hover:bg-slate-50 cursor-pointer flex gap-3">
                     <div className="mt-0.5"><CheckCircle className="w-5 h-5 text-emerald-500" /></div>
                     <div>
-                       <p className="text-sm font-semibold text-slate-900 leading-tight mb-1">PRTD Verdict: Approved</p>
+                       <p className="text-sm font-semibold text-slate-900 leading-tight mb-1">TQR Verdict: Approved</p>
                        <p className="text-xs text-slate-600 line-clamp-2">R&D has fully approved the BLDC Motor Controller (NPD-FY-2026-0014) structural sample.</p>
                        <p className="text-[10px] text-slate-400 mt-1 font-medium">2 hours ago</p>
                     </div>

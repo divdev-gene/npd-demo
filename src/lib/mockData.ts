@@ -14,7 +14,7 @@ export type NPDRecord = {
   supplier: string;
   priority: string;
   gradeA: boolean;
-  prtdScore: any;
+  tqrScore: any;
   cost: number | null;
   division?: string;
 };
@@ -25,9 +25,9 @@ export const mockNPDs: NPDRecord[] = [
     itemName: "Copper Header Tube",
     itemCategory: "Commodity-Based Component Development",
     productLine: "Room Air Conditioners",
-    typeOfWork: "New Tool Development (NTD)",
+    typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Grade A",
-    stage: 6,
+    stage: 5,
     stageName: "Sample Submission",
     tatHealth: "amber",
     tatDaysRemaining: 3,
@@ -36,7 +36,7 @@ export const mockNPDs: NPDRecord[] = [
     supplier: "Tubetech India Pvt Ltd",
     priority: "Normal",
     gradeA: false,
-    prtdScore: null,
+    tqrScore: null,
     cost: null
   },
   {
@@ -44,10 +44,10 @@ export const mockNPDs: NPDRecord[] = [
     itemName: "BLDC Motor Controller",
     itemCategory: "Electronics & Electrical",
     productLine: "Commercial Air Conditioners",
-    typeOfWork: "New Tool Development (NTD)",
+    typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Commercial",
-    stage: 10,
-    stageName: "Approval / Reject / Hold",
+    stage: 8,
+    stageName: "TQR Evaluation",
     tatHealth: "green",
     tatDaysRemaining: 1,
     totalTat: 45,
@@ -55,7 +55,7 @@ export const mockNPDs: NPDRecord[] = [
     supplier: "MicroElectrix Systems",
     priority: "High",
     gradeA: true,
-    prtdScore: { p: 8, r: 9, t: 7, d: 8, composite: 8.0 },
+    tqrScore: { t: 8, q: 9, r: 8, composite: 8.3 },
     cost: 1450.0
   },
   {
@@ -74,7 +74,7 @@ export const mockNPDs: NPDRecord[] = [
     supplier: "Packwell Solutions",
     priority: "Normal",
     gradeA: false,
-    prtdScore: null,
+    tqrScore: null,
     cost: null
   },
   {
@@ -93,7 +93,7 @@ export const mockNPDs: NPDRecord[] = [
     supplier: "TUV SUD",
     priority: "Critical",
     gradeA: false,
-    prtdScore: null,
+    tqrScore: null,
     cost: null
   },
   {
@@ -101,10 +101,10 @@ export const mockNPDs: NPDRecord[] = [
     itemName: "Fan Blade Assembly",
     itemCategory: "Commodity-Based Component Development",
     productLine: "Tower ACs",
-    typeOfWork: "New Tool Development (NTD)",
+    typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Sricity RAC",
-    stage: 12,
-    stageName: "Final Price + PP Production Handover",
+    stage: 11,
+    stageName: "PP Lot Pricing",
     tatHealth: "green",
     tatDaysRemaining: 1,
     totalTat: 45,
@@ -112,7 +112,7 @@ export const mockNPDs: NPDRecord[] = [
     supplier: "AeroDynamics Plastics",
     priority: "Normal",
     gradeA: false,
-    prtdScore: { p: 9, r: 8, t: 9, d: 9, composite: 8.75 },
+    tqrScore: { t: 9, q: 8, r: 9, composite: 8.7 },
     cost: 320.5
   },
   {
@@ -123,7 +123,7 @@ export const mockNPDs: NPDRecord[] = [
     typeOfWork: "PP (Pre-Production) Repeat",
     rAndDDivision: "Rajpura Commercial",
     stage: 2,
-    stageName: "GRN & Price Confirmation",
+    stageName: "Sample Receipt / MRN & Price Confirmation",
     tatHealth: "green",
     tatDaysRemaining: 2,
     totalTat: 5,
@@ -131,7 +131,7 @@ export const mockNPDs: NPDRecord[] = [
     supplier: "MetalWorks India",
     priority: "Normal",
     gradeA: false,
-    prtdScore: null,
+    tqrScore: null,
     cost: 115.0
   },
   {
@@ -139,9 +139,9 @@ export const mockNPDs: NPDRecord[] = [
     itemName: "LED Display Panel",
     itemCategory: "Electronics & Electrical",
     productLine: "Water Dispensers",
-    typeOfWork: "New Tool Development (NTD)",
+    typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Water Purifier Division",
-    stage: 6,
+    stage: 5,
     stageName: "Sample Submission",
     tatHealth: "black",
     tatDaysRemaining: -2,
@@ -150,14 +150,14 @@ export const mockNPDs: NPDRecord[] = [
     supplier: "Shenzhen Optoelectronics",
     priority: "High",
     gradeA: true,
-    prtdScore: null,
+    tqrScore: null,
     cost: null
   }
 ];
 
 export const getStageName = (stage: number, type: string) => {
   if (type === "Engineering Change Notice (ECN)") {
-    const ecnStages = ["ECN Request Initiation", "R&D Change Validation", "Sourcing Impact Assessment", "Supplier Acknowledgement", "Sample Re-submission", "R&D Validation on Changed Parameters", "Partial PRTD", "ECN Approval", "AICM Cost Update", "ECN Closure"];
+    const ecnStages = ["ECN Request Initiation", "R&D Change Validation", "Sourcing Impact Assessment", "Supplier Acknowledgement", "Sample Re-submission", "R&D Validation on Changed Parameters", "Partial TQR", "ECN Approval", "AICM Cost Update", "ECN Closure"];
     return ecnStages[stage - 1] || "Unknown";
   }
   
@@ -168,9 +168,9 @@ export const getStageName = (stage: number, type: string) => {
 
   const ntdStages = [
     "Request Initiation", "R&D Internal Review", "NPD Sourcing Allocation", 
-    "RFD Created & Shared", "Supplier Defense", "Sample Submission",
-    "Sample Arrival & GRN", "R&D Testing", "PRTD Evaluation",
-    "Approval / Reject / Hold", "Sample Cost Structure", "Final Price + PP"
+    "Supplier Defense", "Sample Submission", "Sample Receipt / MRN",
+    "R&D Testing", "TQR Evaluation", "Sample Cost Finalization",
+    "FPA (First Part Approval)", "PP Lot Pricing"
   ];
   return ntdStages[stage - 1] || "Unknown";
 };

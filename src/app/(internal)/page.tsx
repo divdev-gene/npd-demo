@@ -9,6 +9,7 @@ import { Clock, AlertTriangle, MessageSquare, CheckCircle, Filter } from "lucide
 
 export default function PipelineBoard() {
   const [filter, setFilter] = useState("All")
+  const [refresh, setRefresh] = useState(0)
 
   // For SPOC Dashboard, we just mock "Rahul Sharma" pipeline.
   const myNPDs = mockNPDs.filter(npd => npd.spoc === "Rahul Sharma" || filter === "All")
@@ -105,7 +106,20 @@ export default function PipelineBoard() {
         {columns.map(col => {
           const columnNpds = myNPDs.filter(n => col.stages.includes(n.stage))
           return (
-            <div key={col.id} className="flex-1 min-w-[300px] max-w-[400px] bg-slate-100/50 rounded-xl p-3 flex flex-col ring-1 ring-slate-200/60 overflow-hidden">
+            <div 
+              key={col.id} 
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const id = e.dataTransfer.getData("text/plain");
+                const npd = mockNPDs.find(n => n.id === id);
+                if (npd) {
+                  npd.stage = col.stages[0];
+                  setRefresh(r => r + 1);
+                }
+              }}
+              className="flex-1 min-w-[300px] max-w-[400px] bg-slate-100/50 rounded-xl p-3 flex flex-col ring-1 ring-slate-200/60 overflow-hidden"
+            >
               <div className="flex items-center justify-between mb-3 px-1 flex-none">
                 <h3 className="text-sm font-bold text-slate-700">{col.title}</h3>
                 <span className="bg-white ring-1 ring-slate-200 text-slate-600 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm">
@@ -115,8 +129,14 @@ export default function PipelineBoard() {
               
               <div className="flex-1 overflow-y-auto space-y-3 pr-1 pb-2 scrollbar-thin">
                 {columnNpds.map(npd => (
-                  <Link href={`/npd/${npd.id}`} key={npd.id} className="block group">
-                    <Card className="border-0 shadow-[0_1px_3px_0_rgba(0,0,0,0.05)] ring-1 ring-slate-200/80 hover:ring-blue-900/30 hover:shadow-md transition-all cursor-grab active:cursor-grabbing">
+                  <div 
+                    key={npd.id}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("text/plain", npd.id)}
+                    className="cursor-grab active:cursor-grabbing"
+                  >
+                    <Link href={`/npd/${npd.id}`} className="block group">
+                      <Card className="border-0 shadow-[0_1px_3px_0_rgba(0,0,0,0.05)] ring-1 ring-slate-200/80 hover:ring-blue-900/30 hover:shadow-md transition-all">
                       <CardContent className="p-3">
                         <div className="flex justify-between items-start mb-1.5">
                           <span className="text-[11px] font-bold text-slate-500 tracking-tight">{npd.id}</span>
@@ -140,7 +160,8 @@ export default function PipelineBoard() {
                       </CardContent>
                     </Card>
                   </Link>
-                ))}
+                </div>
+              ))}
                 
                 {columnNpds.length === 0 && (
                   <div className="h-24 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-lg text-slate-400 text-xs font-medium">

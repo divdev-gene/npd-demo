@@ -3,12 +3,15 @@
 import { useState } from "react"
 import { mockNPDs } from "@/lib/mockData"
 import { Badge } from "@/components/ui/badge"
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer
+} from 'recharts';
 
 const STAGES = [
   "New Request", "SPOC Assigned", "Target Specs",
-  "RFD Shared", "Supplier Quote", "Sample Submission",
-  "GRN Completed", "R&D Inspection", "Feedback Sent",
-  "Approval Decision", "Cost Finalization", "External Push"
+  "Supplier Quote", "Sample Submission", "Sample Receipt / MRN",
+  "R&D Inspection", "TQR Evaluation", "Sample Cost Finalization",
+  "FPA Request", "PP Lot Pricing"
 ];
 
 const TAT_COLORS: Record<string, string> = {
@@ -19,10 +22,10 @@ const TAT_COLORS: Record<string, string> = {
 };
 
 const BOTTLENECK_DATA = [
-  { stage: "S6: Sample Submission", count: 42, avgDaysOver: 4 },
-  { stage: "S10: Approval Decision", count: 24, avgDaysOver: 2 },
-  { stage: "S4: RFD Shared", count: 18, avgDaysOver: 0 },
-  { stage: "S11: Cost Finalization", count: 9, avgDaysOver: 0 }
+  { stage: "S5: Sample Submission", count: 42, avgDaysOver: 4 },
+  { stage: "S8: TQR Evaluation", count: 24, avgDaysOver: 2 },
+  { stage: "S4: Supplier Quote", count: 18, avgDaysOver: 0 },
+  { stage: "S9: Sample Cost Finalization", count: 9, avgDaysOver: 0 }
 ];
 
 const SUPPLIER_HEATMAP = [
@@ -37,6 +40,33 @@ const REJECTION_PARETO = [
   { code: "MAT-08: Material Grade", count: 22 },
   { code: "DOC-03: Missing Test Cert", count: 14 },
   { code: "PKG-01: Transit Damage", count: 5 }
+];
+
+const TAT_PENDENCY_DATA = [
+  { stage: 'S1', tatAvg: 2, pending: 15 },
+  { stage: 'S2', tatAvg: 5, pending: 22 },
+  { stage: 'S3', tatAvg: 3, pending: 8 },
+  { stage: 'S4', tatAvg: 8, pending: 35 },
+  { stage: 'S5', tatAvg: 12, pending: 42 },
+  { stage: 'S6', tatAvg: 4, pending: 19 },
+];
+
+const SITE_TAT_AVG = [
+  { site: 'Rajpura A', avgTAT: 28 },
+  { site: 'Rajpura Comm', avgTAT: 34 },
+  { site: 'Jhajjhar', avgTAT: 22 },
+  { site: 'Sricity', avgTAT: 45 },
+  { site: 'Air Purifier', avgTAT: 18 },
+  { site: 'Water Purifier', avgTAT: 25 },
+];
+
+const SITE_PENDING_ST = [
+  { site: 'Rajpura A', st1: 12, st2: 18 },
+  { site: 'Rajpura Comm', st1: 8, st2: 10 },
+  { site: 'Jhajjhar', st1: 25, st2: 15 },
+  { site: 'Sricity', st1: 19, st2: 24 },
+  { site: 'Air Purifier', st1: 5, st2: 7 },
+  { site: 'Water Purifier', st1: 14, st2: 9 },
 ];
 
 // Helper Components
@@ -149,7 +179,7 @@ function SupplierHeatmapPanel({ data }: any) {
       <table className="w-full text-left border-collapse text-[10px]">
         <thead>
           <tr className="bg-slate-50 border-b border-slate-200">
-            {['Supplier', 'PRTD Score', 'Rejects', 'Total NPDs', 'TAT %'].map(h => (
+            {['Supplier', 'TQR Score', 'Rejects', 'Total NPDs', 'TAT %'].map(h => (
               <th key={h} className={`py-1.5 px-3 font-semibold text-slate-500 uppercase tracking-widest ${h !== 'Supplier' ? 'text-center' : ''}`}>{h}</th>
             ))}
           </tr>
@@ -199,8 +229,20 @@ function RejectionPareto({ data }: any) {
 }
 
 export default function LeadDashboard() {
+  const [locFilter, setLocFilter] = useState('All');
   const [vertFilter, setFilter] = useState('All');
-  const filteredNPDs = vertFilter === 'All' ? mockNPDs : mockNPDs.filter(n => n.productLine === vertFilter);
+  
+  const dashboardNPDs = locFilter === 'All' ? mockNPDs : mockNPDs.filter(n => n.rAndDDivision === locFilter);
+  const filteredNPDs = vertFilter === 'All' ? dashboardNPDs : dashboardNPDs.filter(n => 
+    n.itemCategory.includes(vertFilter) || n.typeOfWork.includes(vertFilter)
+  );
+
+  const totalNPDs = dashboardNPDs.length * 20 + 5;
+  const samplesReceived = Math.floor(totalNPDs * 0.6);
+  const approvedParts = Math.floor(totalNPDs * 0.3);
+  const rejectedRework = Math.floor(totalNPDs * 0.08);
+  const pendingApproval = Math.floor(totalNPDs * 0.15);
+  const specSheetMissing = Math.floor(totalNPDs * 0.35);
 
   const escalationList = mockNPDs.filter(n => n.tatHealth === 'black');
   const pendingChanges = [
@@ -217,14 +259,27 @@ export default function LeadDashboard() {
   return (
     <div className="max-w-[1600px] mx-auto p-4 flex flex-col gap-4 overflow-y-auto">
       
+      {/* Location Filter */}
+      <div className="flex gap-2 mb-2 items-center flex-wrap">
+        <span className="text-xs font-bold text-slate-500 uppercase">R&D Location:</span>
+        {['All', 'Rajpura Grade A', 'Rajpura Commercial', 'Jhajjhar RAC', 'Sricity RAC', 'Air Purifier Division', 'Water Purifier Division'].map(v => (
+          <button key={v} onClick={() => setLocFilter(v)} 
+            className={`px-3 py-1 rounded-sm text-xs font-semibold transition-colors border ${
+              locFilter === v ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}>
+            {v}
+          </button>
+        ))}
+      </div>
+
       {/* KPI Row */}
       <div className="flex gap-3 overflow-x-auto pb-2">
-        <KPICard label="Total Projects" value="145" sub="active NPDs" />
-        <KPICard label="Samples Received" value="89" sub="GRN completed" color="text-blue-600" />
-        <KPICard label="Approved Parts" value="45" sub="this quarter" color="text-emerald-600" />
-        <KPICard label="Rejected / Rework" value="12" sub="in re-sample loop" color="text-red-500" alert />
-        <KPICard label="Pending Approval" value="24" sub="awaiting verdict" color="text-amber-500" />
-        <KPICard label="Spec Sheet Attached" value="94 / 145" sub="Missing from 51 NPDs" color="text-amber-600" alert />
+        <KPICard label="Total Projects" value={totalNPDs} sub="active NPDs" />
+        <KPICard label="Samples Received" value={samplesReceived} sub="Sample Receipt / MRN completed" color="text-blue-600" />
+        <KPICard label="Approved Parts" value={approvedParts} sub="this quarter" color="text-emerald-600" />
+        <KPICard label="Rejected / Rework" value={rejectedRework} sub="in re-sample loop" color="text-red-500" alert />
+        <KPICard label="Pending Actions" value={pendingApproval} sub="awaiting verdict" color="text-amber-500" />
+        <KPICard label="Spec Sheet Attached" value={`${totalNPDs - specSheetMissing} / ${totalNPDs}`} sub={`Missing from ${specSheetMissing} NPDs`} color="text-amber-600" alert />
       </div>
 
       {/* TAT Heatmap */}
@@ -251,7 +306,7 @@ export default function LeadDashboard() {
           <BottleneckPanel data={BOTTLENECK_DATA} />
         </div>
         <div className="flex-[1.5] bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
-          <PanelHeader title="Supplier Performance Heatmap" right="PRTD composite · 90d" />
+          <PanelHeader title="Supplier Performance Heatmap" right="TQR composite · 90d" />
           <SupplierHeatmapPanel data={SUPPLIER_HEATMAP} />
         </div>
       </div>
@@ -266,7 +321,7 @@ export default function LeadDashboard() {
         <div className="flex-[2] flex flex-col gap-4">
           <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
             <PanelHeader title="Escalation Queue" right={<span className="text-red-600">{escalationList.length} overdue</span>} />
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
               {escalationList.length === 0 ? (
                  <div className="p-3 text-[10px] text-slate-500">No active escalations</div>
               ) : escalationList.map(e => (
@@ -287,27 +342,58 @@ export default function LeadDashboard() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
-            <PanelHeader title="External Change Approval Queue" right={<span className="text-amber-600">{pendingChanges.length} pending</span>} />
-            <div className="divide-y divide-slate-100">
-              {pendingChanges.map((c, i) => (
-                <div key={i} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50">
-                   <span className="font-mono text-[10px] font-bold text-blue-700 min-w-[100px]">{c.npd}</span>
-                   <span className="text-[10px] font-medium text-slate-500 flex-1">{c.type}</span>
-                   <span className="font-mono text-[10px] text-slate-500 line-through">{c.old}</span>
-                   <span className="text-[10px] text-slate-400">→</span>
-                   <span className="font-mono text-[10px] font-bold text-emerald-600">{c.new}</span>
-                   <span className={`text-[9px] font-bold uppercase w-16 text-right ${c.hours < 12 ? 'text-red-500' : 'text-slate-400'}`}>
-                     {c.hours}h left
-                   </span>
-                   <div className="flex gap-1ml-2 pl-2">
-                      <button className="bg-emerald-600 text-white px-2 py-0.5 rounded text-[9px] font-bold tracking-wider hover:bg-emerald-700 uppercase">Approve</button>
-                      <button className="bg-white border border-slate-200 text-slate-600 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider hover:bg-slate-50 uppercase">Reject</button>
-                   </div>
-                </div>
-              ))}
-            </div>
+      {/* Analytics Charts Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="bg-white border border-slate-200 rounded-sm shadow-sm p-4 h-72 flex flex-col">
+          <h3 className="text-xs font-bold text-slate-700 uppercase mb-4">TAT vs Pendency (By Stage)</h3>
+          <div className="flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={TAT_PENDENCY_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="stage" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <RechartsTooltip contentStyle={{ fontSize: '11px', borderRadius: '4px', border: '1px solid #e2e8f0' }} />
+                <Legend wrapperStyle={{ fontSize: '10px' }} />
+                <Bar yAxisId="left" dataKey="pending" name="Pending Count" fill="#3b82f6" radius={[2, 2, 0, 0]} barSize={15} />
+                <Line yAxisId="right" dataKey="tatAvg" name="Avg TAT (Days)" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-sm shadow-sm p-4 h-72 flex flex-col">
+          <h3 className="text-xs font-bold text-slate-700 uppercase mb-4">Site-wise Avg TAT (Days)</h3>
+          <div className="flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={SITE_TAT_AVG} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="site" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <RechartsTooltip contentStyle={{ fontSize: '11px', borderRadius: '4px', border: '1px solid #e2e8f0' }} />
+                <Line type="monotone" dataKey="avgTAT" name="Avg TAT" stroke="#10b981" strokeWidth={3} fill="#10b981" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-sm shadow-sm p-4 h-72 flex flex-col">
+          <h3 className="text-xs font-bold text-slate-700 uppercase mb-4">Sourcing Pending by Team & Site</h3>
+          <div className="flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={SITE_PENDING_ST} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="site" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <RechartsTooltip contentStyle={{ fontSize: '11px', borderRadius: '4px', border: '1px solid #e2e8f0' }} />
+                <Legend wrapperStyle={{ fontSize: '10px' }} />
+                <Bar dataKey="st1" name="ST I" stackId="a" fill="#0f172a" />
+                <Bar dataKey="st2" name="ST II" stackId="a" fill="#64748b" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
