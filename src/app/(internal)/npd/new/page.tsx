@@ -79,8 +79,12 @@ export default function NewRequestWizard() {
 
   const handleConfirmDispatch = () => {
     const year = new Date().getFullYear()
-    const seq = String(npds.length + 1).padStart(4, "0")
-    const newId = `NPD-FY-${year}-${seq}`
+    const maxSeq = npds.reduce((max, n) => {
+      const parts = n.id.split("-")
+      const num = parseInt(parts[parts.length - 1], 10)
+      return isNaN(num) ? max : Math.max(max, num)
+    }, 0)
+    const newId = `NPD-FY-${year}-${String(maxSeq + 1).padStart(4, "0")}`
     const workTypeLabel = WORK_TYPE_LABEL[typeOfWork] || typeOfWork
     const tat = TAT_MAP[typeOfWork] || 45
     const raisedBy = localStorage.getItem("poc_role") || "rnd_user"
