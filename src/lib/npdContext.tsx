@@ -20,7 +20,11 @@ export function NPDProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) setNpds(JSON.parse(stored))
+      if (stored) {
+        const parsed: NPDRecord[] = JSON.parse(stored)
+        const deduped = parsed.filter((n, i, arr) => arr.findIndex(x => x.id === n.id) === i)
+        setNpds(deduped)
+      }
     } catch {
       // fallback to mockNPDs already set
     }
