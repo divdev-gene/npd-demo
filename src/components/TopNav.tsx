@@ -8,29 +8,23 @@ export function TopNav() {
   const pathname = usePathname()
   const [showNotifs, setShowNotifs] = useState(false)
 
-  const [currentRole, setCurrentRole] = useState("st_one")
-
-
+  const [currentRole, setCurrentRole] = useState("rnd_user")
 
   useEffect(() => {
     const stored = localStorage.getItem('poc_role')
-    if (stored) setCurrentRole(stored)
+    if (stored) {
+      setCurrentRole(stored)
+    } else {
+      localStorage.setItem('poc_role', 'rnd_user')
+    }
   }, [])
 
   const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newRole = e.target.value
     setCurrentRole(newRole)
     localStorage.setItem('poc_role', newRole)
-    
-    if (newRole.startsWith("rnd")) {
-      router.push("/dashboard/rnd")
-    } else if (newRole === "super_admin") {
-      router.push("/settings")
-    } else if (newRole === "sourcing_head") {
-      router.push("/dashboard/lead")
-    } else {
-      router.push("/")
-    }
+    window.dispatchEvent(new CustomEvent('rolechange', { detail: newRole }))
+    router.push("/dashboard/lead")
   }
 
   return (
@@ -54,13 +48,12 @@ export function TopNav() {
           onChange={handleRoleChange}
           className="text-sm rounded-md border-slate-300 py-1 pl-3 pr-8 focus:ring-blue-900 focus:border-blue-900 bg-slate-50 font-medium text-slate-700 tour-role-selector"
         >
-          <optgroup label="R&D Team">
+          <optgroup label="R&D">
              <option value="rnd_user">R&D User</option>
              <option value="rnd_head">R&D Head</option>
           </optgroup>
-          <optgroup label="Sourcing Team">
-             <option value="st_one">Sourcing Team I (ST I)</option>
-             <option value="st_two">Sourcing Team II (ST II)</option>
+          <optgroup label="Sourcing">
+             <option value="sourcing_spoc">Sourcing SPOC</option>
              <option value="sourcing_head">Sourcing Head</option>
           </optgroup>
           <optgroup label="Administration">

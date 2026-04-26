@@ -17,6 +17,7 @@ export type NPDRecord = {
   tqrScore: any;
   cost: number | null;
   division?: string;
+  raisedBy?: string;
 };
 
 export const mockNPDs: NPDRecord[] = [
@@ -37,7 +38,8 @@ export const mockNPDs: NPDRecord[] = [
     priority: "Normal",
     gradeA: false,
     tqrScore: null,
-    cost: null
+    cost: null,
+    raisedBy: "rnd_user"
   },
   {
     id: "NPD-FY-2026-0014",
@@ -56,7 +58,8 @@ export const mockNPDs: NPDRecord[] = [
     priority: "High",
     gradeA: true,
     tqrScore: { t: 8, q: 9, r: 8, composite: 8.3 },
-    cost: 1450.0
+    cost: 1450.0,
+    raisedBy: "rnd_user"
   },
   {
     id: "NPD-FY-2026-0018",
@@ -75,7 +78,8 @@ export const mockNPDs: NPDRecord[] = [
     priority: "Normal",
     gradeA: false,
     tqrScore: null,
-    cost: null
+    cost: null,
+    raisedBy: "rnd_user"
   },
   {
     id: "NPD-FY-2026-0021",
@@ -94,7 +98,8 @@ export const mockNPDs: NPDRecord[] = [
     priority: "Critical",
     gradeA: false,
     tqrScore: null,
-    cost: null
+    cost: null,
+    raisedBy: "rnd_user"
   },
   {
     id: "NPD-FY-2026-0005",
@@ -113,7 +118,8 @@ export const mockNPDs: NPDRecord[] = [
     priority: "Normal",
     gradeA: false,
     tqrScore: { t: 9, q: 8, r: 9, composite: 8.7 },
-    cost: 320.5
+    cost: 320.5,
+    raisedBy: "rnd_user"
   },
   {
     id: "NPD-FY-2026-0008",
@@ -132,7 +138,8 @@ export const mockNPDs: NPDRecord[] = [
     priority: "Normal",
     gradeA: false,
     tqrScore: null,
-    cost: 115.0
+    cost: 115.0,
+    raisedBy: "rnd_user"
   },
   {
     id: "NPD-FY-2026-0027",
@@ -151,7 +158,8 @@ export const mockNPDs: NPDRecord[] = [
     priority: "High",
     gradeA: true,
     tqrScore: null,
-    cost: null
+    cost: null,
+    raisedBy: "rnd_user"
   }
 ];
 

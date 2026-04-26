@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { getStageName } from "@/lib/mockData"
 import { useNPDs } from "@/lib/npdContext"
@@ -16,9 +16,32 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search, SlidersHorizontal } from "lucide-react"
 
+const FULL_ACCESS_ROLES = ["sourcing_head", "super_admin", "rnd_head"]
+
+function getRoleLabel(role: string) {
+  if (role === "rnd_user") return "Your Requests"
+  if (role === "sourcing_spoc") return "Sourcing — Assigned NPDs"
+  return "All NPD Requests"
+}
+
 export default function ArchivePage() {
   const { npds } = useNPDs()
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentRole, setCurrentRole] = useState("rnd_user")
+
+  useEffect(() => {
+    setCurrentRole(localStorage.getItem("poc_role") || "rnd_user")
+    const onRoleChange = (e: CustomEvent) => setCurrentRole(e.detail)
+    window.addEventListener("rolechange", onRoleChange as EventListener)
+    return () => window.removeEventListener("rolechange", onRoleChange as EventListener)
+  }, [])
+
+  const visibleNPDs = (() => {
+    if (FULL_ACCESS_ROLES.includes(currentRole)) return npds
+    if (currentRole === "rnd_user") return npds.filter(n => (n.raisedBy ?? "rnd_user") === "rnd_user")
+    if (currentRole === "sourcing_spoc") return npds.filter(n => n.stage >= 2)
+    return npds
+  })()
 
   const getTatBadge = (health: string, days: number) => {
     switch (health) {
@@ -30,7 +53,7 @@ export default function ArchivePage() {
     }
   }
 
-  const filteredNPDs = npds.filter((npd) => {
+  const filteredNPDs = visibleNPDs.filter((npd) => {
     const term = searchTerm.toLowerCase()
     return (
       npd.id.toLowerCase().includes(term) ||
@@ -44,8 +67,8 @@ export default function ArchivePage() {
     <div className="max-w-[1400px] mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">All NPD Requests</h1>
-          <p className="text-sm text-slate-500">Search and filter through the entire historical and active repository.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">{getRoleLabel(currentRole)}</h1>
+          <p className="text-sm text-slate-500">Search and filter through your visible NPD repository.</p>
         </div>
       </div>
 
@@ -137,7 +160,7 @@ export default function ArchivePage() {
         {/* Pagination mock */}
         <div className="p-4 border-t border-slate-200 flex items-center justify-between text-sm text-slate-500 bg-slate-50/30">
           <div>
-            Showing <span className="font-medium text-slate-900">{filteredNPDs.length}</span> of <span className="font-medium text-slate-900">{npds.length}</span> results
+            Showing <span className="font-medium text-slate-900">{filteredNPDs.length}</span> of <span className="font-medium text-slate-900">{visibleNPDs.length}</span> results
           </div>
           <div className="flex space-x-2">
             <button className="px-3 py-1 border border-slate-200 rounded text-slate-400 cursor-not-allowed">Previous</button>

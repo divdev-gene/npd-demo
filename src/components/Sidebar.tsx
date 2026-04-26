@@ -12,10 +12,14 @@ export function Sidebar() {
   useEffect(() => {
     const stored = localStorage.getItem('poc_role')
     if (stored) setCurrentRole(stored)
+
+    const onRoleChange = (e: CustomEvent) => setCurrentRole(e.detail)
+    window.addEventListener('rolechange', onRoleChange as EventListener)
+    return () => window.removeEventListener('rolechange', onRoleChange as EventListener)
   }, [])
 
   const links = [
-    { href: '/npd/new', label: 'Create Request', icon: FilePlus, restrictedTo: ['rnd_user', 'rnd_head'] },
+    { href: '/npd/new', label: 'Create Request', icon: FilePlus, restrictedTo: ['rnd_user', 'rnd_head', 'super_admin'] },
     { href: '/dashboard/lead', label: 'Lead Dashboard', icon: BarChart3 },
     { href: '/archive', label: 'All NPDs', icon: Archive },
     { href: '/approvals', label: 'Approvals', icon: CheckCircle },
