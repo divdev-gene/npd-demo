@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card"
@@ -8,11 +8,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, Database, Code, CheckCircle2, XCircle, ArrowRight, ExternalLink } from "lucide-react"
 
+const DEFAULT_DELAY_STATUS = { "DEL-001": "pending", "DEL-002": "pending" }
+const STORAGE_KEY = "approvals_delay_status"
+
 export default function ApprovalsPage() {
-  const [delayStatus, setDelayStatus] = useState<Record<string, string>>({
-    "DEL-001": "pending",
-    "DEL-002": "pending"
-  })
+  const [delayStatus, setDelayStatus] = useState<Record<string, string>>(DEFAULT_DELAY_STATUS)
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) setDelayStatus(JSON.parse(stored))
+    } catch {}
+  }, [])
+
+  const updateDelayStatus = (key: string, value: string) => {
+    const next = { ...delayStatus, [key]: value }
+    setDelayStatus(next)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -62,8 +75,8 @@ export default function ApprovalsPage() {
                  <td className="px-6 py-5 align-top text-right">
                    {delayStatus["DEL-001"] === "pending" ? (
                      <div className="flex flex-col sm:flex-row gap-2 justify-end mt-1">
-                       <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setDelayStatus({...delayStatus, "DEL-001": "rejected"})}>Reject Extension</Button>
-                       <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setDelayStatus({...delayStatus, "DEL-001": "extended"})}>Extend Timeline</Button>
+                       <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => updateDelayStatus("DEL-001", "rejected")}>Reject Extension</Button>
+                       <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => updateDelayStatus("DEL-001", "extended")}>Extend Timeline</Button>
                      </div>
                    ) : delayStatus["DEL-001"] === "rejected" ? (
                      <Badge className="bg-red-50 text-red-700 border-red-200 mt-1"><XCircle className="w-3 h-3 mr-1"/> Rejected by Sourcing</Badge>
@@ -90,8 +103,8 @@ export default function ApprovalsPage() {
                  <td className="px-6 py-5 align-top text-right">
                    {delayStatus["DEL-002"] === "pending" ? (
                      <div className="flex flex-col sm:flex-row gap-2 justify-end mt-1">
-                       <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setDelayStatus({...delayStatus, "DEL-002": "rejected"})}>Reject Extension</Button>
-                       <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setDelayStatus({...delayStatus, "DEL-002": "extended"})}>Extend Timeline</Button>
+                       <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => updateDelayStatus("DEL-002", "rejected")}>Reject Extension</Button>
+                       <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => updateDelayStatus("DEL-002", "extended")}>Extend Timeline</Button>
                      </div>
                    ) : delayStatus["DEL-002"] === "rejected" ? (
                      <Badge className="bg-red-50 text-red-700 border-red-200 mt-1"><XCircle className="w-3 h-3 mr-1"/> Rejected by Sourcing</Badge>

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import { mockNPDs, getStageName } from "@/lib/mockData"
+import { getStageName } from "@/lib/mockData"
+import { useNPDs } from "@/lib/npdContext"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -12,9 +13,10 @@ import { CheckCircle2, Circle, CheckCircle, Clock, AlertCircle, FileText, Send, 
 export default function NpdDetailView() {
   const params = useParams()
   const npdId = params.id as string
-  
-  const npd = mockNPDs.find(n => n.id === npdId) || mockNPDs[0]
-  const [activeStage, setActiveStage] = useState(npd.stage)
+  const { npds, updateNPD } = useNPDs()
+
+  const npd = npds.find(n => n.id === npdId) || npds[0]
+  const [activeStage, setActiveStage] = useState(npd?.stage ?? 1)
   const [currentRole, setCurrentRole] = useState("st_one")
   const [tqrStatus, setTqrStatus] = useState("pending")
   const [rejectReason, setRejectReason] = useState("")
@@ -38,7 +40,11 @@ export default function NpdDetailView() {
   }))
 
   const advanceStage = () => {
-    if (activeStage < 11) setActiveStage(activeStage + 1)
+    if (activeStage < 11) {
+      const next = activeStage + 1
+      setActiveStage(next)
+      updateNPD(npdId, { stage: next, stageName: getStageName(next, npd.typeOfWork) })
+    }
   }
 
   return (

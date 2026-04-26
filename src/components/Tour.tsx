@@ -57,8 +57,10 @@ export function Tour() {
 
   if (!isMounted) return null
 
+  const JoyrideAny = Joyride as any
+
   return (
-    <Joyride
+    <JoyrideAny
       callback={handleJoyrideCallback}
       continuous
       hideCloseButton
@@ -69,12 +71,12 @@ export function Tour() {
       steps={steps}
       styles={{
         options: {
-          primaryColor: "#0f172a", // Deep Navy
+          primaryColor: "#0f172a",
           textColor: "#334155",
           zIndex: 10000,
         },
         buttonNext: {
-          backgroundColor: "#1e3a8a", // Blue 900
+          backgroundColor: "#1e3a8a",
           borderRadius: 4,
           fontSize: 14,
         },
@@ -85,7 +87,7 @@ export function Tour() {
         buttonSkip: {
           color: "#94a3b8",
         }
-      }}
+      } as any}
     />
   )
 }

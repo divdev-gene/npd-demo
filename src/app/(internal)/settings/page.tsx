@@ -6,10 +6,19 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Save, Users, ShieldCheck, Mail, Map, Settings } from "lucide-react"
+import { Save, Users, ShieldCheck, Mail, Map, Settings, RotateCcw } from "lucide-react"
 
 export default function SuperAdminPage() {
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  const handleReset = () => {
+    setResetting(true)
+    setTimeout(() => {
+      localStorage.clear()
+      window.location.reload()
+    }, 400)
+  }
 
   const handleSave = () => {
     setSaving(true)
@@ -213,6 +222,28 @@ Amber Sourcing Operations`}
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Card className="border-red-200 bg-red-50/30">
+        <CardHeader className="pb-3 border-b border-red-100">
+          <CardTitle className="text-base text-red-700 flex items-center gap-2">
+            <RotateCcw className="w-4 h-4" /> Demo Tools
+          </CardTitle>
+          <CardDescription className="text-red-600/70">
+            Resets all session data — NPD records, approvals, and role — back to the original mock state.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <Button
+            variant="outline"
+            className="border-red-300 text-red-600 hover:bg-red-100"
+            onClick={handleReset}
+            disabled={resetting}
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            {resetting ? "Resetting…" : "Reset Demo Data"}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   )
 }

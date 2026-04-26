@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from "react"
-import { LayoutDashboard, FilePlus, Archive, CheckCircle, BarChart3, Settings } from 'lucide-react'
+import { FilePlus, Archive, CheckCircle, BarChart3, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function Sidebar() {
@@ -15,7 +15,6 @@ export function Sidebar() {
   }, [])
 
   const links = [
-    { href: '/', label: 'My Pipeline Board', icon: LayoutDashboard },
     { href: '/npd/new', label: 'Create Request', icon: FilePlus, restrictedTo: ['rnd_user', 'rnd_head', 'super_admin'] },
     { href: '/dashboard/lead', label: 'Lead Dashboard', icon: BarChart3 },
     { href: '/archive', label: 'All NPDs', icon: Archive },

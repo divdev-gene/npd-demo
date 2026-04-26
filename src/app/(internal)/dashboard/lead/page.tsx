@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { mockNPDs } from "@/lib/mockData"
+import { useNPDs } from "@/lib/npdContext"
 import { Badge } from "@/components/ui/badge"
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer
@@ -229,11 +229,12 @@ function RejectionPareto({ data }: any) {
 }
 
 export default function LeadDashboard() {
+  const { npds } = useNPDs()
   const [locFilter, setLocFilter] = useState('All');
   const [vertFilter, setFilter] = useState('All');
-  
-  const dashboardNPDs = locFilter === 'All' ? mockNPDs : mockNPDs.filter(n => n.rAndDDivision === locFilter);
-  const filteredNPDs = vertFilter === 'All' ? dashboardNPDs : dashboardNPDs.filter(n => 
+
+  const dashboardNPDs = locFilter === 'All' ? npds : npds.filter(n => n.rAndDDivision === locFilter);
+  const filteredNPDs = vertFilter === 'All' ? dashboardNPDs : dashboardNPDs.filter(n =>
     n.itemCategory.includes(vertFilter) || n.typeOfWork.includes(vertFilter)
   );
 
@@ -244,7 +245,7 @@ export default function LeadDashboard() {
   const pendingApproval = Math.floor(totalNPDs * 0.15);
   const specSheetMissing = Math.floor(totalNPDs * 0.35);
 
-  const escalationList = mockNPDs.filter(n => n.tatHealth === 'black');
+  const escalationList = npds.filter(n => n.tatHealth === 'black');
   const pendingChanges = [
     { npd: "NPD-2026-0008", type: "AICM Cost", old: "₹115.00", new: "₹118.50", hours: 4 },
     { npd: "NPD-2026-0012", type: "Pricing Portal", old: "₹310.00", new: "₹308.00", hours: 24 }

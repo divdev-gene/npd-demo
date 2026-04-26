@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Wrench, FileEdit, Globe, ShieldCheck, Repeat, ChevronRight, ArrowLeft, Mail, CheckCircle } from "lucide-react"
+import { useNPDs } from "@/lib/npdContext"
+import { getStageName } from "@/lib/mockData"
 
 const WORK_TYPES = [
   { id: "NCD", title: "New Component Development (NCD)", desc: "Brand new component. Full 12-stage lifecycle.", icon: Wrench },
@@ -18,21 +20,79 @@ const WORK_TYPES = [
   { id: "PP", title: "PP (Pre-Production) Repeat", desc: "First production quantity of validated part.", icon: Repeat },
 ]
 
+const SPOC_NAME_MAP: Record<string, string> = {
+  "Plastics": "Rahul Sharma",
+  "Sheet Metal": "Karan Mehta",
+  "Electronics & Electrical": "Priya Rajan",
+  "Compressors & Motors": "Amit Kumar",
+  "Packaging & Others": "Varun Joshi",
+  "Others": "General Sourcing"
+}
+
+const TAT_MAP: Record<string, number> = {
+  "NCD": 45,
+  "ECN": 30,
+  "Localisation": 45,
+  "Compliance": 30,
+  "PP": 5,
+}
+
+const WORK_TYPE_LABEL: Record<string, string> = {
+  "NCD": "New Component Development (NCD)",
+  "ECN": "Engineering Change Notice (ECN)",
+  "Localisation": "Localisation",
+  "Compliance": "Compliance / Regulatory",
+  "PP": "PP (Pre-Production) Repeat",
+}
+
 export default function NewRequestWizard() {
   const router = useRouter()
+  const { addNPD, npds } = useNPDs()
   const [step, setStep] = useState(1)
   const [typeOfWork, setTypeOfWork] = useState("")
   const [commodity, setCommodity] = useState("")
+  const [productLine, setProductLine] = useState("")
+  const [rAndDDivision, setRAndDDivision] = useState("")
+  const [itemName, setItemName] = useState("")
   const [excelAttached, setExcelAttached] = useState(false)
   const [hasRevision, setHasRevision] = useState(false)
 
   const spocMap: Record<string, string> = {
     "Plastics": "Rahul Sharma (Plastics SPOC)",
-    "Sheet Metal": "Karan Sir (Sheet Metal SPOC)",
+    "Sheet Metal": "Karan Mehta (Sheet Metal SPOC)",
     "Electronics & Electrical": "Priya Rajan (Electronics SPOC)",
-    "Compressors & Motors": "Amit K. (Compressors SPOC)",
-    "Packaging & Others": "Varun J. (Packaging SPOC)",
+    "Compressors & Motors": "Amit Kumar (Compressors SPOC)",
+    "Packaging & Others": "Varun Joshi (Packaging SPOC)",
     "Others": "General Sourcing (Unassigned)"
+  }
+
+  const handleConfirmDispatch = () => {
+    const year = new Date().getFullYear()
+    const seq = String(npds.length + 1).padStart(4, "0")
+    const newId = `NPD-FY-${year}-${seq}`
+    const workTypeLabel = WORK_TYPE_LABEL[typeOfWork] || typeOfWork
+    const tat = TAT_MAP[typeOfWork] || 45
+
+    addNPD({
+      id: newId,
+      itemName: itemName || "New Component",
+      itemCategory: commodity || "Others",
+      productLine: productLine || "Unspecified",
+      typeOfWork: workTypeLabel,
+      rAndDDivision: rAndDDivision || "Unspecified",
+      stage: 1,
+      stageName: getStageName(1, workTypeLabel),
+      tatHealth: "green",
+      tatDaysRemaining: tat,
+      totalTat: tat,
+      spoc: SPOC_NAME_MAP[commodity] || "General Sourcing",
+      supplier: "Pending Assignment",
+      priority: "Normal",
+      gradeA: false,
+      tqrScore: null,
+      cost: null,
+    })
+    router.push('/archive')
   }
 
   const renderStep1 = () => (
@@ -82,7 +142,7 @@ export default function NewRequestWizard() {
           
           <div className="space-y-2">
             <Label>Product Line <span className="text-red-500">*</span></Label>
-            <Select>
+            <Select onValueChange={(v: string | null) => { if (v) setProductLine(v) }}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select product line" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="RAC (SAC/WAAC/CAC)">RAC (SAC/WAAC/CAC)</SelectItem>
@@ -96,7 +156,7 @@ export default function NewRequestWizard() {
 
           <div className="space-y-2">
             <Label>Plant / R&D Division <span className="text-red-500">*</span></Label>
-            <Select>
+            <Select onValueChange={(v: string | null) => { if (v) setRAndDDivision(v) }}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select R&D Division" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Rajpura RAC">Rajpura RAC</SelectItem>
@@ -112,12 +172,12 @@ export default function NewRequestWizard() {
 
           <div className="space-y-2">
             <Label>Item Name <span className="text-red-500">*</span></Label>
-            <Input placeholder="e.g. Copper Header Tube" />
+            <Input placeholder="e.g. Copper Header Tube" value={itemName} onChange={e => setItemName(e.target.value)} />
           </div>
 
           <div className="space-y-2">
             <Label>Commodity/Category (Routes to SPOC) <span className="text-red-500">*</span></Label>
-            <Select onValueChange={setCommodity}>
+            <Select onValueChange={(v: string | null) => { if (v) setCommodity(v) }}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select category" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Plastics">Plastics</SelectItem>
@@ -262,10 +322,11 @@ export default function NewRequestWizard() {
              <p>A new {typeOfWork} project has been initiated by the R&D division requiring immediate sourcing allocation.</p>
              
              <div className="p-4 bg-slate-50 rounded border border-slate-100">
-                <p className="mb-1"><strong>Item Name:</strong> Pending (Generated from form input)</p>
+                <p className="mb-1"><strong>Item Name:</strong> {itemName || 'N/A'}</p>
                 <p className="mb-1"><strong>Commodity Category:</strong> {commodity || 'N/A'}</p>
-                <p className="mb-1"><strong>R&D Division:</strong> Generated from form input</p>
-                <p><strong>System Temporary ID:</strong> NPD-FY-2026-TEMP</p>
+                <p className="mb-1"><strong>R&D Division:</strong> {rAndDDivision || 'N/A'}</p>
+                <p className="mb-1"><strong>Product Line:</strong> {productLine || 'N/A'}</p>
+                <p><strong>Assigned SPOC:</strong> {SPOC_NAME_MAP[commodity] || 'General Sourcing'}</p>
              </div>
              
              <p className="mt-4"><strong>Attached Documents & Specifications:</strong></p>
@@ -284,10 +345,8 @@ export default function NewRequestWizard() {
         <Button variant="outline" onClick={() => setStep(2)}>
           <ArrowLeft className="w-4 h-4 mr-2" /> Back to Editor
         </Button>
-        <Button 
-          onClick={() => {
-            router.push('/')
-          }}
+        <Button
+          onClick={handleConfirmDispatch}
           className="bg-emerald-600 hover:bg-emerald-700 text-white px-8"
         >
           <CheckCircle className="w-4 h-4 mr-2" /> Confirm & Dispatch Email

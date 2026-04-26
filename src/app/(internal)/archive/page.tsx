@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { mockNPDs, getStageName } from "@/lib/mockData"
+import { getStageName } from "@/lib/mockData"
+import { useNPDs } from "@/lib/npdContext"
 import {
   Table,
   TableBody,
@@ -16,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Search, SlidersHorizontal } from "lucide-react"
 
 export default function ArchivePage() {
+  const { npds } = useNPDs()
   const [searchTerm, setSearchTerm] = useState("")
 
   const getTatBadge = (health: string, days: number) => {
@@ -28,7 +30,7 @@ export default function ArchivePage() {
     }
   }
 
-  const filteredNPDs = mockNPDs.filter((npd) => {
+  const filteredNPDs = npds.filter((npd) => {
     const term = searchTerm.toLowerCase()
     return (
       npd.id.toLowerCase().includes(term) ||
@@ -135,7 +137,7 @@ export default function ArchivePage() {
         {/* Pagination mock */}
         <div className="p-4 border-t border-slate-200 flex items-center justify-between text-sm text-slate-500 bg-slate-50/30">
           <div>
-            Showing <span className="font-medium text-slate-900">{filteredNPDs.length}</span> of <span className="font-medium text-slate-900">{mockNPDs.length}</span> results
+            Showing <span className="font-medium text-slate-900">{filteredNPDs.length}</span> of <span className="font-medium text-slate-900">{npds.length}</span> results
           </div>
           <div className="flex space-x-2">
             <button className="px-3 py-1 border border-slate-200 rounded text-slate-400 cursor-not-allowed">Previous</button>
