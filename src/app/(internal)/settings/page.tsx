@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -11,6 +11,11 @@ import { Save, Users, ShieldCheck, Mail, Map, Settings, RotateCcw } from "lucide
 export default function SuperAdminPage() {
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [currentRole, setCurrentRole] = useState("")
+
+  useEffect(() => {
+    setCurrentRole(localStorage.getItem("poc_role") || "")
+  }, [])
 
   const handleReset = () => {
     setResetting(true)
@@ -223,7 +228,7 @@ Amber Sourcing Operations`}
         </TabsContent>
       </Tabs>
 
-      <Card className="border-red-200 bg-red-50/30">
+      {currentRole === "super_admin" && <Card className="border-red-200 bg-red-50/30">
         <CardHeader className="pb-3 border-b border-red-100">
           <CardTitle className="text-base text-red-700 flex items-center gap-2">
             <RotateCcw className="w-4 h-4" /> Demo Tools
@@ -243,7 +248,7 @@ Amber Sourcing Operations`}
             {resetting ? "Resetting…" : "Reset Demo Data"}
           </Button>
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   )
 }

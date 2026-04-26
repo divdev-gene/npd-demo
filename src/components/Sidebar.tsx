@@ -15,7 +15,7 @@ export function Sidebar() {
   }, [])
 
   const links = [
-    { href: '/npd/new', label: 'Create Request', icon: FilePlus, restrictedTo: ['rnd_user', 'rnd_head', 'super_admin'] },
+    { href: '/npd/new', label: 'Create Request', icon: FilePlus, restrictedTo: ['rnd_user', 'rnd_head'] },
     { href: '/dashboard/lead', label: 'Lead Dashboard', icon: BarChart3 },
     { href: '/archive', label: 'All NPDs', icon: Archive },
     { href: '/approvals', label: 'Approvals', icon: CheckCircle },
