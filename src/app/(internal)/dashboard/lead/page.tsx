@@ -117,20 +117,18 @@ function StageLegend({ stageCounts }: { stageCounts: number[] }) {
                     <div key={sn}
                       className="flex flex-col items-center gap-1 px-2.5 py-2 rounded-lg border"
                       style={{ background: phase.bg, borderColor: phase.border, minWidth: 68 }}>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
-                          style={{ backgroundColor: phase.color }}>
-                          {sn}
-                        </div>
-                        {count > 0 && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
-                            style={{ backgroundColor: phase.color }}>
-                            {count}
-                          </span>
-                        )}
+                      {/* Stage number circle */}
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                        style={{ backgroundColor: phase.color }}>
+                        {sn}
                       </div>
+                      {/* Stage name */}
                       <span className="text-[9px] font-semibold text-center leading-tight" style={{ color: phase.color }}>
                         {STAGE_SHORT[sn - 1]}
+                      </span>
+                      {/* NPD count — separated below name */}
+                      <span className="text-[10px] font-bold" style={{ color: count > 0 ? phase.color : "#cbd5e1" }}>
+                        {count} NPD{count !== 1 ? "s" : ""}
                       </span>
                     </div>
                   )
