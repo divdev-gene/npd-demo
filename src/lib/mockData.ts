@@ -18,6 +18,181 @@ export type NPDRecord = {
   cost: number | null;
   division?: string;
   raisedBy?: string;
+  driveLink?: string;
+};
+
+export const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"];
+
+export type VendorRecord = {
+  name: string;
+  tier: "Tier 1" | "Tier 2" | "Tier 3";
+  commodityMatch: number;
+  auditScore: number;
+  certifications: string[];
+  status: "verified" | "audit_overdue" | "new";
+};
+
+export const VENDOR_CATALOG: Record<string, VendorRecord[]> = {
+  // ── Used by mock NPDs (full category names) ────────────────────────────────
+  "Commodity-Based Component Development": [
+    { name: "Tubetech India Pvt Ltd",      tier: "Tier 1", commodityMatch: 100, auditScore: 94, certifications: ["ISO 9001:2015", "IATF 16949"],          status: "verified"      },
+    { name: "MetalWorks India",             tier: "Tier 1", commodityMatch: 92,  auditScore: 89, certifications: ["ISO 9001:2015"],                        status: "verified"      },
+    { name: "Alpha Component Systems",      tier: "Tier 2", commodityMatch: 86,  auditScore: 78, certifications: ["ISO 9001:2015"],                        status: "verified"      },
+    { name: "National Metalfabs",           tier: "Tier 2", commodityMatch: 81,  auditScore: 71, certifications: [],                                       status: "audit_overdue" },
+    { name: "Supreme Plastics Ltd",         tier: "Tier 2", commodityMatch: 74,  auditScore: 65, certifications: [],                                       status: "new"           },
+  ],
+  "Compliance & Regulatory": [
+    { name: "TUV SUD India",               tier: "Tier 1", commodityMatch: 100, auditScore: 99, certifications: ["NABL Accredited", "ISO 17025"],         status: "verified"      },
+    { name: "Bureau Veritas",              tier: "Tier 1", commodityMatch: 97,  auditScore: 97, certifications: ["NABL Accredited", "ISO 17025"],         status: "verified"      },
+    { name: "SGS India Pvt Ltd",           tier: "Tier 2", commodityMatch: 91,  auditScore: 88, certifications: ["Accredited Body"],                     status: "verified"      },
+  ],
+
+  // ── Used by new-request form (commodity short names) ──────────────────────
+  "Plastics": [
+    { name: "Supreme Plastics Ltd",         tier: "Tier 1", commodityMatch: 96,  auditScore: 91, certifications: ["ISO 9001:2015", "IATF 16949"],          status: "verified"      },
+    { name: "Hindustan Polymers Pvt Ltd",   tier: "Tier 1", commodityMatch: 88,  auditScore: 83, certifications: ["ISO 9001:2015"],                        status: "verified"      },
+    { name: "Pioneer Moulding Co.",         tier: "Tier 2", commodityMatch: 79,  auditScore: 72, certifications: ["ISO 9001:2015"],                        status: "verified"      },
+    { name: "Unique Polymers India",        tier: "Tier 3", commodityMatch: 65,  auditScore: 58, certifications: [],                                       status: "new"           },
+  ],
+  "Sheet Metal": [
+    { name: "MetalWorks India",             tier: "Tier 1", commodityMatch: 97,  auditScore: 92, certifications: ["ISO 9001:2015", "IATF 16949"],          status: "verified"      },
+    { name: "Precision Stampings Ltd",      tier: "Tier 1", commodityMatch: 91,  auditScore: 86, certifications: ["ISO 9001:2015"],                        status: "verified"      },
+    { name: "Alpha Component Systems",      tier: "Tier 2", commodityMatch: 82,  auditScore: 74, certifications: ["ISO 9001:2015"],                        status: "verified"      },
+    { name: "Bright Steel Works",           tier: "Tier 2", commodityMatch: 70,  auditScore: 63, certifications: [],                                       status: "audit_overdue" },
+  ],
+  "Electronics & Electrical": [
+    { name: "MicroElectrix Systems",        tier: "Tier 1", commodityMatch: 98,  auditScore: 91, certifications: ["ISO 9001:2015", "UL Listed", "CE Mark"], status: "verified"     },
+    { name: "Shenzhen Optoelectronics",     tier: "Tier 2", commodityMatch: 90,  auditScore: 83, certifications: ["CE Mark", "RoHS Compliant"],            status: "verified"      },
+    { name: "Synapse Electronics Pvt Ltd",  tier: "Tier 2", commodityMatch: 76,  auditScore: 68, certifications: [],                                       status: "audit_overdue" },
+    { name: "Rexnord Controls India",       tier: "Tier 3", commodityMatch: 67,  auditScore: 59, certifications: [],                                       status: "new"           },
+  ],
+  "Compressors & Motors": [
+    { name: "Tecumseh India Ltd",           tier: "Tier 1", commodityMatch: 99,  auditScore: 95, certifications: ["ISO 9001:2015", "IATF 16949"],          status: "verified"      },
+    { name: "Emerson Electric India",       tier: "Tier 1", commodityMatch: 96,  auditScore: 93, certifications: ["ISO 9001:2015", "UL Listed"],           status: "verified"      },
+    { name: "GD Midea Compressor Co.",      tier: "Tier 2", commodityMatch: 88,  auditScore: 81, certifications: ["CE Mark"],                             status: "verified"      },
+    { name: "Kirloskar Electric Ltd",       tier: "Tier 2", commodityMatch: 83,  auditScore: 76, certifications: ["ISO 9001:2015"],                        status: "verified"      },
+  ],
+  "Packaging & Others": [
+    { name: "Packwell Solutions",           tier: "Tier 1", commodityMatch: 96,  auditScore: 88, certifications: ["ISO 9001:2015", "FSC Certified"],       status: "verified"      },
+    { name: "PrintPack Industries",         tier: "Tier 2", commodityMatch: 84,  auditScore: 75, certifications: ["ISO 9001:2015"],                        status: "verified"      },
+    { name: "GreenPack Co.",                tier: "Tier 3", commodityMatch: 70,  auditScore: 62, certifications: [],                                       status: "new"           },
+  ],
+  "Others": [
+    { name: "MultiSource India Pvt Ltd",    tier: "Tier 2", commodityMatch: 72,  auditScore: 67, certifications: [],                                       status: "new"           },
+    { name: "General Component Suppliers",  tier: "Tier 3", commodityMatch: 60,  auditScore: 55, certifications: [],                                       status: "new"           },
+  ],
+};
+
+export type FormQuestion = {
+  id: string;
+  label: string;
+  type: "text" | "number" | "date" | "select" | "file" | "textarea";
+  required: boolean;
+  options?: string[];
+};
+
+export const SUPPLIER_FORM_DEFAULTS: FormQuestion[] = [
+  { id: "q1",  label: "Dispatch Date",                           type: "date",     required: true  },
+  { id: "q2",  label: "Number of Samples",                       type: "number",   required: true  },
+  { id: "q3",  label: "Unit Cost per Piece (₹)",                 type: "number",   required: true  },
+  { id: "q4",  label: "Tooling Cost (₹)",                        type: "number",   required: false },
+  { id: "q5",  label: "Primary Packaging Cost (₹/unit)",         type: "number",   required: false },
+  { id: "q6",  label: "Secondary Packaging Cost (₹/unit)",       type: "number",   required: false },
+  { id: "q7",  label: "Transit Packaging Cost (₹/unit)",         type: "number",   required: false },
+  { id: "q8",  label: "Estimated Transport Cost per Unit (₹)",   type: "number",   required: false },
+  { id: "q9",  label: "Confirmed MOQ",                           type: "number",   required: true  },
+  { id: "q10", label: "Payment Terms",                           type: "select",   required: true,
+    options: ["30 Days Credit", "60 Days Credit", "90 Days Credit", "LC", "Advance Payment"] },
+  { id: "q11", label: "Delivery Lead Time (days)",               type: "number",   required: false },
+  { id: "q12", label: "Quality Certificates & Test Reports",     type: "file",     required: true  },
+];
+
+export const SUPPLIER_FORM_KEY      = "supplier_form_config_v1";
+export const SUPPLIER_DOCS_KEY      = "supplier_submitted_docs_v1";
+
+export type SupplierDoc = {
+  fileName:    string;
+  questionLabel: string;
+  submittedAt: string;
+  sizeMB:      string;
+  submittedBy: string;
+};
+
+export type VendorQuotation = {
+  vendorName:   string;
+  tier:         string;
+  status:       "submitted" | "pending";
+  unitCost:     number | null;
+  toolingCost:  number | null;
+  dispatchDate: string | null;
+  sampleQty:    number | null;
+  moq:          number | null;
+  paymentTerms: string | null;
+  leadTimeDays: number | null;
+  submittedAt:  string | null;
+};
+
+export const VENDOR_QUOTE_APPROVALS_KEY = "vendor_quote_approvals_v1";
+export const ENQUIRY_SENT_KEY           = "enquiry_sent_vendors_v1";
+export const LIVE_QUOTATIONS_KEY        = "live_quotations_v1";
+
+export type LiveQuotation = {
+  vendorName:         string;
+  status:             "submitted" | "re_negotiation";
+  formValues:         Record<string, string>;
+  submittedAt:        string;
+  revisionCount:      number;
+  reNegotiationMsg?:  string;
+  reNegotiationAt?:   string;
+};
+
+export const MOCK_VENDOR_QUOTATIONS: Record<string, VendorQuotation[]> = {
+  "NPD-FY-2026-0012": [
+    { vendorName: "Tubetech India Pvt Ltd",   tier: "Tier 1", status: "submitted", unitCost: 285, toolingCost: 0,   dispatchDate: "15 May 2026", sampleQty: 5, moq: 5000, paymentTerms: "90 Days Credit", leadTimeDays: 21, submittedAt: "14 Apr 2026" },
+    { vendorName: "Alpha Component Systems",  tier: "Tier 2", status: "submitted", unitCost: 310, toolingCost: 500, dispatchDate: "20 May 2026", sampleQty: 3, moq: 3000, paymentTerms: "60 Days Credit", leadTimeDays: 25, submittedAt: "15 Apr 2026" },
+    { vendorName: "National Metalfabs",       tier: "Tier 2", status: "pending",   unitCost: null, toolingCost: null, dispatchDate: null, sampleQty: null, moq: null, paymentTerms: null, leadTimeDays: null, submittedAt: null },
+  ],
+  "NPD-FY-2026-0014": [
+    { vendorName: "MicroElectrix Systems",    tier: "Tier 1", status: "submitted", unitCost: 1380, toolingCost: 0,    dispatchDate: "10 May 2026", sampleQty: 10, moq: 1000, paymentTerms: "90 Days Credit", leadTimeDays: 18, submittedAt: "18 Apr 2026" },
+    { vendorName: "Shenzhen Optoelectronics", tier: "Tier 2", status: "submitted", unitCost: 1290, toolingCost: 2000, dispatchDate: "22 May 2026", sampleQty: 8,  moq: 2000, paymentTerms: "LC",             leadTimeDays: 35, submittedAt: "19 Apr 2026" },
+    { vendorName: "Synapse Electronics Pvt Ltd", tier: "Tier 2", status: "pending", unitCost: null, toolingCost: null, dispatchDate: null, sampleQty: null, moq: null, paymentTerms: null, leadTimeDays: null, submittedAt: null },
+  ],
+  "NPD-FY-2026-0027": [
+    { vendorName: "Shenzhen Optoelectronics", tier: "Tier 2", status: "submitted", unitCost: 870, toolingCost: 1500, dispatchDate: "28 May 2026", sampleQty: 6, moq: 1500, paymentTerms: "LC",             leadTimeDays: 30, submittedAt: "22 Apr 2026" },
+    { vendorName: "MicroElectrix Systems",    tier: "Tier 1", status: "pending",   unitCost: null, toolingCost: null, dispatchDate: null, sampleQty: null, moq: null, paymentTerms: null, leadTimeDays: null, submittedAt: null },
+    { vendorName: "Rexnord Controls India",   tier: "Tier 3", status: "pending",   unitCost: null, toolingCost: null, dispatchDate: null, sampleQty: null, moq: null, paymentTerms: null, leadTimeDays: null, submittedAt: null },
+  ],
+  "NPD-FY-2026-0018": [
+    { vendorName: "Packwell Solutions",       tier: "Tier 1", status: "submitted", unitCost: 48, toolingCost: 0, dispatchDate: "12 May 2026", sampleQty: 20, moq: 10000, paymentTerms: "60 Days Credit", leadTimeDays: 14, submittedAt: "24 Apr 2026" },
+    { vendorName: "PrintPack Industries",     tier: "Tier 2", status: "submitted", unitCost: 42, toolingCost: 0, dispatchDate: "18 May 2026", sampleQty: 15, moq: 8000,  paymentTerms: "60 Days Credit", leadTimeDays: 18, submittedAt: "25 Apr 2026" },
+  ],
+};
+
+export const MOCK_SUPPLIER_DOCS: Record<string, SupplierDoc[]> = {
+  "NPD-FY-2026-0012": [
+    { fileName: "ISO_9001_2015_Certificate.pdf",          questionLabel: "Quality Certificates & Test Reports", submittedAt: "14 Apr 2026", sizeMB: "2.3", submittedBy: "Tubetech India Pvt Ltd" },
+    { fileName: "Material_Test_Report_CopperTube_Q1.pdf", questionLabel: "Quality Certificates & Test Reports", submittedAt: "14 Apr 2026", sizeMB: "1.1", submittedBy: "Tubetech India Pvt Ltd" },
+  ],
+  "NPD-FY-2026-0014": [
+    { fileName: "CE_Mark_Certificate_BLDC.pdf",         questionLabel: "Quality Certificates & Test Reports", submittedAt: "18 Apr 2026", sizeMB: "3.2", submittedBy: "MicroElectrix Systems"   },
+    { fileName: "UL_Listing_Cert_Controller.pdf",       questionLabel: "Quality Certificates & Test Reports", submittedAt: "18 Apr 2026", sizeMB: "1.8", submittedBy: "MicroElectrix Systems"   },
+    { fileName: "Sample_Test_Report_Rev2.pdf",          questionLabel: "Quality Certificates & Test Reports", submittedAt: "20 Apr 2026", sizeMB: "4.5", submittedBy: "MicroElectrix Systems"   },
+    { fileName: "Dimensional_Inspection_Report.xlsx",   questionLabel: "Quality Certificates & Test Reports", submittedAt: "21 Apr 2026", sizeMB: "0.8", submittedBy: "Shenzhen Optoelectronics"},
+  ],
+  "NPD-FY-2026-0005": [
+    { fileName: "ISO_9001_Certificate_AeroDyn.pdf",     questionLabel: "Quality Certificates & Test Reports", submittedAt: "10 Mar 2026", sizeMB: "2.1", submittedBy: "AeroDynamics Plastics"   },
+    { fileName: "IATF_16949_Certificate.pdf",           questionLabel: "Quality Certificates & Test Reports", submittedAt: "10 Mar 2026", sizeMB: "1.9", submittedBy: "AeroDynamics Plastics"   },
+    { fileName: "FPA_Approval_Dimensional_Report.pdf",  questionLabel: "Quality Certificates & Test Reports", submittedAt: "25 Mar 2026", sizeMB: "6.2", submittedBy: "AeroDynamics Plastics"   },
+    { fileName: "PP_Lot_Pricing_Sheet_v3.xlsx",         questionLabel: "Quality Certificates & Test Reports", submittedAt: "15 Apr 2026", sizeMB: "0.5", submittedBy: "AeroDynamics Plastics"   },
+  ],
+  "NPD-FY-2026-0027": [
+    { fileName: "CE_RoHS_Certificate_LEDPanel.pdf",     questionLabel: "Quality Certificates & Test Reports", submittedAt: "22 Apr 2026", sizeMB: "2.7", submittedBy: "Shenzhen Optoelectronics" },
+  ],
+  "NPD-FY-2026-0018": [
+    { fileName: "ISO_9001_Packwell.pdf",                questionLabel: "Quality Certificates & Test Reports", submittedAt: "24 Apr 2026", sizeMB: "1.8", submittedBy: "Packwell Solutions"       },
+    { fileName: "FSC_Certificate_Packwell.pdf",         questionLabel: "Quality Certificates & Test Reports", submittedAt: "24 Apr 2026", sizeMB: "0.9", submittedBy: "Packwell Solutions"       },
+    { fileName: "ISO_9001_PrintPack.pdf",               questionLabel: "Quality Certificates & Test Reports", submittedAt: "25 Apr 2026", sizeMB: "1.4", submittedBy: "PrintPack Industries"     },
+  ],
 };
 
 export const mockNPDs: NPDRecord[] = [
@@ -39,7 +214,8 @@ export const mockNPDs: NPDRecord[] = [
     gradeA: false,
     tqrScore: null,
     cost: null,
-    raisedBy: "rnd_user"
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-copper-header-tube"
   },
   {
     id: "NPD-FY-2026-0014",
@@ -49,17 +225,18 @@ export const mockNPDs: NPDRecord[] = [
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Commercial",
     stage: 8,
-    stageName: "TQR Evaluation",
+    stageName: "FPA (First Part Approval)",
     tatHealth: "green",
     tatDaysRemaining: 1,
     totalTat: 45,
-    spoc: "Aditi Verma",
+    spoc: "Priya Rajan",
     supplier: "MicroElectrix Systems",
     priority: "High",
     gradeA: true,
     tqrScore: { t: 8, q: 9, r: 8, composite: 8.3 },
     cost: 1450.0,
-    raisedBy: "rnd_user"
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-bldc-motor-controller"
   },
   {
     id: "NPD-FY-2026-0018",
@@ -73,13 +250,14 @@ export const mockNPDs: NPDRecord[] = [
     tatHealth: "red",
     tatDaysRemaining: 0,
     totalTat: 5,
-    spoc: "Sandeep Kumar",
+    spoc: "Varun Joshi",
     supplier: "Packwell Solutions",
     priority: "Normal",
     gradeA: false,
     tqrScore: null,
     cost: null,
-    raisedBy: "rnd_user"
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-transit-packaging"
   },
   {
     id: "NPD-FY-2026-0021",
@@ -93,13 +271,14 @@ export const mockNPDs: NPDRecord[] = [
     tatHealth: "green",
     tatDaysRemaining: 12,
     totalTat: 30,
-    spoc: "Priya Singh",
-    supplier: "TUV SUD",
+    spoc: "Priya Rajan",
+    supplier: "TUV SUD India",
     priority: "Critical",
     gradeA: false,
     tqrScore: null,
     cost: null,
-    raisedBy: "rnd_user"
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-wpc-certification"
   },
   {
     id: "NPD-FY-2026-0005",
@@ -108,7 +287,7 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Tower ACs",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Sricity RAC",
-    stage: 11,
+    stage: 10,
     stageName: "PP Lot Pricing",
     tatHealth: "green",
     tatDaysRemaining: 1,
@@ -119,7 +298,8 @@ export const mockNPDs: NPDRecord[] = [
     gradeA: false,
     tqrScore: { t: 9, q: 8, r: 9, composite: 8.7 },
     cost: 320.5,
-    raisedBy: "rnd_user"
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-fan-blade-assembly"
   },
   {
     id: "NPD-FY-2026-0008",
@@ -129,7 +309,7 @@ export const mockNPDs: NPDRecord[] = [
     typeOfWork: "PP (Pre-Production) Repeat",
     rAndDDivision: "Rajpura Commercial",
     stage: 2,
-    stageName: "Sample Receipt / MRN & Price Confirmation",
+    stageName: "R&D Internal Review",
     tatHealth: "green",
     tatDaysRemaining: 2,
     totalTat: 5,
@@ -139,7 +319,8 @@ export const mockNPDs: NPDRecord[] = [
     gradeA: false,
     tqrScore: null,
     cost: 115.0,
-    raisedBy: "rnd_user"
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-compressor-heat-shield"
   },
   {
     id: "NPD-FY-2026-0027",
@@ -153,32 +334,40 @@ export const mockNPDs: NPDRecord[] = [
     tatHealth: "black",
     tatDaysRemaining: -2,
     totalTat: 45,
-    spoc: "Aditi Verma",
+    spoc: "Priya Rajan",
     supplier: "Shenzhen Optoelectronics",
     priority: "High",
     gradeA: true,
     tqrScore: null,
     cost: null,
-    raisedBy: "rnd_user"
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-led-display-panel"
   }
 ];
 
 export const getStageName = (stage: number, type: string) => {
   if (type === "Engineering Change Notice (ECN)") {
-    const ecnStages = ["ECN Request Initiation", "R&D Change Validation", "Sourcing Impact Assessment", "Supplier Acknowledgement", "Sample Re-submission", "R&D Validation on Changed Parameters", "Partial TQR", "ECN Approval", "AICM Cost Update", "ECN Closure"];
+    const ecnStages = [
+      "ECN Request Initiation", "R&D Change Validation", "Sourcing Impact Assessment",
+      "Supplier Acknowledgement", "Sample Re-submission", "R&D Validation on Changed Parameters",
+      "Partial TQR", "ECN Approval", "AICM Cost Update", "ECN Closure"
+    ];
     return ecnStages[stage - 1] || "Unknown";
   }
-  
+
   if (type === "Compliance / Regulatory") {
-    const compStages = ["Initiation", "Evaluation", "Lab Assignment", "Document Submission", "Certification Verification", "Closure"];
+    const compStages = [
+      "Initiation", "Evaluation", "Lab Assignment",
+      "Document Submission", "Certification Verification", "Closure"
+    ];
     return compStages[stage - 1] || "Unknown";
   }
 
   const ntdStages = [
-    "Request Initiation", "R&D Internal Review", "NPD Sourcing Allocation", 
+    "Request Initiation", "R&D Internal Review", "NPD Sourcing Allocation",
     "Supplier Defense", "Sample Submission", "Sample Receipt / MRN",
-    "R&D Testing", "TQR Evaluation", "Sample Cost Finalization",
-    "FPA (First Part Approval)", "PP Lot Pricing"
+    "R&D Evaluation", "FPA (First Part Approval)", "Sample Cost Finalization",
+    "PP Lot Pricing"
   ];
   return ntdStages[stage - 1] || "Unknown";
 };

@@ -96,8 +96,8 @@ export default function NewRequestWizard() {
       productLine: productLine || "Unspecified",
       typeOfWork: workTypeLabel,
       rAndDDivision: rAndDDivision || "Unspecified",
-      stage: 1,
-      stageName: getStageName(1, workTypeLabel),
+      stage: 3,
+      stageName: getStageName(3, workTypeLabel),
       tatHealth: "green",
       tatDaysRemaining: tat,
       totalTat: tat,
@@ -108,6 +108,7 @@ export default function NewRequestWizard() {
       tqrScore: null,
       cost: null,
       raisedBy,
+      driveLink: driveLink || undefined,
     })
     router.push('/archive')
   }
