@@ -77,9 +77,9 @@ const SPOCS = [
 // ── Helpers ────────────────────────────────────────────────────────────────
 function PanelHeader({ title, right }: { title: string; right?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50">
-      <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">{title}</span>
-      {right && <span className="text-[10px] font-medium text-slate-500">{right}</span>}
+    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100" style={{ background: "#FAFAFA" }}>
+      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em]">{title}</span>
+      {right && <span className="text-[10px] font-medium text-slate-400">{right}</span>}
     </div>
   )
 }
@@ -91,7 +91,7 @@ function TATDot({ health, size = 6 }: { health: string; size?: number }) {
 // ── Stage Legend ───────────────────────────────────────────────────────────
 function StageLegend({ stageCounts }: { stageCounts: number[] }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+    <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
       <PanelHeader
         title="NPD Stage Reference"
         right={<span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">LIVE COUNTS</span>}
@@ -213,7 +213,7 @@ function FunnelStrip({ steps }: {
   steps: { label: string; value: number; pct?: string; color: string }[]
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-sm shadow-sm p-3">
+    <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-3">
       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Sourcing Funnel</span>
       <div className="flex items-center gap-0 mt-2">
         {steps.map((s, i) => (
@@ -441,7 +441,7 @@ export default function LeadDashboard() {
   }))
 
   return (
-    <div className="max-w-[1600px] mx-auto p-4 flex flex-col gap-4 overflow-y-auto">
+    <div className="max-w-[1600px] mx-auto flex flex-col gap-4">
 
       {/* ── Filters ─────────────────────────────────────────────────────── */}
       <div className="flex gap-4 flex-wrap items-center">
@@ -449,8 +449,8 @@ export default function LeadDashboard() {
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mr-1">Location:</span>
           {["All","Rajpura Grade A","Rajpura Commercial","Jhajjhar RAC","Sricity RAC","Air Purifier Division","Water Purifier Division"].map(v => (
             <button key={v} onClick={() => setLocFilter(v)}
-              className={`px-2.5 py-1 rounded-sm text-[10px] font-semibold border transition-colors ${
-                locFilter === v ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-colors ${
+                locFilter === v ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
               }`}>{v}</button>
           ))}
         </div>
@@ -458,8 +458,8 @@ export default function LeadDashboard() {
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mr-1">Vertical:</span>
           {["All","Commodity","Electrical","Compliance","Packaging"].map(v => (
             <button key={v} onClick={() => setVertFilter(v)}
-              className={`px-2.5 py-1 rounded-sm text-[10px] font-semibold border transition-colors ${
-                vertFilter === v ? "bg-slate-200 text-slate-800 border-slate-300" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-colors ${
+                vertFilter === v ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
               }`}>{v}</button>
           ))}
         </div>
@@ -468,7 +468,7 @@ export default function LeadDashboard() {
       {/* ── Charts Row ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Live stage distribution */}
-        <div className="bg-white border border-slate-200 rounded-sm shadow-sm p-4 h-64 flex flex-col">
+        <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Stage Distribution</h3>
             <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">LIVE</span>
@@ -494,7 +494,7 @@ export default function LeadDashboard() {
         </div>
 
         {/* TAT vs Pendency */}
-        <div className="bg-white border border-slate-200 rounded-sm shadow-sm p-4 h-64 flex flex-col">
+        <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
           <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">TAT vs Pendency (by Stage)</h3>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
@@ -513,7 +513,7 @@ export default function LeadDashboard() {
         </div>
 
         {/* Site-wise TAT */}
-        <div className="bg-white border border-slate-200 rounded-sm shadow-sm p-4 h-64 flex flex-col">
+        <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
           <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">Site-wise Avg TAT (Days)</h3>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
@@ -533,7 +533,7 @@ export default function LeadDashboard() {
       <StageLegend stageCounts={stageCounts} />
 
       {/* ── TAT Heatmap ──────────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
         <PanelHeader title="TAT Heatmap — Active NPDs by Stage" right={
           <div className="flex gap-1">
             {["All","Commodity","Electrical","Compliance","Packaging"].map(v => (
@@ -583,13 +583,13 @@ export default function LeadDashboard() {
 
       {/* ── Middle Row ───────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+        <div className="flex-1 bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
           <PanelHeader title="Stage Bottleneck Analysis" right="live" />
           {bottleneckData.length > 0
             ? <BottleneckPanel data={bottleneckData} />
             : <div className="p-4 text-[10px] text-slate-400 italic">No bottlenecks — all stages clear.</div>}
         </div>
-        <div className="flex-[1.5] bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+        <div className="flex-[1.5] bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
           <PanelHeader title="Supplier Performance Heatmap" right="TQR composite · 90d" />
           <SupplierHeatmapPanel />
         </div>
@@ -597,11 +597,11 @@ export default function LeadDashboard() {
 
       {/* ── Bottom Row ───────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+        <div className="flex-1 bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
           <PanelHeader title="Rejection Root-Cause Pareto" right="89 total" />
           <RejectionPareto />
         </div>
-        <div className="flex-[2] bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+        <div className="flex-[2] bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
           <PanelHeader title="Escalation Queue"
             right={<span className={escalationList.length > 0 ? "text-red-600" : "text-slate-400"}>{escalationList.length} overdue</span>} />
           <div className="divide-y divide-slate-100 max-h-52 overflow-y-auto">
@@ -622,7 +622,7 @@ export default function LeadDashboard() {
       </div>
 
       {/* ── SPOC Compliance ──────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden mb-4">
+      <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden mb-4">
         <PanelHeader title="45-Day Sample Compliance by Vertical" />
         <div className="flex gap-4 p-3 overflow-x-auto">
           {SPOCS.map(sp => {

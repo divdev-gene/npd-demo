@@ -1,36 +1,36 @@
 "use client"
 import { useState, useEffect, useRef } from 'react'
-import { Search, Bell, AlertTriangle, FileText, CheckCircle, ChevronDown } from 'lucide-react'
+import { Search, Bell, AlertTriangle, FileText, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 
 const ROLE_GROUPS = [
   {
     label: "R&D",
     roles: [
-      { value: "rnd_user",      name: "R&D User",      area: "New Requests" },
-      { value: "rnd_head",      name: "R&D Head",       area: "All R&D" },
+      { value: "rnd_user", name: "R&D User",     area: "New Requests" },
+      { value: "rnd_head", name: "R&D Head",      area: "All R&D" },
     ]
   },
   {
     label: "Sourcing SPOCs",
     roles: [
-      { value: "Rahul Sharma",  name: "Rahul Sharma",   area: "Plastics" },
-      { value: "Karan Mehta",   name: "Karan Mehta",    area: "Sheet Metal" },
-      { value: "Priya Rajan",   name: "Priya Rajan",    area: "Electronics & Electrical" },
-      { value: "Amit Kumar",    name: "Amit Kumar",     area: "Compressors & Motors" },
-      { value: "Varun Joshi",   name: "Varun Joshi",    area: "Packaging & Others" },
+      { value: "Rahul Sharma", name: "Rahul Sharma", area: "Plastics" },
+      { value: "Karan Mehta",  name: "Karan Mehta",  area: "Sheet Metal" },
+      { value: "Priya Rajan",  name: "Priya Rajan",  area: "Electronics & Electrical" },
+      { value: "Amit Kumar",   name: "Amit Kumar",   area: "Compressors & Motors" },
+      { value: "Varun Joshi",  name: "Varun Joshi",  area: "Packaging & Others" },
     ]
   },
   {
-    label: "Sourcing Leadership",
+    label: "Leadership",
     roles: [
-      { value: "sourcing_head", name: "Sourcing Head",  area: "All NPDs" },
+      { value: "sourcing_head", name: "Sourcing Head", area: "All NPDs" },
     ]
   },
   {
     label: "Administration",
     roles: [
-      { value: "super_admin",   name: "Super Admin",    area: "Full Access" },
+      { value: "super_admin", name: "Super Admin", area: "Full Access" },
     ]
   },
 ]
@@ -41,14 +41,23 @@ function getInitials(name: string) {
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)
 }
 
-function getRoleColor(value: string) {
-  if (value.startsWith("rnd")) return "bg-violet-600"
-  if (value === "sourcing_head") return "bg-blue-900"
-  if (value === "super_admin") return "bg-slate-700"
+function getRoleBg(value: string) {
+  if (value.startsWith("rnd"))       return "bg-violet-600"
+  if (value === "sourcing_head")     return "bg-blue-800"
+  if (value === "super_admin")       return "bg-slate-700"
   return "bg-teal-600"
 }
 
 const NOTIF_COUNT = 3
+
+const PAGE_LABELS: Record<string, { label: string; sub?: string }> = {
+  "/dashboard/lead": { label: "Lead Dashboard",  sub: "Sourcing intelligence overview" },
+  "/dashboard/rnd":  { label: "R&D Dashboard",   sub: "Engineering team view" },
+  "/archive":        { label: "All NPDs",         sub: "NPD repository" },
+  "/npd/new":        { label: "Create Request",   sub: "Initiate a new NPD" },
+  "/approvals":      { label: "Approvals",        sub: "Pending actions" },
+  "/settings":       { label: "Settings",         sub: "System configuration" },
+}
 
 export function TopNav() {
   const router   = useRouter()
@@ -82,80 +91,87 @@ export function TopNav() {
     router.push("/dashboard/lead")
   }
 
-  const active = ALL_ROLES.find(r => r.value === currentRole) ?? ALL_ROLES[0]
-
-  // page label from pathname
-  const PAGE_LABELS: Record<string, string> = {
-    "/dashboard/lead": "Lead Dashboard",
-    "/dashboard/rnd":  "R&D Dashboard",
-    "/archive":        "All NPDs",
-    "/npd/new":        "Create Request",
-    "/approvals":      "Approvals",
-    "/settings":       "Settings",
-  }
-  const pageLabel = PAGE_LABELS[pathname] ?? (pathname.startsWith("/npd/") ? "NPD Detail" : "")
+  const active   = ALL_ROLES.find(r => r.value === currentRole) ?? ALL_ROLES[0]
+  const pageMeta = PAGE_LABELS[pathname] ?? (pathname.startsWith("/npd/") ? { label: "NPD Detail", sub: "Record view" } : { label: "" })
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-5 relative z-50">
+    <header className="flex h-14 items-center justify-between border-b border-slate-100 bg-white px-5 relative z-50 shrink-0">
 
-      {/* Left — breadcrumb */}
-      <div className="flex items-center gap-2 min-w-[160px]">
-        {pageLabel && (
-          <span className="text-sm font-semibold text-slate-700 tracking-tight">{pageLabel}</span>
+      {/* Left — page title */}
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-[13px] font-semibold text-slate-800 tracking-tight truncate">{pageMeta.label}</span>
+        {pageMeta.sub && (
+          <>
+            <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />
+            <span className="text-[12px] text-slate-400 truncate hidden sm:block">{pageMeta.sub}</span>
+          </>
         )}
       </div>
 
       {/* Centre — search */}
-      <div className="flex flex-1 justify-center px-6 max-w-xl mx-auto">
+      <div className="flex flex-1 justify-center px-8 max-w-md mx-auto">
         <div className="relative w-full">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           <input
             type="text"
-            className="block w-full rounded-lg border-0 py-1.5 pl-9 pr-14 text-slate-900 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-900 text-sm bg-slate-50"
-            placeholder="Search NPD ID, part, supplier…"
+            className="block w-full rounded-lg border-0 py-1.5 pl-9 pr-12 text-[13px] text-slate-800 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-slate-900 bg-slate-50/70 outline-none"
+            placeholder="Search NPD, part, supplier…"
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400 bg-white border border-slate-200 rounded px-1.5 py-0.5 leading-none select-none">⌘K</span>
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 bg-white border border-slate-200 rounded px-1 py-0.5 leading-none select-none tracking-wider">⌘K</span>
         </div>
       </div>
 
-      {/* Right — role pill + bell */}
-      <div className="flex items-center gap-3 min-w-[160px] justify-end">
+      {/* Right — role + bell */}
+      <div className="flex items-center gap-2 min-w-0 justify-end">
 
         {/* Role switcher */}
         <div ref={roleRef} className="relative tour-role-selector">
           <button
             onClick={() => setShowRolePicker(v => !v)}
-            className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors border ${showRolePicker ? 'bg-slate-100 border-slate-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+            className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all border ${
+              showRolePicker
+                ? 'bg-slate-100 border-slate-200 shadow-inner'
+                : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+            }`}
           >
-            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-white text-[10px] font-bold shrink-0 ${getRoleColor(currentRole)}`}>
+            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-white text-[10px] font-bold shrink-0 ${getRoleBg(currentRole)}`}>
               {getInitials(active.name)}
             </span>
-            <span className="hidden sm:block text-slate-700 max-w-[120px] truncate">{active.name}</span>
-            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showRolePicker ? 'rotate-180' : ''}`} />
+            <span className="hidden sm:block text-slate-700 max-w-[110px] truncate">{active.name}</span>
+            <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-150 ${showRolePicker ? 'rotate-180' : ''}`} />
           </button>
 
           {showRolePicker && (
-            <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white shadow-xl ring-1 ring-slate-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute right-0 mt-2 w-60 rounded-xl bg-white shadow-2xl shadow-slate-200/80 ring-1 ring-slate-100 overflow-hidden z-50">
+              <div className="px-3 py-2.5 border-b border-slate-100 bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Switch Persona</p>
+              </div>
               {ROLE_GROUPS.map(group => (
                 <div key={group.label}>
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100">
+                  <div className="px-3 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-[0.12em] bg-slate-50/50 border-b border-slate-50">
                     {group.label}
                   </div>
                   {group.roles.map(role => (
                     <button
                       key={role.value}
                       onClick={() => switchRole(role.value)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors ${currentRole === role.value ? 'bg-blue-50' : ''}`}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                        currentRole === role.value ? 'bg-slate-900' : 'hover:bg-slate-50'
+                      }`}
                     >
-                      <span className={`flex items-center justify-center w-7 h-7 rounded-full text-white text-[10px] font-bold shrink-0 ${getRoleColor(role.value)}`}>
+                      <span className={`flex items-center justify-center w-7 h-7 rounded-full text-white text-[10px] font-bold shrink-0 ${getRoleBg(role.value)}`}>
                         {getInitials(role.name)}
                       </span>
-                      <div className="min-w-0">
-                        <p className={`text-sm font-semibold leading-tight truncate ${currentRole === role.value ? 'text-blue-900' : 'text-slate-800'}`}>{role.name}</p>
-                        <p className="text-[11px] text-slate-400 truncate">{role.area}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-[12px] font-semibold leading-tight truncate ${currentRole === role.value ? 'text-white' : 'text-slate-800'}`}>
+                          {role.name}
+                        </p>
+                        <p className={`text-[10px] truncate ${currentRole === role.value ? 'text-slate-400' : 'text-slate-400'}`}>
+                          {role.area}
+                        </p>
                       </div>
                       {currentRole === role.value && (
-                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                       )}
                     </button>
                   ))}
@@ -168,55 +184,56 @@ export function TopNav() {
         {/* Notifications */}
         <div ref={notifRef} className="relative tour-notifications">
           <button
-            type="button"
             onClick={() => setShowNotifs(v => !v)}
-            className={`relative rounded-lg p-1.5 transition-colors ${showNotifs ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+            className={`relative rounded-lg p-2 transition-colors ${
+              showNotifs ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
+            }`}
           >
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 flex items-center justify-center h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold border-2 border-white leading-none">
+            <Bell className="h-4 w-4" />
+            <span className="absolute top-1 right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold border-[1.5px] border-white leading-none">
               {NOTIF_COUNT}
             </span>
           </button>
 
           {showNotifs && (
-            <div className="absolute right-0 mt-1.5 w-80 rounded-xl bg-white shadow-xl ring-1 ring-slate-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+            <div className="absolute right-0 mt-2 w-80 rounded-xl bg-white shadow-2xl shadow-slate-200/80 ring-1 ring-slate-100 overflow-hidden z-50">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-slate-900 text-sm">Notifications</h3>
-                  <span className="bg-red-100 text-red-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{NOTIF_COUNT}</span>
+                  <p className="text-[13px] font-bold text-slate-900">Notifications</p>
+                  <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">{NOTIF_COUNT} new</span>
                 </div>
-                <span className="text-xs font-semibold text-blue-600 cursor-pointer hover:underline">Mark all read</span>
+                <button className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors">
+                  Mark all read
+                </button>
               </div>
-              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                <div className="p-4 hover:bg-slate-50 cursor-pointer flex gap-3">
-                  <div className="mt-0.5 shrink-0"><AlertTriangle className="w-4 h-4 text-red-500" /></div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900 leading-tight mb-0.5">NPD-FY-2026-0018 TAT Breach</p>
-                    <p className="text-xs text-slate-500 line-clamp-2">Transit Packaging SLA breached Stage 3. Overdue by 0 days.</p>
-                    <p className="text-[10px] text-slate-400 mt-1 font-medium">10 mins ago</p>
-                  </div>
-                </div>
-                <div className="p-4 hover:bg-slate-50 cursor-pointer flex gap-3">
-                  <div className="mt-0.5 shrink-0"><CheckCircle className="w-4 h-4 text-emerald-500" /></div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900 leading-tight mb-0.5">TQR Verdict: Approved</p>
-                    <p className="text-xs text-slate-500 line-clamp-2">BLDC Motor Controller (NPD-FY-2026-0014) structural sample approved.</p>
-                    <p className="text-[10px] text-slate-400 mt-1 font-medium">2 hours ago</p>
-                  </div>
-                </div>
-                <div className="p-4 hover:bg-slate-50 cursor-pointer flex gap-3">
-                  <div className="mt-0.5 shrink-0"><FileText className="w-4 h-4 text-blue-500" /></div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900 leading-tight mb-0.5">New Pricing Upload</p>
-                    <p className="text-xs text-slate-500 line-clamp-2">Tubetech India uploaded costing for Copper Header Tube.</p>
-                    <p className="text-[10px] text-slate-400 mt-1 font-medium">Yesterday</p>
-                  </div>
-                </div>
+              <div className="max-h-72 overflow-y-auto">
+                {[
+                  { icon: AlertTriangle, color: "text-red-500", bg: "bg-red-50", title: "NPD-FY-2026-0018 TAT Breach", body: "Transit Packaging SLA breached Stage 3. Overdue.", time: "10 mins ago" },
+                  { icon: CheckCircle,  color: "text-emerald-500", bg: "bg-emerald-50", title: "TQR Verdict: Approved", body: "BLDC Motor Controller structural sample approved.", time: "2 hours ago" },
+                  { icon: FileText,     color: "text-blue-500", bg: "bg-blue-50", title: "New Pricing Upload", body: "Tubetech India uploaded costing for Copper Header Tube.", time: "Yesterday" },
+                ].map((n, i) => {
+                  const Icon = n.icon
+                  return (
+                    <div key={i} className="flex gap-3 px-4 py-3.5 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 transition-colors">
+                      <div className={`mt-0.5 w-7 h-7 rounded-lg ${n.bg} flex items-center justify-center shrink-0`}>
+                        <Icon className={`w-3.5 h-3.5 ${n.color}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-semibold text-slate-900 leading-tight mb-0.5">{n.title}</p>
+                        <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">{n.body}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-medium">{n.time}</p>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-              <div className="p-3 border-t border-slate-100 bg-slate-50 text-center">
-                <span className="text-xs font-semibold text-blue-600 cursor-pointer hover:underline" onClick={() => { setShowNotifs(false); router.push("/settings") }}>
+              <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/50 text-center">
+                <button
+                  onClick={() => { setShowNotifs(false); router.push("/settings") }}
+                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                >
                   Configure alerts in Settings
-                </span>
+                </button>
               </div>
             </div>
           )}

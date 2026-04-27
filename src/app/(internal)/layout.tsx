@@ -10,7 +10,7 @@ export default function InternalLayout({
 }) {
   return (
     <NPDProvider>
-      <div className="flex h-screen bg-slate-50 overflow-hidden">
+      <div className="flex h-screen overflow-hidden" style={{ background: "#F2F4F7" }}>
         <Tour />
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">

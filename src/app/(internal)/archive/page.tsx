@@ -7,35 +7,26 @@ import { useNPDs } from "@/lib/npdContext"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Search, AlertTriangle, Star, Activity, Layers } from "lucide-react"
+import { Search, AlertTriangle, Star, Activity, Layers, Filter } from "lucide-react"
 
 const FULL_ACCESS_ROLES = ["sourcing_head", "super_admin", "rnd_head"]
-const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"]
+const SPOC_NAMES        = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"]
 
 const TYPE_FILTERS = ["All", "NCD", "ECN", "Compliance", "PP"] as const
 type TypeFilter = typeof TYPE_FILTERS[number]
 
-const TAT_ROW: Record<string, string> = {
-  green: "",
-  amber: "bg-amber-100/70",
-  red:   "bg-red-100/70",
-  black: "bg-red-200/80",
+const TAT_ACCENT: Record<string, string> = {
+  green: "#10B981",
+  amber: "#F59E0B",
+  red:   "#EF4444",
+  black: "#DC2626",
 }
 
-const TAT_CHIP: Record<string, string> = {
-  green: "bg-emerald-100 text-emerald-800",
-  amber: "bg-amber-100 text-amber-800",
-  red:   "bg-red-100 text-red-700",
-  black: "bg-red-600 text-white",
-}
-
-const TAT_DOT: Record<string, string> = {
-  green: "bg-emerald-500",
-  amber: "bg-amber-500",
-  red:   "bg-red-500",
-  black: "bg-white animate-pulse",
+const TAT_LABEL: Record<string, string> = {
+  green: "On Track",
+  amber: "At Risk",
+  red:   "Due Today",
+  black: "Overdue",
 }
 
 function getRoleLabel(role: string) {
@@ -44,27 +35,32 @@ function getRoleLabel(role: string) {
   return "All NPD Requests"
 }
 
-function StageBar({ stage, total = 10 }: { stage: number; total?: number }) {
+function StageProgress({ stage, total = 10 }: { stage: number; total?: number }) {
+  const pct = Math.round((stage / total) * 100)
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex gap-[2px]">
-        {Array.from({ length: total }).map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 w-3 rounded-sm ${i < stage ? "bg-blue-900" : "bg-slate-200"}`}
-          />
-        ))}
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold text-slate-500 tabular-nums">{stage}/{total}</span>
+        <span className="text-[10px] font-bold text-slate-400">{pct}%</span>
       </div>
-      <span className="text-[10px] font-bold text-slate-500 tabular-nums">{stage}/{total}</span>
+      <div className="h-1 rounded-full bg-slate-100 overflow-hidden w-28">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{
+            width: `${pct}%`,
+            background: stage === 10 ? "#10B981" : stage >= 7 ? "#8B5CF6" : "#1E40AF",
+          }}
+        />
+      </div>
     </div>
   )
 }
 
 export default function ArchivePage() {
   const { npds } = useNPDs()
-  const [searchTerm,   setSearchTerm]   = useState("")
-  const [typeFilter,   setTypeFilter]   = useState<TypeFilter>("All")
-  const [currentRole,  setCurrentRole]  = useState("rnd_user")
+  const [searchTerm,  setSearchTerm]  = useState("")
+  const [typeFilter,  setTypeFilter]  = useState<TypeFilter>("All")
+  const [currentRole, setCurrentRole] = useState("rnd_user")
 
   useEffect(() => {
     setCurrentRole(localStorage.getItem("poc_role") || "rnd_user")
@@ -81,10 +77,10 @@ export default function ArchivePage() {
   })()
 
   const typeFiltered = typeFilter === "All" ? visibleNPDs : visibleNPDs.filter(n => {
-    if (typeFilter === "NCD") return n.typeOfWork.includes("NCD") || n.typeOfWork.includes("New Component")
-    if (typeFilter === "ECN") return n.typeOfWork.includes("ECN") || n.typeOfWork.includes("Engineering Change")
+    if (typeFilter === "NCD")        return n.typeOfWork.includes("NCD") || n.typeOfWork.includes("New Component")
+    if (typeFilter === "ECN")        return n.typeOfWork.includes("ECN") || n.typeOfWork.includes("Engineering Change")
     if (typeFilter === "Compliance") return n.typeOfWork.includes("Compliance")
-    if (typeFilter === "PP") return n.typeOfWork.includes("PP")
+    if (typeFilter === "PP")         return n.typeOfWork.includes("PP")
     return true
   })
 
@@ -98,206 +94,197 @@ export default function ArchivePage() {
     )
   })
 
-  // KPIs
-  const total    = visibleNPDs.length
-  const active   = visibleNPDs.filter(n => n.stage < 10).length
-  const overdue  = visibleNPDs.filter(n => n.tatHealth === "black" || n.tatHealth === "red").length
-  const gradeA   = visibleNPDs.filter(n => n.gradeA).length
-
+  const total   = visibleNPDs.length
+  const active  = visibleNPDs.filter(n => n.stage < 10).length
+  const overdue = visibleNPDs.filter(n => n.tatHealth === "black" || n.tatHealth === "red").length
+  const gradeA  = visibleNPDs.filter(n => n.gradeA).length
   const showRaisedBy = FULL_ACCESS_ROLES.includes(currentRole)
+
+  const kpis = [
+    { label: "Total NPDs",     value: total,  icon: Layers,        color: "#1E40AF", bg: "#EFF6FF" },
+    { label: "Active",         value: active, icon: Activity,      color: "#059669", bg: "#ECFDF5" },
+    { label: "Overdue / Risk", value: overdue,icon: AlertTriangle,  color: overdue > 0 ? "#DC2626" : "#64748B", bg: overdue > 0 ? "#FEF2F2" : "#F8FAFC", alert: overdue > 0 },
+    { label: "Grade A",        value: gradeA, icon: Star,          color: "#7C3AED", bg: "#F5F3FF" },
+  ]
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-5">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{getRoleLabel(currentRole)}</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Search and filter through your visible NPD repository.</p>
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-[22px] font-bold tracking-tight text-slate-900">{getRoleLabel(currentRole)}</h1>
+          <p className="text-[13px] text-slate-500 mt-0.5">Search and filter through your visible NPD repository.</p>
+        </div>
+        <span className="text-[11px] font-semibold text-slate-400">{total} total records</span>
       </div>
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-            <Layers className="w-4 h-4 text-blue-700" />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total</p>
-            <p className="text-xl font-bold text-slate-900 leading-tight">{total}</p>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-            <Activity className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active</p>
-            <p className="text-xl font-bold text-slate-900 leading-tight">{active}</p>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-          <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-4 h-4 text-red-500" />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Overdue / At Risk</p>
-            <p className={`text-xl font-bold leading-tight ${overdue > 0 ? "text-red-600" : "text-slate-900"}`}>{overdue}</p>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-          <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center shrink-0">
-            <Star className="w-4 h-4 text-purple-600" />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Grade A</p>
-            <p className="text-xl font-bold text-slate-900 leading-tight">{gradeA}</p>
-          </div>
-        </div>
+        {kpis.map((k, i) => {
+          const Icon = k.icon
+          return (
+            <div key={i} className="bg-white border border-slate-100 rounded-xl px-4 py-3.5 flex items-center gap-3 shadow-sm">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: k.bg }}>
+                <Icon className="w-4 h-4" style={{ color: k.color }} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{k.label}</p>
+                <p className="text-xl font-bold leading-tight" style={{ color: k.alert ? k.color : "#0F172A" }}>{k.value}</p>
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {/* Table card */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
 
         {/* Toolbar */}
-        <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <Input
-                placeholder="Search ID, item, supplier, SPOC…"
-                className="pl-8 bg-slate-50 border-slate-200 text-sm h-8"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <span className="text-xs text-slate-400 ml-auto">
-              {filteredNPDs.length} of {visibleNPDs.length} results
-            </span>
+        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search ID, item, supplier, SPOC…"
+              className="w-full pl-9 pr-3 py-1.5 text-[13px] text-slate-800 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 placeholder:text-slate-400"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
           </div>
-
-          {/* Filter pills */}
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
             {TYPE_FILTERS.map(f => (
               <button
                 key={f}
                 onClick={() => setTypeFilter(f)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-                  typeFilter === f
-                    ? "bg-blue-900 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
+                className="px-3 py-1 rounded-lg text-[11px] font-semibold transition-all"
+                style={{
+                  background: typeFilter === f ? "#0F172A" : "#F1F5F9",
+                  color: typeFilter === f ? "#FFFFFF" : "#64748B",
+                }}
               >
                 {f}
               </button>
             ))}
           </div>
+          <span className="ml-auto text-[11px] text-slate-400 font-medium whitespace-nowrap">
+            {filteredNPDs.length} of {visibleNPDs.length}
+          </span>
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-b border-slate-200">
-                <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">NPD ID</TableHead>
-                <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Item</TableHead>
-                <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Type</TableHead>
-                <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Supplier</TableHead>
-                <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Progress</TableHead>
-                <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">TAT</TableHead>
-                <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">SPOC</TableHead>
-                {showRaisedBy && <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Raised By</TableHead>}
+              <TableRow className="border-b border-slate-100" style={{ background: "#FAFAFA" }}>
+                <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3 pl-5">NPD ID</TableHead>
+                <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">Item</TableHead>
+                <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">Type</TableHead>
+                <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">Supplier</TableHead>
+                <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">Progress</TableHead>
+                <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">TAT Status</TableHead>
+                <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">SPOC</TableHead>
+                {showRaisedBy && <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">Raised By</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredNPDs.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={showRaisedBy ? 8 : 7} className="py-20 text-center">
-                    <div className="flex flex-col items-center gap-2 text-slate-400">
-                      <Layers className="w-8 h-8 opacity-30" />
-                      <p className="text-sm font-medium">No NPDs found</p>
-                      <p className="text-xs">Try adjusting your search or filter</p>
+                    <div className="flex flex-col items-center gap-2">
+                      <Layers className="w-8 h-8 text-slate-200" />
+                      <p className="text-[13px] font-semibold text-slate-400">No NPDs found</p>
+                      <p className="text-[12px] text-slate-400">Try adjusting your search or filter</p>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredNPDs.map(npd => (
-                  <TableRow
-                    key={npd.id}
-                    className={`cursor-pointer group transition-colors ${
-                      npd.tatHealth === "black" ? TAT_ROW.black + " hover:bg-red-300/80"   :
-                      npd.tatHealth === "red"   ? TAT_ROW.red   + " hover:bg-red-200/80"   :
-                      npd.tatHealth === "amber" ? TAT_ROW.amber + " hover:bg-amber-200/80" :
-                      "hover:bg-blue-50/40"
-                    }`}
-                  >
-                    <TableCell className={`font-medium border-l-4 ${
-                      npd.tatHealth === "black" ? "border-l-red-600"   :
-                      npd.tatHealth === "red"   ? "border-l-red-400"   :
-                      npd.tatHealth === "amber" ? "border-l-amber-400" :
-                      "border-l-transparent"
-                    }`}>
-                      <Link href={`/npd/${npd.id}`} className="text-blue-700 hover:underline font-mono text-xs">
-                        {npd.id}
-                      </Link>
-                      {npd.gradeA && (
-                        <span className="ml-1.5 inline-flex items-center gap-0.5 text-[9px] font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded-full">
-                          <Star className="w-2.5 h-2.5" /> A
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-semibold text-slate-900 text-sm group-hover:text-blue-900 transition-colors leading-tight">{npd.itemName}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">{npd.productLine}</div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-                        {npd.typeOfWork.split(' (')[0].split(' ').slice(0, 2).join(' ')}
-                      </span>
-                      <div className="text-[11px] text-slate-400 mt-1 max-w-[160px] truncate">{npd.itemCategory}</div>
-                    </TableCell>
-                    <TableCell className="text-sm font-medium">
-                      {npd.supplier === "Pending Assignment" ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-full">
-                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                          Pending Assignment
-                        </span>
-                      ) : (
-                        <span className="text-slate-700">{npd.supplier}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-[11px] text-slate-600 font-medium mb-1.5 truncate max-w-[160px]">
-                        {getStageName(npd.stage, npd.typeOfWork)}
-                      </div>
-                      <StageBar stage={npd.stage} />
-                    </TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${TAT_CHIP[npd.tatHealth]}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${TAT_DOT[npd.tatHealth]}`} />
-                        {npd.tatHealth === "black" ? "Overdue" :
-                         npd.tatHealth === "red"   ? "Due Today" :
-                         `${npd.tatDaysRemaining}d left`}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-600">{npd.spoc}</TableCell>
-                    {showRaisedBy && (
-                      <TableCell className="text-xs text-slate-400">
-                        {npd.raisedBy === "rnd_head" ? "R&D Head" : "R&D User"}
+                filteredNPDs.map(npd => {
+                  const accent = TAT_ACCENT[npd.tatHealth] ?? "#10B981"
+                  return (
+                    <TableRow
+                      key={npd.id}
+                      className="group cursor-pointer border-b border-slate-50 hover:bg-slate-50/70 transition-colors"
+                    >
+                      <TableCell className="py-3.5 pl-5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1 h-8 rounded-full shrink-0" style={{ background: accent }} />
+                          <div>
+                            <Link href={`/npd/${npd.id}`} className="font-mono text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline block">
+                              {npd.id}
+                            </Link>
+                            {npd.gradeA && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full mt-0.5">
+                                <Star className="w-2 h-2" /> Grade A
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </TableCell>
-                    )}
-                  </TableRow>
-                ))
+                      <TableCell className="py-3.5">
+                        <p className="text-[13px] font-semibold text-slate-800 group-hover:text-slate-900 leading-tight">{npd.itemName}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{npd.productLine}</p>
+                      </TableCell>
+                      <TableCell className="py-3.5">
+                        <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                          {npd.typeOfWork.split(' (')[0].split(' ').slice(0, 2).join(' ')}
+                        </span>
+                        <p className="text-[10px] text-slate-400 mt-1 max-w-[140px] truncate">{npd.itemCategory}</p>
+                      </TableCell>
+                      <TableCell className="py-3.5">
+                        {npd.supplier === "Pending Assignment" ? (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Pending
+                          </span>
+                        ) : (
+                          <span className="text-[13px] text-slate-700">{npd.supplier}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-3.5">
+                        <p className="text-[11px] text-slate-500 font-medium mb-1.5 truncate max-w-[160px]">
+                          {getStageName(npd.stage, npd.typeOfWork)}
+                        </p>
+                        <StageProgress stage={npd.stage} />
+                      </TableCell>
+                      <TableCell className="py-3.5">
+                        <span
+                          className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-md"
+                          style={{
+                            color: accent,
+                            background: accent + "18",
+                          }}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: accent }} />
+                          {TAT_LABEL[npd.tatHealth]}
+                          {!["black","red"].includes(npd.tatHealth) && ` · ${npd.tatDaysRemaining}d`}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-3.5">
+                        <span className="text-[12px] font-medium text-slate-600">{npd.spoc}</span>
+                      </TableCell>
+                      {showRaisedBy && (
+                        <TableCell className="py-3.5 text-[11px] text-slate-400">
+                          {npd.raisedBy === "rnd_head" ? "R&D Head" : "R&D User"}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 bg-slate-50/30">
-          <span>{filteredNPDs.length} record{filteredNPDs.length !== 1 ? "s" : ""}</span>
+        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between" style={{ background: "#FAFAFA" }}>
+          <span className="text-[11px] text-slate-400 font-medium">
+            Showing {filteredNPDs.length} record{filteredNPDs.length !== 1 ? "s" : ""}
+          </span>
           <div className="flex gap-1.5">
-            <button className="px-3 py-1 border border-slate-200 rounded text-slate-400 cursor-not-allowed">Previous</button>
-            <button className="px-3 py-1 border border-slate-200 rounded text-slate-500 hover:bg-slate-100">Next</button>
+            <button className="px-3 py-1 border border-slate-200 rounded-lg text-[11px] text-slate-400 cursor-not-allowed">← Previous</button>
+            <button className="px-3 py-1 border border-slate-200 rounded-lg text-[11px] text-slate-500 hover:bg-white transition-colors">Next →</button>
           </div>
         </div>
       </div>
