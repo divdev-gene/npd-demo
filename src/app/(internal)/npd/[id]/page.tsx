@@ -92,6 +92,17 @@ export default function NpdDetailView() {
   // ── Sample Cost ────────────────────────────────────────────────────────
   const [costSaved,    setCostSaved]    = useState(false)
 
+  // ── Supplier Defence ────────────────────────────────────────────────────
+  const [defenceAdvanced, setDefenceAdvanced] = useState(false)
+
+  // ── Sample Submission images ────────────────────────────────────────────
+  const STATIC_SAMPLE_IMAGES = [
+    { name: "sample_front_view.jpg",  label: "Front View",   bg: "bg-slate-200" },
+    { name: "sample_side_view.jpg",   label: "Side View",    bg: "bg-slate-300" },
+    { name: "sample_dimension.jpg",   label: "Dimension",    bg: "bg-slate-200" },
+  ]
+  const [fpaImageUploaded, setFpaImageUploaded] = useState(false)
+
 
   const enquiryValidUntil = (() => {
     const d = new Date()
@@ -601,20 +612,134 @@ export default function NpdDetailView() {
             </Card>
           )}
 
-          {/* ── Sample Receipt / MRN ───────────────────────────────────────── */}
-          {activeStage === 5 && (currentRole.startsWith("rnd") || currentRole === "super_admin") && (
-            <Card className="border-blue-200 shadow-sm">
-              <CardHeader className="bg-blue-50 border-b border-blue-100 pb-3">
-                <CardTitle className="text-blue-900 flex items-center gap-2">
-                  <DownloadCloud className="w-5 h-5" /> Accept Delivery / Raise MRN
+          {/* ── Supplier Defence: dispatch link ────────────────────────────── */}
+          {activeStage === 4 && (
+            <Card className="border-orange-300 shadow-sm">
+              <CardHeader className="bg-orange-50 border-b border-orange-200 pb-3">
+                <CardTitle className="text-orange-900 flex items-center gap-2 text-base">
+                  <ShieldCheck className="w-5 h-5" /> Supplier Defence — Awaiting Dispatch
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-5">
+              <CardContent className="pt-5 space-y-3">
+                <p className="text-sm text-slate-600">
+                  Share the link below with <strong>{npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? "the selected vendor"}</strong>. They must upload all compliance documents and confirm dispatch before this stage advances.
+                </p>
+                {(() => {
+                  const vendor = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
+                  const dispatchUrl = `${baseUrl}/supplier/dispatch/${npdId}${vendor ? `?vendor=${encodeURIComponent(vendor)}` : ""}`
+                  return (
+                    <div className="flex items-center gap-2 bg-white border border-orange-200 rounded-lg px-3 py-2.5">
+                      <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="text-xs text-blue-700 font-mono truncate flex-1">{dispatchUrl}</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(dispatchUrl)
+                          setCopiedVendor("dispatch")
+                          setTimeout(() => setCopiedVendor(null), 2000)
+                        }}
+                        className="shrink-0 text-[10px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                      >
+                        <Copy className="w-3 h-3" />
+                        {copiedVendor === "dispatch" ? "Copied!" : "Copy"}
+                      </button>
+                      <a href={dispatchUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  )
+                })()}
+                {!defenceAdvanced ? (
+                  <Button
+                    className="bg-orange-600 hover:bg-orange-700 text-white text-xs"
+                    onClick={() => {
+                      setDefenceAdvanced(true)
+                      setActiveStage(5)
+                      updateNPD(npdId, { stage: 5, stageName: getStageName(5, npd.typeOfWork) })
+                    }}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched & Advance to Sample Submission
+                  </Button>
+                ) : (
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" /> Advanced to Sample Submission
+                  </span>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Sample Submission ──────────────────────────────────────────── */}
+          {activeStage === 5 && (currentRole.startsWith("rnd") || currentRole === "super_admin") && (
+            <Card className="border-blue-400 shadow-md ring-2 ring-blue-100">
+              <CardHeader className="bg-blue-900 pb-4 rounded-t-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-white flex items-center gap-2 text-base">
+                      <DownloadCloud className="w-5 h-5" /> Sample Submission — Action Required
+                    </CardTitle>
+                    <p className="text-blue-200 text-xs mt-1">Supplier has dispatched samples. Verify delivery, review images, and log receipt to advance.</p>
+                  </div>
+                  <span className="bg-blue-700 border border-blue-500 text-blue-100 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">Stage 5</span>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-5 space-y-6">
+
+                {/* Static supplier sample images */}
+                <div>
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <FolderOpen className="w-4 h-4 text-slate-400" /> Supplier Sample Images
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {STATIC_SAMPLE_IMAGES.map(img => (
+                      <div key={img.name} className="rounded-lg overflow-hidden border border-slate-200">
+                        <div className={`${img.bg} h-28 flex items-center justify-center`}>
+                          <span className="text-slate-400 text-xs font-medium">{img.label}</span>
+                        </div>
+                        <div className="bg-white px-2.5 py-1.5 border-t border-slate-100">
+                          <p className="text-[10px] text-slate-500 truncate">{img.name}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* RND FPA / delivery verification upload */}
+                <div>
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <UploadCloud className="w-4 h-4 text-blue-700" /> Upload FPA / Delivery Verification Image <span className="text-red-500">*</span>
+                  </p>
+                  <p className="text-[11px] text-slate-400 mb-2">R&D must upload the First Part Approval sheet or physical delivery photo to confirm receipt.</p>
+                  <div
+                    onClick={() => setFpaImageUploaded(v => !v)}
+                    className={`rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all ${
+                      fpaImageUploaded
+                        ? "border-emerald-400 bg-emerald-50"
+                        : "border-blue-300 hover:border-blue-400 hover:bg-blue-50/40 bg-white"
+                    }`}
+                  >
+                    {fpaImageUploaded ? (
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <CheckCircle className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <p className="text-sm font-semibold text-emerald-700">FPA_delivery_confirm.jpg</p>
+                        <p className="text-xs text-emerald-600">Click to remove</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <UploadCloud className="w-8 h-8 text-blue-400 mb-1" />
+                        <p className="text-sm font-semibold text-slate-700">Click to upload FPA or delivery photo</p>
+                        <p className="text-xs text-slate-400">PDF, PNG, JPG, XLSX accepted</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {mrnStatus === "idle" && (
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-blue-50/50 rounded-lg p-4 border border-blue-100">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
                     <div>
-                      <p className="text-sm font-semibold text-blue-900">Samples dispatched by supplier</p>
-                      <p className="text-xs text-blue-700 mt-1">Log receipt when physical delivery is confirmed to move to Sample Receipt stage.</p>
+                      <p className="text-sm font-semibold text-blue-900">Ready to log physical receipt?</p>
+                      <p className="text-xs text-blue-700 mt-1">Fill MRN details to move to Sample Receipt / MRN stage.</p>
                     </div>
                     <Button className="bg-blue-900 hover:bg-blue-800 text-white shrink-0" onClick={() => setMrnStatus("form")}>
                       <DownloadCloud className="w-4 h-4 mr-2" /> Accept Delivery
@@ -745,6 +870,7 @@ export default function NpdDetailView() {
 
         {/* ── Supplier Sourcing Workflow ─────────────────────────────────────── */}
         <TabsContent value="supplier" className="mt-6 space-y-6">
+
           {isSpocOrSourcing ? (
             <Card className="border-slate-200">
               <CardHeader className="bg-slate-50 border-b border-slate-100 pb-3">

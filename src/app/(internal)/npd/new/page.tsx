@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  Wrench, FileEdit, Globe, ShieldCheck, Repeat,
+  Wrench, FileEdit, Globe, ShieldCheck, Repeat, Hammer,
   ChevronRight, ArrowLeft, Mail, CheckCircle, Check,
   Link2, User
 } from "lucide-react"
@@ -17,11 +17,12 @@ import { useNPDs } from "@/lib/npdContext"
 import { getStageName } from "@/lib/mockData"
 
 const WORK_TYPES = [
-  { id: "NCD",         title: "New Component Development", short: "NCD",        desc: "Brand new component. Full end-to-end lifecycle.", icon: Wrench,     tat: 45, stages: 11 },
-  { id: "ECN",         title: "Engineering Change Notice",  short: "ECN",        desc: "Change to existing component. Abbreviated flow.", icon: FileEdit,   tat: 30, stages: 10 },
-  { id: "Localisation",title: "Localisation",               short: "LOCAL",      desc: "Import replacement. Cost & compliance check.",    icon: Globe,      tat: 45, stages: 11 },
-  { id: "Compliance",  title: "Compliance / Regulatory",    short: "COMP",       desc: "BIS, QCO, etc. Document-centric flow.",           icon: ShieldCheck, tat: 30, stages: 6  },
-  { id: "PP",          title: "PP Pre-Production Repeat",   short: "PP",         desc: "First production quantity of validated part.",    icon: Repeat,     tat: 5,  stages: 4  },
+  { id: "NCD",         title: "New Component Development", short: "NCD",   desc: "Brand new component. Full end-to-end lifecycle.", icon: Wrench,     tat: 45, stages: 11 },
+  { id: "ECN",         title: "Engineering Change Notice",  short: "ECN",   desc: "Change to existing component. Abbreviated flow.", icon: FileEdit,   tat: 30, stages: 10 },
+  { id: "NTD",         title: "New Tool Development",       short: "NTD",   desc: "New tooling / die / fixture development request.", icon: Hammer,     tat: 45, stages: 10 },
+  { id: "Localisation",title: "Localisation",               short: "LOCAL", desc: "Import replacement. Cost & compliance check.",    icon: Globe,      tat: 45, stages: 11 },
+  { id: "Compliance",  title: "Compliance / Regulatory",    short: "COMP",  desc: "BIS, QCO, etc. Document-centric flow.",           icon: ShieldCheck, tat: 30, stages: 6  },
+  { id: "PP",          title: "PP Pre-Production Repeat",   short: "PP",    desc: "First production quantity of validated part.",    icon: Repeat,     tat: 5,  stages: 4  },
 ]
 
 const SPOC_NAME_MAP: Record<string, string> = {
@@ -43,12 +44,13 @@ const SPOC_DISPLAY_MAP: Record<string, string> = {
 }
 
 const TAT_MAP: Record<string, number> = {
-  "NCD": 45, "ECN": 30, "Localisation": 45, "Compliance": 30, "PP": 5,
+  "NCD": 45, "ECN": 30, "NTD": 45, "Localisation": 45, "Compliance": 30, "PP": 5,
 }
 
 const WORK_TYPE_LABEL: Record<string, string> = {
   "NCD":          "New Component Development (NCD)",
   "ECN":          "Engineering Change Notice (ECN)",
+  "NTD":          "New Tool Development (NTD)",
   "Localisation": "Localisation",
   "Compliance":   "Compliance / Regulatory",
   "PP":           "PP (Pre-Production) Repeat",
@@ -68,7 +70,6 @@ export default function NewRequestWizard() {
   const [typeOfWork, setTypeOfWork]   = useState("")
   const [commodity, setCommodity]     = useState("")
   const [productLine, setProductLine] = useState("")
-  const [rAndDDivision, setRAndDDivision] = useState("")
   const [itemName, setItemName]       = useState("")
   const [driveLink, setDriveLink]     = useState("")
   const [hasRevision, setHasRevision] = useState(false)
@@ -95,7 +96,7 @@ export default function NewRequestWizard() {
       itemCategory: commodity || "Others",
       productLine: productLine || "Unspecified",
       typeOfWork: workTypeLabel,
-      rAndDDivision: rAndDDivision || "Unspecified",
+      rAndDDivision: "Rajpura RAC",
       stage: 3,
       stageName: getStageName(3, workTypeLabel),
       tatHealth: "green",
@@ -114,8 +115,8 @@ export default function NewRequestWizard() {
   }
 
   const step2Valid = typeOfWork === "NCD"
-    ? (!!itemName && !!commodity && !!productLine && !!rAndDDivision && !!driveLink && (!hasRevision || (hasRevision && cplAttached)))
-    : (!!itemName && !!commodity && !!productLine && !!rAndDDivision)
+    ? (!!itemName && !!commodity && !!productLine && !!driveLink && (!hasRevision || (hasRevision && cplAttached)))
+    : (!!itemName && !!commodity && !!productLine)
 
   // ── Step 1 ────────────────────────────────────────────────────────────────
   const renderStep1 = () => (
@@ -169,7 +170,7 @@ export default function NewRequestWizard() {
       {/* Selected type banner */}
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm">
         {selectedType && <selectedType.icon className="w-4 h-4 text-blue-900 shrink-0" />}
-        <span className="font-semibold text-slate-800">{selectedType?.title}</span>
+        <span className="font-semibold text-slate-800">{selectedType?.title} — Rajpura RAC</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -189,22 +190,6 @@ export default function NewRequestWizard() {
                 <SelectItem value="RAC (SAC/WAAC/CAC)">RAC (SAC / WAAC / CAC)</SelectItem>
                 <SelectItem value="Commercial Air Conditioning">Commercial Air Conditioning</SelectItem>
                 <SelectItem value="Grade A">Grade A</SelectItem>
-                <SelectItem value="Air Purifier">Air Purifier</SelectItem>
-                <SelectItem value="Water Purifier">Water Purifier</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Plant / R&D Division <span className="text-red-500">*</span></Label>
-            <Select onValueChange={(v: string | null) => { if (v) setRAndDDivision(v) }}>
-              <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Select R&D Division" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Rajpura RAC">Rajpura RAC</SelectItem>
-                <SelectItem value="Rajpura Grade A">Rajpura Grade A</SelectItem>
-                <SelectItem value="Rajpura Commercial">Rajpura Commercial</SelectItem>
-                <SelectItem value="Jhajjhar RAC">Jhajjhar RAC</SelectItem>
-                <SelectItem value="Sricity RAC">Sricity RAC</SelectItem>
                 <SelectItem value="Air Purifier">Air Purifier</SelectItem>
                 <SelectItem value="Water Purifier">Water Purifier</SelectItem>
               </SelectContent>
@@ -365,6 +350,36 @@ export default function NewRequestWizard() {
             </>
           )}
 
+          {typeOfWork === "NTD" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Tool / Die Reference <span className="text-red-500">*</span></Label>
+                <Input placeholder="e.g. TOOL-RAC-2026-014" className="bg-white" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Tool Type</Label>
+                <Select>
+                  <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Select tool type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Injection Mould">Injection Mould</SelectItem>
+                    <SelectItem value="Press Tool / Die">Press Tool / Die</SelectItem>
+                    <SelectItem value="Fixture">Fixture</SelectItem>
+                    <SelectItem value="Jig">Jig</SelectItem>
+                    <SelectItem value="Gauge / Inspection Aid">Gauge / Inspection Aid</SelectItem>
+                    <SelectItem value="Others">Others</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Tool Spec / Drawing Link</Label>
+                <div className="relative">
+                  <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input placeholder="https://drive.google.com/..." type="url" className="pl-9 bg-white" />
+                </div>
+              </div>
+            </>
+          )}
+
           {(typeOfWork === "Localisation" || typeOfWork === "Compliance" || typeOfWork === "PP") && (
             <div className="flex items-center gap-3 px-4 py-10 rounded-lg border border-dashed border-slate-200 text-slate-400 text-sm justify-center">
               No additional documents required for this work type.
@@ -395,10 +410,9 @@ export default function NewRequestWizard() {
       {/* Summary strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Item",       value: itemName || "—" },
-          { label: "Category",   value: commodity || "—" },
-          { label: "Division",   value: rAndDDivision || "—" },
-          { label: "SPOC",       value: SPOC_NAME_MAP[commodity] || "—" },
+          { label: "Item",     value: itemName || "—" },
+          { label: "Category", value: commodity || "—" },
+          { label: "SPOC",     value: SPOC_NAME_MAP[commodity] || "—" },
         ].map(({ label, value }) => (
           <div key={label} className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
@@ -430,7 +444,6 @@ export default function NewRequestWizard() {
           <div className="rounded-md bg-slate-50 border border-slate-100 p-4 space-y-1 text-xs">
             <p><strong>Item Name:</strong> {itemName || "N/A"}</p>
             <p><strong>Commodity:</strong> {commodity || "N/A"}</p>
-            <p><strong>R&D Division:</strong> {rAndDDivision || "N/A"}</p>
             <p><strong>Product Line:</strong> {productLine || "N/A"}</p>
             {driveLink && <p><strong>Drawing Link:</strong> <span className="text-blue-600 underline">{driveLink}</span></p>}
             {hasRevision && revisionNo && <p><strong>Revision No:</strong> {revisionNo}</p>}
