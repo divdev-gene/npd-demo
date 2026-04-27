@@ -866,6 +866,81 @@ export default function NpdDetailView() {
               </CardContent>
             </Card>
           )}
+
+          {/* ── PP Lot Pricing ─────────────────────────────────────────────── */}
+          {activeStage >= 10 && (() => {
+            const raw  = localStorage.getItem("sample_cost_v1")
+            const cost = raw ? (JSON.parse(raw) as Record<string, Record<string, string>>)[npdId] : null
+            const rows = [
+              { label: "Approved Supplier",       value: npd.supplier },
+              { label: "Item",                     value: npd.itemName },
+              { label: "Unit Cost (₹)",            value: cost?.unitCost   ? `₹ ${parseFloat(cost.unitCost).toFixed(2)}` : "₹ 285.00" },
+              { label: "Tooling Cost (₹)",         value: cost?.tooling    ? `₹ ${parseFloat(cost.tooling).toFixed(2)}`   : "₹ 0.00"   },
+              { label: "Primary Packaging (₹)",    value: cost?.primaryPkg ? `₹ ${parseFloat(cost.primaryPkg).toFixed(2)}`: "₹ 2.50"   },
+              { label: "Confirmed MOQ",            value: cost?.moq        ? `${parseInt(cost.moq).toLocaleString()} pcs` : "5,000 pcs" },
+              { label: "Payment Terms",            value: cost?.payment    ?? "90 Days Credit" },
+              { label: "Product Line",             value: npd.productLine },
+              { label: "Commodity",                value: npd.itemCategory },
+            ]
+            const unitCost   = parseFloat(cost?.unitCost   ?? "285")
+            const tooling    = parseFloat(cost?.tooling    ?? "0")
+            const primaryPkg = parseFloat(cost?.primaryPkg ?? "2.5")
+            const transport  = 15
+            const totalUnit  = unitCost + primaryPkg + transport
+            return (
+              <Card className="border-purple-200 shadow-sm">
+                <CardHeader className="bg-purple-50 border-b border-purple-100 pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-purple-900 flex items-center gap-2 text-base">
+                      <ClipboardCheck className="w-5 h-5" /> PP Lot Pricing — Reference
+                    </CardTitle>
+                    <span className="text-[10px] font-bold text-purple-600 bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      Fetched from Sample Cost
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-600 mt-1">
+                    Pricing locked at Sample Cost Finalization. Used as the reference for PP lot purchase order.
+                  </p>
+                </CardHeader>
+                <CardContent className="pt-5 space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {rows.map(({ label, value }) => (
+                      <div key={label} className="flex justify-between items-center border-b border-slate-100 pb-2">
+                        <span className="text-xs text-slate-500">{label}</span>
+                        <span className="text-sm font-semibold text-slate-800">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-lg bg-purple-50 border border-purple-200 px-4 py-3 space-y-2">
+                    <p className="text-xs font-bold text-purple-700 uppercase tracking-wide mb-1">Landed Cost Breakdown</p>
+                    <div className="flex justify-between text-xs text-slate-600">
+                      <span>Unit Cost</span><span className="font-semibold">₹ {unitCost.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-600">
+                      <span>Packaging (Primary)</span><span className="font-semibold">₹ {primaryPkg.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-600">
+                      <span>Est. Transport / Unit</span><span className="font-semibold">₹ {transport.toFixed(2)}</span>
+                    </div>
+                    {tooling > 0 && (
+                      <div className="flex justify-between text-xs text-slate-600">
+                        <span>Tooling (amortized)</span><span className="font-semibold">₹ {tooling.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-bold text-purple-900 border-t border-purple-200 pt-2 mt-1">
+                      <span>Total Landed Cost / Unit</span>
+                      <span>₹ {(totalUnit + (tooling > 0 ? tooling : 0)).toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5 text-xs font-semibold text-emerald-800">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" /> PP Lot pricing reference confirmed. Ready for purchase order.
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })()}
         </TabsContent>
 
         {/* ── Supplier Sourcing Workflow ─────────────────────────────────────── */}
@@ -1243,7 +1318,7 @@ export default function NpdDetailView() {
                     }
                   }}
                 >
-                  Finalise & Push to AICM
+                  Finalize
                 </Button>
               </div>
             </CardContent>
