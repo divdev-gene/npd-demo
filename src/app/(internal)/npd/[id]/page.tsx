@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button"
 import {
   CheckCircle2, Circle, CheckCircle, Clock, AlertCircle, FileText,
   Send, MessageSquare, Mail, ShieldCheck, XCircle, Star, Copy, ExternalLink, Link2,
-  FolderOpen, UploadCloud, Download, DownloadCloud, ClipboardCheck
+  FolderOpen, UploadCloud, Download, DownloadCloud, ClipboardCheck,
+  Inbox, Pencil, CornerUpLeft, Bot, RefreshCw
 } from "lucide-react"
 
 const NTD_STAGES = [
@@ -65,6 +66,12 @@ export default function NpdDetailView() {
   const [vendorStatuses,  setVendorStatuses]  = useState<Record<string, VendorStatusResponse>>({})
   const [dateApprovals,   setDateApprovals]   = useState<Record<string, "approved" | "rejected">>({})
   const [copiedReminder,  setCopiedReminder]  = useState<string | null>(null)
+
+  // ── Mail inbox ──────────────────────────────────────────────────────────
+  const [mailFolder,   setMailFolder]   = useState<"inbox" | "sent" | "system">("inbox")
+  const [selectedMail, setSelectedMail] = useState<number | null>(0)
+  const [replyText,    setReplyText]    = useState("")
+  const [replySent,    setReplySent]    = useState<Record<number, boolean>>({})
 
   // ── MRN / Delivery Acceptance ───────────────────────────────────────────
   const [mrnStatus,    setMrnStatus]    = useState<"idle" | "form" | "raised">("idle")
@@ -1641,37 +1648,325 @@ export default function NpdDetailView() {
         </TabsContent>
 
         {/* ── Integrated Mail Inbox ─────────────────────────────────────────── */}
-        <TabsContent value="mail" className="mt-6">
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Integrated Mail Inbox</CardTitle>
-              <CardDescription>Emails containing {npd.id}</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4 p-0">
-              <div className="border-b px-6 py-4 hover:bg-slate-50 cursor-pointer">
-                <div className="flex justify-between">
-                  <p className="font-bold text-slate-900">{npd.supplier} Sales Contact</p>
-                  <p className="text-sm text-slate-500">Today, 10:45 AM</p>
-                </div>
-                <p className="text-sm font-semibold mt-1">Re: Clarification on Drawing Tolerances — {npd.id}</p>
-                <p className="text-sm text-slate-600 mt-2 line-clamp-2">
-                  Dear Amber Sourcing team, we received the latest rev of the drawing but wanted to confirm if the +/- 0.5mm tolerance on the flare is rigid, as our standard tooling for {npd.itemCategory} is 0.6...
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer">
-                    <MessageSquare className="w-3 h-3 mr-1" /> Reply
-                  </Badge>
+        <TabsContent value="mail" className="mt-4">
+          {(() => {
+            const INBOX_THREADS = [
+              {
+                id: 0,
+                from: `${npd.supplier} — Sales`,
+                fromInitials: npd.supplier.slice(0,2).toUpperCase(),
+                fromColor: "#1E40AF",
+                fromBg: "#EFF6FF",
+                subject: `Re: Clarification on Drawing Tolerances — ${npd.id}`,
+                preview: `Dear Amber Sourcing team, we received the latest rev of the drawing but wanted to confirm if the ±0.5 mm tolerance on the flare is rigid…`,
+                time: "Today, 10:45 AM",
+                unread: true,
+                body: `<p>Dear Amber Sourcing team,</p>
+<p>We received the latest revision of the drawing (<strong>${npd.id}</strong>) but wanted to confirm whether the ±0.5 mm tolerance on the flare geometry is rigid, as our standard tooling for <strong>${npd.itemCategory}</strong> runs at ±0.6 mm.</p>
+<p>We can achieve the tighter spec with a dedicated die modification — estimated lead time is 4 additional working days. Please advise if we should proceed.</p>
+<p>Best regards,<br />${npd.supplier} Sales Team</p>`,
+              },
+              {
+                id: 1,
+                from: `${npd.supplier} — Technical`,
+                fromInitials: npd.supplier.slice(0,2).toUpperCase(),
+                fromColor: "#1E40AF",
+                fromBg: "#EFF6FF",
+                subject: `Material Certification — ${npd.id}`,
+                preview: `Attached: RoHS Compliance certificate and MSDS for the raw material batch used in your sample production run…`,
+                time: "Yesterday, 4:12 PM",
+                unread: false,
+                body: `<p>Hi Team,</p>
+<p>Please find attached:</p>
+<ul style="list-style:disc;padding-left:20px;margin:10px 0">
+  <li>RoHS Compliance Certificate (valid until Dec 2027)</li>
+  <li>MSDS — Raw material batch #AM-2026-119</li>
+  <li>Factory Acceptance Test (FAT) report for batch</li>
+</ul>
+<p>Let us know if additional documentation is required before sample dispatch.</p>
+<p>Regards,<br />${npd.supplier} Technical Team</p>`,
+              },
+              {
+                id: 2,
+                from: "National Metalfabs",
+                fromInitials: "NM",
+                fromColor: "#059669",
+                fromBg: "#ECFDF5",
+                subject: `Sample Dispatch Confirmation — ${npd.id}`,
+                preview: `This is to confirm dispatch of 10 samples via Blue Dart courier AWB# 74291832. Expected delivery: 2 business days…`,
+                time: "2 days ago",
+                unread: false,
+                body: `<p>Dear Amber Sourcing,</p>
+<p>We are pleased to confirm dispatch of <strong>10 samples</strong> for NPD reference <strong>${npd.id}</strong>.</p>
+<table style="border-collapse:collapse;width:100%;margin:12px 0;font-size:13px">
+  <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0"><td style="padding:6px 10px;font-weight:600">Courier</td><td style="padding:6px 10px">Blue Dart Express</td></tr>
+  <tr style="border-bottom:1px solid #e2e8f0"><td style="padding:6px 10px;font-weight:600">AWB#</td><td style="padding:6px 10px">74291832</td></tr>
+  <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0"><td style="padding:6px 10px;font-weight:600">ETA</td><td style="padding:6px 10px">2 business days</td></tr>
+  <tr><td style="padding:6px 10px;font-weight:600">Packed by</td><td style="padding:6px 10px">QA Dept, NM Faridabad</td></tr>
+</table>
+<p>Regards,<br />National Metalfabs</p>`,
+              },
+            ]
+
+            const SYSTEM_THREADS = [
+              {
+                id: 100,
+                from: "Amber ASR · System",
+                fromInitials: "AS",
+                fromColor: "#7C3AED",
+                fromBg: "#F5F3FF",
+                subject: `RFQ Dispatched to ${composedEmails.length || 3} Vendors — ${npd.id}`,
+                preview: `Automated RFQ emails dispatched to shortlisted suppliers via Amber Sourcing portal. Replies tracked automatically.`,
+                time: "3 days ago",
+                unread: false,
+                body: `<p><strong>Automated System Notice</strong></p>
+<p>RFQ emails were dispatched to all shortlisted suppliers for <strong>${npd.id} — ${npd.itemName}</strong>.</p>
+<p><strong>${composedEmails.length || 3} suppliers</strong> were contacted. Each email includes:</p>
+<ul style="list-style:disc;padding-left:20px;margin:10px 0">
+  <li>Technical specification summary</li>
+  <li>Quantity and delivery requirements</li>
+  <li>Secure portal link for quotation submission</li>
+  <li>Drawing folder access (if attached)</li>
+</ul>
+<p>Replies will be captured automatically when suppliers submit via the portal.</p>`,
+              },
+              {
+                id: 101,
+                from: "Amber ASR · System",
+                fromInitials: "AS",
+                fromColor: "#7C3AED",
+                fromBg: "#F5F3FF",
+                subject: `NPD Request Created — ${npd.id}`,
+                preview: `New NPD request has been initiated. R&D review pending. Assigned SPOC: ${npd.spoc}.`,
+                time: "5 days ago",
+                unread: false,
+                body: `<p><strong>New NPD Initiated</strong></p>
+<p>A new sourcing request has been created with the following details:</p>
+<table style="border-collapse:collapse;width:100%;margin:12px 0;font-size:13px">
+  <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0"><td style="padding:6px 10px;font-weight:600">NPD ID</td><td style="padding:6px 10px">${npd.id}</td></tr>
+  <tr style="border-bottom:1px solid #e2e8f0"><td style="padding:6px 10px;font-weight:600">Item</td><td style="padding:6px 10px">${npd.itemName}</td></tr>
+  <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0"><td style="padding:6px 10px;font-weight:600">Category</td><td style="padding:6px 10px">${npd.itemCategory}</td></tr>
+  <tr style="border-bottom:1px solid #e2e8f0"><td style="padding:6px 10px;font-weight:600">SPOC Assigned</td><td style="padding:6px 10px">${npd.spoc}</td></tr>
+  <tr style="background:#f8fafc"><td style="padding:6px 10px;font-weight:600">Priority</td><td style="padding:6px 10px">${npd.priority}</td></tr>
+</table>`,
+              },
+            ]
+
+            const SENT_THREADS = composedEmails.map((e, i) => ({
+              id: 200 + i,
+              from: `To: ${e.vendorName}`,
+              fromInitials: e.vendorName.slice(0,2).toUpperCase(),
+              fromColor: "#0891B2",
+              fromBg: "#ECFEFF",
+              subject: e.subject,
+              preview: e.body.replace(/<[^>]+>/g, " ").slice(0, 120) + "…",
+              time: "3 days ago",
+              unread: false,
+              body: e.body,
+            }))
+
+            const folderThreads =
+              mailFolder === "inbox"  ? INBOX_THREADS  :
+              mailFolder === "sent"   ? SENT_THREADS   :
+              SYSTEM_THREADS
+
+            const selected = folderThreads[selectedMail ?? 0] ?? folderThreads[0]
+
+            return (
+              <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden" style={{ height: 580 }}>
+                <div className="flex h-full">
+
+                  {/* ── Folder sidebar ── */}
+                  <div className="w-44 shrink-0 border-r border-slate-100 flex flex-col" style={{ background: "#FAFAFA" }}>
+                    <div className="px-3 pt-4 pb-3 border-b border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em]">Mail</p>
+                    </div>
+                    <div className="flex-1 py-2 px-2 space-y-0.5">
+                      {[
+                        { id: "inbox"  as const, label: "Inbox",  icon: Inbox,   count: INBOX_THREADS.filter(t => t.unread).length },
+                        { id: "sent"   as const, label: "Outbox", icon: Send,    count: SENT_THREADS.length },
+                        { id: "system" as const, label: "System", icon: Bot,     count: 0 },
+                      ].map(f => {
+                        const Icon = f.icon
+                        const active = mailFolder === f.id
+                        return (
+                          <button
+                            key={f.id}
+                            onClick={() => { setMailFolder(f.id); setSelectedMail(0); setReplyText("") }}
+                            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all"
+                            style={{
+                              background: active ? "#0F172A" : "transparent",
+                              color: active ? "#FFFFFF" : "#64748B",
+                            }}
+                          >
+                            <Icon className="w-3.5 h-3.5 shrink-0" />
+                            <span className="flex-1 text-left">{f.label}</span>
+                            {f.count > 0 && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                                style={{ background: active ? "rgba(255,255,255,0.2)" : "#EFF6FF", color: active ? "#fff" : "#1E40AF" }}>
+                                {f.count}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div className="p-2 border-t border-slate-100">
+                      <button className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-slate-100 transition-colors">
+                        <RefreshCw className="w-3 h-3" /> Sync
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── Thread list ── */}
+                  <div className="w-64 shrink-0 border-r border-slate-100 flex flex-col overflow-hidden">
+                    <div className="px-3 pt-3 pb-2.5 border-b border-slate-100 flex items-center justify-between">
+                      <p className="text-[11px] font-bold text-slate-700 capitalize">{mailFolder}</p>
+                      <span className="text-[10px] text-slate-400">{folderThreads.length}</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+                      {folderThreads.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full py-10">
+                          <Mail className="w-7 h-7 text-slate-200 mb-2" />
+                          <p className="text-[11px] text-slate-400">No emails yet</p>
+                        </div>
+                      ) : (
+                        folderThreads.map((t, i) => (
+                          <button
+                            key={t.id}
+                            onClick={() => { setSelectedMail(i); setReplyText("") }}
+                            className="w-full text-left px-3 py-3 transition-colors hover:bg-slate-50"
+                            style={{ background: selectedMail === i ? "#EFF6FF" : undefined, borderLeft: selectedMail === i ? "2px solid #1E40AF" : "2px solid transparent" }}
+                          >
+                            <div className="flex items-start gap-2">
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5"
+                                style={{ background: t.fromColor }}>
+                                {t.fromInitials}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <p className={`text-[12px] truncate leading-tight ${t.unread ? "font-bold text-slate-900" : "font-medium text-slate-600"}`}>
+                                    {t.from}
+                                  </p>
+                                  {t.unread && <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />}
+                                </div>
+                                <p className={`text-[11px] truncate mt-0.5 ${t.unread ? "font-semibold text-slate-800" : "text-slate-500"}`}>
+                                  {t.subject.replace(` — ${npd.id}`, "")}
+                                </p>
+                                <p className="text-[10px] text-slate-400 truncate mt-0.5">{t.preview}</p>
+                                <p className="text-[9px] text-slate-400 mt-1">{t.time}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Reading pane ── */}
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {selected ? (
+                      <>
+                        {/* Email header */}
+                        <div className="px-5 py-4 border-b border-slate-100">
+                          <h3 className="text-[14px] font-bold text-slate-900 leading-tight mb-2">{selected.subject}</h3>
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                              style={{ background: selected.fromColor }}>
+                              {selected.fromInitials}
+                            </div>
+                            <div>
+                              <p className="text-[12px] font-semibold text-slate-800">{selected.from}</p>
+                              <p className="text-[11px] text-slate-400">To: sourcing@amberenterprises.in · {selected.time}</p>
+                            </div>
+                            <div className="ml-auto flex items-center gap-1.5">
+                              {mailFolder === "inbox" && (
+                                <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                                  {npd.id}
+                                </span>
+                              )}
+                              {selected.unread && (
+                                <span className="text-[9px] font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full">
+                                  UNREAD
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Email body */}
+                        <div className="flex-1 overflow-y-auto px-5 py-4">
+                          <div
+                            className="text-[13px] text-slate-700 leading-relaxed [&_p]:mb-3 [&_strong]:font-semibold [&_table]:border-collapse [&_table]:w-full [&_td]:text-[12px] [&_ul]:my-2 [&_li]:mb-1 max-w-2xl"
+                            dangerouslySetInnerHTML={{ __html: selected.body }}
+                          />
+                        </div>
+
+                        {/* Reply area — only in inbox */}
+                        {mailFolder === "inbox" && (
+                          <div className="border-t border-slate-100 px-5 py-3">
+                            {replySent[selected.id] ? (
+                              <div className="flex items-center gap-2 text-[12px] text-emerald-600 font-semibold py-1">
+                                <CheckCircle2 className="w-4 h-4" /> Reply sent to {selected.from}
+                              </div>
+                            ) : (
+                              <div className="flex gap-3 items-end">
+                                <div className="flex-1 relative">
+                                  <CornerUpLeft className="absolute left-3 top-3 w-3.5 h-3.5 text-slate-400" />
+                                  <textarea
+                                    rows={2}
+                                    value={replyText}
+                                    onChange={e => setReplyText(e.target.value)}
+                                    placeholder={`Reply to ${selected.from}…`}
+                                    className="w-full pl-9 pr-3 py-2.5 text-[12px] text-slate-800 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 placeholder:text-slate-400 resize-none"
+                                  />
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    if (!replyText.trim()) return
+                                    setReplySent(prev => ({ ...prev, [selected.id]: true }))
+                                    setReplyText("")
+                                  }}
+                                  disabled={!replyText.trim()}
+                                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold text-white transition-colors shrink-0"
+                                  style={{ background: replyText.trim() ? "#0F172A" : "#CBD5E1", cursor: replyText.trim() ? "pointer" : "not-allowed" }}
+                                >
+                                  <Send className="w-3.5 h-3.5" /> Send
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Compose bar for sent/outbox */}
+                        {mailFolder === "sent" && (
+                          <div className="border-t border-slate-100 px-5 py-3 flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                if (selected.body) {
+                                  navigator.clipboard.writeText(`Subject: ${selected.subject}\n\n${selected.body.replace(/<[^>]+>/g, "")}`)
+                                }
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                            >
+                              <Copy className="w-3.5 h-3.5" /> Copy to Clipboard
+                            </button>
+                            <span className="text-[11px] text-slate-400">Sent via Amber Sourcing Portal</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
+                        <Mail className="w-10 h-10 mb-3" />
+                        <p className="text-[13px] font-medium">Select an email to read</p>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               </div>
-              <div className="border-b px-6 py-4 hover:bg-slate-50 opacity-70">
-                <div className="flex justify-between">
-                  <p className="font-bold text-slate-900">Amber ASR Auto</p>
-                  <p className="text-sm text-slate-500">2 days ago</p>
-                </div>
-                <p className="text-sm font-semibold mt-1">Request Dispatched to Supplier</p>
-              </div>
-            </CardContent>
-          </Card>
+            )
+          })()}
         </TabsContent>
 
         {/* ── Parts & Supplier Tracking ─────────────────────────────────────── */}
