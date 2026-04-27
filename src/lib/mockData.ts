@@ -23,6 +23,8 @@ export type NPDRecord = {
 
 export const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"];
 
+export const VENDOR_EMAIL = "divyanshchawla12@gmail.com";
+
 export type VendorRecord = {
   name: string;
   tier: "Tier 1" | "Tier 2" | "Tier 3";
@@ -31,6 +33,27 @@ export type VendorRecord = {
   certifications: string[];
   status: "verified" | "audit_overdue" | "new";
 };
+
+export const VENDOR_RFQ_TEMPLATE_KEY = "vendor_rfq_template_v1";
+export const DEFAULT_RFQ_TEMPLATE = `Subject: URGENT QUOTE REQUIRED: {npd_id} — {item_name}
+
+Dear {vendor_name},
+
+Amber Enterprises is initiating new product development for the following requirement:
+
+  Item: {item_name}
+  Commodity: {commodity}
+  NPD ID: {npd_id}
+  Drawing Folder: {drawing_link}
+
+Please submit your quotation via the portal link below:
+
+{portal_link}
+
+This link is valid until {valid_until}. Kindly respond at the earliest.
+
+Regards,
+Amber Sourcing Operations`;
 
 export const VENDOR_CATALOG: Record<string, VendorRecord[]> = {
   // ── Used by mock NPDs (full category names) ────────────────────────────────
@@ -109,6 +132,39 @@ export const SUPPLIER_FORM_DEFAULTS: FormQuestion[] = [
 
 export const SUPPLIER_FORM_KEY      = "supplier_form_config_v1";
 export const SUPPLIER_DOCS_KEY      = "supplier_submitted_docs_v1";
+export const COMPOSED_EMAILS_KEY    = "composed_emails_v1";
+export const VENDOR_STATUS_KEY        = "vendor_status_v1";
+export const VENDOR_DATE_APPROVAL_KEY = "vendor_date_approval_v1";
+
+export type VendorStatusResponse = {
+  vendorName:  string;
+  onTime:      boolean;
+  newDate?:    string;
+  notes?:      string;
+  respondedAt: string;
+};
+
+export const DEFAULT_STATUS_TEMPLATE = `Subject: Dispatch Status Check — {npd_id} | {item_name}
+
+Dear {vendor_name},
+
+This is a reminder regarding your quotation for {npd_id} — {item_name}.
+
+Your committed dispatch date: {dispatch_date}
+
+Please confirm whether you are on track to meet this date using the link below:
+
+{status_link}
+
+Regards,
+Amber Sourcing Operations`;
+
+export const VENDOR_STATUS_TEMPLATE_KEY = "vendor_status_template_v1";
+
+export const SAMPLE_RECEIPT_KEY = "sample_receipt_v1";
+export const MRN_APPROVAL_KEY   = "mrn_approval_v1";
+export const FPA_DATA_KEY       = "fpa_data_v1";
+export const SAMPLE_COST_KEY    = "sample_cost_v1";
 
 export type SupplierDoc = {
   fileName:    string;

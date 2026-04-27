@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Save, Users, ShieldCheck, Mail, Map, Settings, RotateCcw, Plus, Trash2, GripVertical, FormInput } from "lucide-react"
-import { SUPPLIER_FORM_DEFAULTS, SUPPLIER_FORM_KEY, type FormQuestion } from "@/lib/mockData"
+import { SUPPLIER_FORM_DEFAULTS, SUPPLIER_FORM_KEY, VENDOR_RFQ_TEMPLATE_KEY, DEFAULT_RFQ_TEMPLATE, type FormQuestion } from "@/lib/mockData"
 
 const HEAD_ROLES = ["rnd_head", "sourcing_head", "super_admin"]
 
@@ -31,6 +31,8 @@ export default function SuperAdminPage() {
   const [newRequired,  setNewRequired]  = useState(false)
   const [editingId,    setEditingId]    = useState<string | null>(null)
   const [editLabel,    setEditLabel]    = useState("")
+  const [rfqTemplate,  setRfqTemplate]  = useState(DEFAULT_RFQ_TEMPLATE)
+  const [rfqSaved,     setRfqSaved]     = useState(false)
 
   useEffect(() => {
     const role = localStorage.getItem("poc_role") || ""
@@ -39,7 +41,15 @@ export default function SuperAdminPage() {
     if (stored) {
       try { setQuestions(JSON.parse(stored)) } catch { /* keep defaults */ }
     }
+    const savedTemplate = localStorage.getItem(VENDOR_RFQ_TEMPLATE_KEY)
+    if (savedTemplate) setRfqTemplate(savedTemplate)
   }, [])
+
+  const saveRfqTemplate = () => {
+    localStorage.setItem(VENDOR_RFQ_TEMPLATE_KEY, rfqTemplate)
+    setRfqSaved(true)
+    setTimeout(() => setRfqSaved(false), 2000)
+  }
 
   const saveFormConfig = () => {
     localStorage.setItem(SUPPLIER_FORM_KEY, JSON.stringify(questions))
@@ -89,9 +99,6 @@ export default function SuperAdminPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Super Admin Control Center</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Manage holistic User RBAC, Site Mappings, and Automated Workflows.
-          </p>
         </div>
         <Button onClick={handleSave} disabled={saving} className="bg-slate-900 text-white min-w-[120px]">
           {saving ? 'Saved Successfully' : <><Save className="w-4 h-4 mr-2" /> Save Config</>}
@@ -113,7 +120,6 @@ export default function SuperAdminPage() {
           <Card>
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-lg">System Hierarchy (Horizontal Layout)</CardTitle>
-              <CardDescription>Drag or assign users across the geographical hierarchy. (Only 1 ID allowed per critical node level)</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
                {/* Horizontal Site Layout */}
@@ -181,7 +187,6 @@ export default function SuperAdminPage() {
            <Card>
              <CardHeader className="pb-3 border-b">
                 <CardTitle>Role-Based Module Distribution</CardTitle>
-                <CardDescription>Grant multi-system access to individual user roles.</CardDescription>
              </CardHeader>
              <CardContent className="pt-6">
                <div className="overflow-x-auto">
@@ -235,7 +240,6 @@ export default function SuperAdminPage() {
           <Card>
              <CardHeader className="pb-3 border-b">
                 <CardTitle>Mandatory Email Templates</CardTitle>
-                <CardDescription>Configure the exact phrasing used when ASR shoots an automated trigger.</CardDescription>
              </CardHeader>
              <CardContent className="pt-6 space-y-6">
                <div className="space-y-2">
@@ -254,23 +258,18 @@ Please initiate Supplier Selection immediately.`}
                </div>
                
                <div className="space-y-2 border-t pt-4">
-                 <Label className="font-bold text-emerald-900">Bulk RFQ to Vendor (7-Day Validity)</Label>
-                 <textarea className="w-full h-32 p-3 border border-slate-200 rounded-md text-sm font-mono focus:ring-2 focus:ring-emerald-900 focus:border-emerald-900" 
-                  defaultValue={`Subject: URGENT QUOTE REQUIRED: {npd_id}
-
-Dear Vendor Partner,
-
-Amber is initiating development for {item_name}.
-Please find attached specifications and drawings.
-
-PORTAL LINK: https://asr.amber.com/quote/{secure_hash}
-(Note: This link remains active for exactly 7 Days)
-
-Tentative Sample Delivery Date: {sample_eta}
-
-Regards,
-Amber Sourcing Operations`} 
+                 <div className="flex items-center justify-between">
+                   <Label className="font-bold text-emerald-900">Bulk RFQ to Vendor</Label>
+                   <Button size="sm" onClick={saveRfqTemplate} className="bg-emerald-700 hover:bg-emerald-800 text-white h-7 text-xs">
+                     {rfqSaved ? "Saved ✓" : <><Save className="w-3 h-3 mr-1" />Save Template</>}
+                   </Button>
+                 </div>
+                 <textarea
+                   className="w-full h-48 p-3 border border-slate-200 rounded-md text-sm font-mono focus:ring-2 focus:ring-emerald-900 focus:border-emerald-900"
+                   value={rfqTemplate}
+                   onChange={e => setRfqTemplate(e.target.value)}
                  />
+                 <p className="text-[10px] text-slate-500">Variables: {"{npd_id}"}, {"{item_name}"}, {"{commodity}"}, {"{vendor_name}"}, {"{portal_link}"}, {"{valid_until}"}, {"{drawing_link}"}</p>
                </div>
              </CardContent>
           </Card>
@@ -290,7 +289,6 @@ Amber Sourcing Operations`}
               <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-lg">Supplier Enquiry Form Builder</CardTitle>
-                  <CardDescription>Configure the questions suppliers see when they open the bulk enquiry link.</CardDescription>
                 </div>
                 <Button
                   onClick={saveFormConfig}
@@ -404,9 +402,6 @@ Amber Sourcing Operations`}
           <CardTitle className="text-base text-red-700 flex items-center gap-2">
             <RotateCcw className="w-4 h-4" /> Demo Tools
           </CardTitle>
-          <CardDescription className="text-red-600/70">
-            Resets all session data — NPD records, approvals, and role — back to the original mock state.
-          </CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
           <Button

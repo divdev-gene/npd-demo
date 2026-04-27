@@ -6,8 +6,9 @@ import {
   getStageName, VENDOR_CATALOG, SPOC_NAMES,
   MOCK_SUPPLIER_DOCS, SUPPLIER_DOCS_KEY,
   MOCK_VENDOR_QUOTATIONS, VENDOR_QUOTE_APPROVALS_KEY,
-  LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY,
-  type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation,
+  LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY, VENDOR_RFQ_TEMPLATE_KEY, DEFAULT_RFQ_TEMPLATE, VENDOR_EMAIL, COMPOSED_EMAILS_KEY,
+  VENDOR_STATUS_KEY, DEFAULT_STATUS_TEMPLATE, VENDOR_STATUS_TEMPLATE_KEY, VENDOR_DATE_APPROVAL_KEY,
+  type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse,
 } from "@/lib/mockData"
 import { useNPDs } from "@/lib/npdContext"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +18,7 @@ import { Button } from "@/components/ui/button"
 import {
   CheckCircle2, Circle, CheckCircle, Clock, AlertCircle, FileText,
   Send, MessageSquare, Mail, ShieldCheck, XCircle, Star, Copy, ExternalLink, Link2,
-  FolderOpen, UploadCloud, Download
+  FolderOpen, UploadCloud, Download, DownloadCloud, ClipboardCheck
 } from "lucide-react"
 
 const NTD_STAGES = [
@@ -59,6 +60,30 @@ export default function NpdDetailView() {
   const [liveQuotes,         setLiveQuotes]         = useState<Record<string, LiveQuotation>>({})
   const [renegotiatingVendor, setRenegotiatingVendor] = useState<string | null>(null)
   const [reNegMsg, setReNegMsg] = useState("")
+  const [composedEmails, setComposedEmails] = useState<{ vendorName: string; subject: string; body: string; portalLink: string }[]>([])
+  const [copiedEmail,    setCopiedEmail]    = useState<string | null>(null)
+  const [vendorStatuses,  setVendorStatuses]  = useState<Record<string, VendorStatusResponse>>({})
+  const [dateApprovals,   setDateApprovals]   = useState<Record<string, "approved" | "rejected">>({})
+  const [copiedReminder,  setCopiedReminder]  = useState<string | null>(null)
+
+  // ── MRN / Delivery Acceptance ───────────────────────────────────────────
+  const [mrnStatus,    setMrnStatus]    = useState<"idle" | "form" | "raised">("idle")
+  const [mrnNumber,    setMrnNumber]    = useState("")
+  const [mrnDate,      setMrnDate]      = useState("")
+  const [mrnQty,       setMrnQty]       = useState("")
+  const [mrnCondition, setMrnCondition] = useState<"Good" | "Damaged" | "Partial">("Good")
+  const [mrnNotes,     setMrnNotes]     = useState("")
+  const [mrnApproved,  setMrnApproved]  = useState(false)
+
+  // ── FPA ────────────────────────────────────────────────────────────────
+  const [fpaStatus,    setFpaStatus]    = useState<"idle" | "form" | "done">("idle")
+  const [fpaNumber,    setFpaNumber]    = useState("")
+  const [fpaDate,      setFpaDate]      = useState("")
+  const [fpaApprover,  setFpaApprover]  = useState("")
+  const [fpaRemarks,   setFpaRemarks]   = useState("")
+
+  // ── Sample Cost ────────────────────────────────────────────────────────
+  const [costSaved,    setCostSaved]    = useState(false)
 
 
   const enquiryValidUntil = (() => {
@@ -76,6 +101,14 @@ export default function NpdDetailView() {
     const allStored: Record<string, SupplierDoc[]> = rawStored ? JSON.parse(rawStored) : {}
     const mockDocs = MOCK_SUPPLIER_DOCS[npdId] ?? []
     setSupplierDocs([...mockDocs, ...(allStored[npdId] ?? [])])
+
+    const rawStatus = localStorage.getItem(VENDOR_STATUS_KEY)
+    const allStatus: Record<string, Record<string, VendorStatusResponse>> = rawStatus ? JSON.parse(rawStatus) : {}
+    setVendorStatuses(allStatus[npdId] ?? {})
+
+    const rawDateAppr = localStorage.getItem(VENDOR_DATE_APPROVAL_KEY)
+    const allDateAppr: Record<string, Record<string, "approved" | "rejected">> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
+    setDateApprovals(allDateAppr[npdId] ?? {})
   }
 
   useEffect(() => {
@@ -100,6 +133,11 @@ export default function NpdDetailView() {
     const allLive: Record<string, Record<string, LiveQuotation>> = rawLive ? JSON.parse(rawLive) : {}
     setLiveQuotes(allLive[npdId] ?? {})
 
+    // Composed emails
+    const rawEmails = localStorage.getItem(COMPOSED_EMAILS_KEY)
+    const allEmails: Record<string, { vendorName: string; subject: string; body: string; portalLink: string }[]> = rawEmails ? JSON.parse(rawEmails) : {}
+    if (allEmails[npdId]) setComposedEmails(allEmails[npdId])
+
     // Sent vendors / enquiry dispatch state
     const rawSent = localStorage.getItem(ENQUIRY_SENT_KEY)
     const allSent: Record<string, string[]> = rawSent ? JSON.parse(rawSent) : {}
@@ -113,9 +151,45 @@ export default function NpdDetailView() {
       if (initial.length > 0) setSelectedVendors(new Set([initial[0].name]))
     }
 
+    // Vendor statuses
+    const rawStatus = localStorage.getItem(VENDOR_STATUS_KEY)
+    const allStatus: Record<string, Record<string, VendorStatusResponse>> = rawStatus ? JSON.parse(rawStatus) : {}
+    setVendorStatuses(allStatus[npdId] ?? {})
+
+    const rawDateAppr = localStorage.getItem(VENDOR_DATE_APPROVAL_KEY)
+    const allDateAppr: Record<string, Record<string, "approved" | "rejected">> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
+    setDateApprovals(allDateAppr[npdId] ?? {})
+
+    // Load MRN state
+    try {
+      const rawMRN = localStorage.getItem("sample_receipt_v1")
+      const allMRN: Record<string, { mrnNumber?: string }> = rawMRN ? JSON.parse(rawMRN) : {}
+      if (allMRN[npdId]?.mrnNumber) setMrnStatus("raised")
+      const rawAppr = localStorage.getItem("mrn_approval_v1")
+      const allAppr: Record<string, "approved" | "rejected"> = rawAppr ? JSON.parse(rawAppr) : {}
+      if (rawMRN && allMRN[npdId]?.mrnNumber) {
+        const key = allMRN[npdId].mrnNumber!
+        if (allAppr[key] === "approved") setMrnApproved(true)
+      }
+    } catch {}
+
+    // Load FPA state
+    try {
+      const rawFPA = localStorage.getItem("fpa_data_v1")
+      const allFPA: Record<string, unknown> = rawFPA ? JSON.parse(rawFPA) : {}
+      if (allFPA[npdId]) setFpaStatus("done")
+    } catch {}
+
+    // Load sample cost saved flag
+    try {
+      const rawCost = localStorage.getItem("sample_cost_v1")
+      const allCost: Record<string, unknown> = rawCost ? JSON.parse(rawCost) : {}
+      if (allCost[npdId]) setCostSaved(true)
+    } catch {}
+
     // Refresh live data when supplier submits in another tab
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY) refreshLiveData()
+      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY) refreshLiveData()
     }
     const onFocus = () => refreshLiveData()
 
@@ -164,6 +238,38 @@ export default function NpdDetailView() {
     const all: Record<string, string[]> = raw ? JSON.parse(raw) : {}
     all[npdId] = vendorList
     localStorage.setItem(ENQUIRY_SENT_KEY, JSON.stringify(all))
+
+    // Compose emails for each vendor
+    const template = localStorage.getItem(VENDOR_RFQ_TEMPLATE_KEY) || DEFAULT_RFQ_TEMPLATE
+    const emails = vendorList.map(vName => {
+      const portalLink = `${baseUrl}/supplier/quote/${npdId}?vendor=${encodeURIComponent(vName)}`
+      const filled = template
+        .replace(/{npd_id}/g,       npdId)
+        .replace(/{item_name}/g,    npd.itemName)
+        .replace(/{commodity}/g,    npd.itemCategory)
+        .replace(/{vendor_name}/g,  vName)
+        .replace(/{portal_link}/g,  portalLink)
+        .replace(/{valid_until}/g,  enquiryValidUntil)
+        .replace(/{drawing_link}/g, npd.driveLink || "Not attached")
+      const lines = filled.split("\n")
+      const subject = lines[0].replace(/^Subject:\s*/i, "").trim()
+      const bodyLines = lines.slice(1)
+      // Convert plain text lines to HTML; replace the portal link line with a button
+      const buttonHtml = `<div style="margin:16px 0;"><a href="${portalLink}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Open Supplier Portal →</a></div>`
+      const body = bodyLines.map(line => {
+        const trimmed = line.trim()
+        if (trimmed === "" ) return `<div style="height:8px"></div>`
+        if (trimmed === portalLink || trimmed === "{portal_link}") return buttonHtml
+        return `<p style="margin:0 0 4px 0;">${trimmed}</p>`
+      }).join("")
+      return { vendorName: vName, subject, body, portalLink }
+    })
+    setComposedEmails(emails)
+    const rawEmails = localStorage.getItem(COMPOSED_EMAILS_KEY)
+    const allEmails: Record<string, typeof emails> = rawEmails ? JSON.parse(rawEmails) : {}
+    allEmails[npdId] = emails
+    localStorage.setItem(COMPOSED_EMAILS_KEY, JSON.stringify(allEmails))
+
     // Advance stage to 4 — Supplier Defence
     if (activeStage < 4) {
       setActiveStage(4)
@@ -202,6 +308,36 @@ export default function NpdDetailView() {
     setReNegMsg("")
   }
 
+  const setDateApproval = (vendorName: string, decision: "approved" | "rejected") => {
+    const next = { ...dateApprovals, [vendorName]: decision }
+    setDateApprovals(next)
+    const raw = localStorage.getItem(VENDOR_DATE_APPROVAL_KEY)
+    const all: Record<string, Record<string, "approved" | "rejected">> = raw ? JSON.parse(raw) : {}
+    all[npdId] = next
+    localStorage.setItem(VENDOR_DATE_APPROVAL_KEY, JSON.stringify(all))
+  }
+
+  const buildReminderEmail = (vendorName: string, dispatchDate: string) => {
+    const statusLink = `${baseUrl}/supplier/status/${npdId}?vendor=${encodeURIComponent(vendorName)}`
+    const template = localStorage.getItem(VENDOR_STATUS_TEMPLATE_KEY) || DEFAULT_STATUS_TEMPLATE
+    const filled = template
+      .replace(/{npd_id}/g,       npdId)
+      .replace(/{item_name}/g,    npd.itemName)
+      .replace(/{vendor_name}/g,  vendorName)
+      .replace(/{dispatch_date}/g, dispatchDate)
+      .replace(/{status_link}/g,  statusLink)
+    const lines   = filled.split("\n")
+    const subject = lines[0].replace(/^Subject:\s*/i, "").trim()
+    const buttonHtml = `<div style="margin:16px 0;"><a href="${statusLink}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Confirm Dispatch Status →</a></div>`
+    const body = lines.slice(1).map(line => {
+      const t = line.trim()
+      if (t === "") return `<div style="height:8px"></div>`
+      if (t === statusLink || t === "{status_link}") return buttonHtml
+      return `<p style="margin:0 0 4px 0;">${t}</p>`
+    }).join("")
+    return { subject, body, statusLink }
+  }
+
   const setVendorApproval = (vendorName: string, decision: "approved" | "rejected") => {
     const next = { ...quoteApprovals, [vendorName]: decision }
     setQuoteApprovals(next)
@@ -209,11 +345,15 @@ export default function NpdDetailView() {
     const all: Record<string, Record<string, "approved" | "rejected">> = raw ? JSON.parse(raw) : {}
     all[npdId] = next
     localStorage.setItem(VENDOR_QUOTE_APPROVALS_KEY, JSON.stringify(all))
-    // Approving a vendor advances the NPD to Stage 5 — Sample Submission
-    if (decision === "approved" && activeStage < 5) {
-      const next5 = 5
-      setActiveStage(next5)
-      updateNPD(npdId, { stage: next5, stageName: getStageName(next5, npd.typeOfWork) })
+    // Approving a vendor updates the supplier name and advances to Stage 5 — Sample Submission
+    if (decision === "approved") {
+      const updates: Partial<typeof npd> = { supplier: vendorName }
+      if (activeStage < 5) {
+        setActiveStage(5)
+        updates.stage = 5
+        updates.stageName = getStageName(5, npd.typeOfWork)
+      }
+      updateNPD(npdId, updates)
     }
   }
 
@@ -362,7 +502,7 @@ export default function NpdDetailView() {
           </TabsTrigger>
           <TabsTrigger value="testing"   className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-900">R&D Testing & TQR</TabsTrigger>
           <TabsTrigger value="costing"   className="data-[state=active]:bg-amber-50 data-[state=active]:text-amber-900">
-            {activeStage >= 7 && <AlertCircle className="w-4 h-4 mr-1 text-amber-600" />} Stage 7+: Costing
+            Sample Cost
           </TabsTrigger>
           <TabsTrigger value="tracking"  className="data-[state=active]:bg-purple-50 data-[state=active]:text-purple-900">Parts & Supplier Tracking</TabsTrigger>
           <TabsTrigger value="docs"      className="data-[state=active]:bg-slate-100">Documents Library</TabsTrigger>
@@ -450,6 +590,147 @@ export default function NpdDetailView() {
                 >
                   <CheckCircle className="w-4 h-4 mr-2" /> Approve Request & Trigger Handoff
                 </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Sample Receipt / MRN ───────────────────────────────────────── */}
+          {activeStage === 5 && (currentRole.startsWith("rnd") || currentRole === "super_admin") && (
+            <Card className="border-blue-200 shadow-sm">
+              <CardHeader className="bg-blue-50 border-b border-blue-100 pb-3">
+                <CardTitle className="text-blue-900 flex items-center gap-2">
+                  <DownloadCloud className="w-5 h-5" /> Accept Delivery / Raise MRN
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-5">
+                {mrnStatus === "idle" && (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-blue-50/50 rounded-lg p-4 border border-blue-100">
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900">Samples dispatched by supplier</p>
+                      <p className="text-xs text-blue-700 mt-1">Log receipt when physical delivery is confirmed to move to Sample Receipt stage.</p>
+                    </div>
+                    <Button className="bg-blue-900 hover:bg-blue-800 text-white shrink-0" onClick={() => setMrnStatus("form")}>
+                      <DownloadCloud className="w-4 h-4 mr-2" /> Accept Delivery
+                    </Button>
+                  </div>
+                )}
+
+                {mrnStatus === "form" && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1">MRN Number <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          value={mrnNumber}
+                          onChange={e => setMrnNumber(e.target.value)}
+                          placeholder="e.g. MRN-2026-0042"
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1">Date of Receipt <span className="text-red-500">*</span></label>
+                        <input
+                          type="date"
+                          value={mrnDate}
+                          onChange={e => setMrnDate(e.target.value)}
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1">Quantity Received <span className="text-red-500">*</span></label>
+                        <input
+                          type="number"
+                          value={mrnQty}
+                          onChange={e => setMrnQty(e.target.value)}
+                          placeholder="e.g. 5"
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1">Condition</label>
+                        <select
+                          value={mrnCondition}
+                          onChange={e => setMrnCondition(e.target.value as "Good" | "Damaged" | "Partial")}
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option>Good</option>
+                          <option>Damaged</option>
+                          <option>Partial</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 block mb-1">Notes</label>
+                      <textarea
+                        rows={2}
+                        value={mrnNotes}
+                        onChange={e => setMrnNotes(e.target.value)}
+                        placeholder="Any observations about the received samples…"
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-3 justify-end pt-2 border-t border-slate-100">
+                      <Button variant="outline" onClick={() => setMrnStatus("idle")}>Cancel</Button>
+                      <Button
+                        className="bg-blue-900 hover:bg-blue-800 text-white"
+                        disabled={!mrnNumber || !mrnDate || !mrnQty}
+                        onClick={() => {
+                          const rawMRN = localStorage.getItem("sample_receipt_v1")
+                          const allMRN: Record<string, unknown> = rawMRN ? JSON.parse(rawMRN) : {}
+                          allMRN[npdId] = {
+                            mrnNumber, receivedDate: mrnDate, receivedQty: parseInt(mrnQty),
+                            condition: mrnCondition, notes: mrnNotes,
+                            supplier: npd.supplier, raisedBy: currentRole,
+                            raisedAt: new Date().toLocaleString("en-IN"),
+                          }
+                          localStorage.setItem("sample_receipt_v1", JSON.stringify(allMRN))
+                          setMrnStatus("raised")
+                          setActiveStage(6)
+                          updateNPD(npdId, { stage: 6, stageName: "Sample Receipt / MRN" })
+                        }}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" /> Log Receipt & Raise for Approval
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {mrnStatus === "raised" && (
+                  <div className={`rounded-lg border p-4 flex items-start gap-3 ${mrnApproved ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
+                    {mrnApproved
+                      ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                      : <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
+                    <div>
+                      <p className={`text-sm font-bold ${mrnApproved ? "text-emerald-800" : "text-amber-800"}`}>
+                        {mrnApproved ? "MRN Approved — R&D Evaluation in Progress" : "MRN Raised — Pending R&D Head Approval"}
+                      </p>
+                      <p className={`text-xs mt-0.5 ${mrnApproved ? "text-emerald-700" : "text-amber-700"}`}>
+                        {mrnApproved
+                          ? "R&D Head has approved the sample receipt. Evaluation underway."
+                          : "MRN submitted. R&D Head needs to approve from the Approvals tab to begin evaluation."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeStage >= 6 && mrnStatus !== "idle" && mrnStatus !== "form" && (
+            <Card className={`shadow-sm ${mrnApproved ? "border-emerald-200 bg-emerald-50/30" : "border-amber-200 bg-amber-50/30"}`}>
+              <CardContent className="py-4 px-5 flex items-center gap-3">
+                {mrnApproved
+                  ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  : <Clock className="w-5 h-5 text-amber-500 shrink-0" />}
+                <div>
+                  <p className={`text-sm font-bold ${mrnApproved ? "text-emerald-800" : "text-amber-800"}`}>
+                    {mrnApproved ? "Sample Receipt Approved — R&D Evaluation Active" : "MRN Raised — Awaiting R&D Head Approval"}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {mrnApproved ? "Stage 7 in progress." : "Approve from the Approvals tab in the left sidebar."}
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -675,6 +956,44 @@ export default function NpdDetailView() {
                         )
                       })}
                     </div>
+
+                    {/* Composed Emails */}
+                    {composedEmails.length > 0 && (
+                      <div className="border-t border-emerald-200 pt-4 space-y-4">
+                        <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-slate-500" /> Email Drafts
+                        </h4>
+                        {composedEmails.map(({ vendorName, subject, body }) => {
+                          return (
+                            <div key={vendorName} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                              {/* Email header bar */}
+                              <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span className="text-xs font-semibold text-white truncate">{subject}</span>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`)
+                                    setCopiedEmail(vendorName)
+                                    setTimeout(() => setCopiedEmail(null), 2000)
+                                  }}
+                                  className="shrink-0 ml-3 text-[10px] font-semibold text-slate-300 hover:text-white flex items-center gap-1"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                  {copiedEmail === vendorName ? "Copied!" : "Copy"}
+                                </button>
+                              </div>
+                              {/* Email body rendered as HTML */}
+                              <div
+                                className="p-5 text-sm text-slate-700 leading-relaxed bg-white [&_p]:mb-3 [&_strong]:font-semibold [&_table]:my-2"
+                                dangerouslySetInnerHTML={{ __html: body }}
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -690,55 +1009,58 @@ export default function NpdDetailView() {
           )}
         </TabsContent>
 
-        {/* ── Costing ───────────────────────────────────────────────────────── */}
+        {/* ── Sample Cost Finalization ──────────────────────────────────────── */}
         <TabsContent value="costing" className="mt-6">
           <Card className="border-amber-200">
             <CardHeader className="bg-amber-50 border-b border-amber-100 rounded-t-xl">
               <CardTitle className="text-amber-900 flex items-center">
-                Stage 7+: Sample Cost Finalization (AICM Integration)
+                Sample Cost Finalization
               </CardTitle>
-              <CardDescription className="text-amber-700">
-                Complete this mandatory structure to push to AICM for cost validation.
-              </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
+              {costSaved && (
+                <div className="mb-5 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <p className="text-sm font-semibold text-emerald-800">Sample cost saved successfully.</p>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium text-slate-700">Unit Cost Quoted by Supplier (₹)</label>
-                    <input type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 border" defaultValue="310.00" />
+                    <input id="sc-unit" type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 border" defaultValue="310.00" />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-700">Tooling Cost (Amortized / One-time)</label>
-                    <input type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 border" defaultValue="0" />
+                    <input id="sc-tooling" type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 border" defaultValue="0" />
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="text-xs font-medium text-slate-700">Primary Pkg</label>
-                      <input type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 p-2 border" defaultValue="2.5" />
+                      <input id="sc-ppkg" type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 p-2 border" defaultValue="2.5" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-slate-700">Secondary Pkg</label>
-                      <input type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 p-2 border" defaultValue="0" />
+                      <input id="sc-spkg" type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 p-2 border" defaultValue="0" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-slate-700">Transit Pkg</label>
-                      <input type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 p-2 border" defaultValue="8.0" />
+                      <input id="sc-tpkg" type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 p-2 border" defaultValue="8.0" />
                     </div>
                   </div>
                 </div>
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium text-slate-700">Estimated Transport Cost / Unit</label>
-                    <input type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 border" defaultValue="15.00" />
+                    <input id="sc-transport" type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 border" defaultValue="15.00" />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-700">Confirmed MOQ</label>
-                    <input type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 border" defaultValue="5000" />
+                    <input id="sc-moq" type="number" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 border" defaultValue="5000" />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-700">Payment Terms</label>
-                    <select className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 p-2 border">
+                    <select id="sc-payment" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 p-2 border">
                       <option>90 Days Credit</option>
                       <option>60 Days Credit</option>
                       <option>LC</option>
@@ -746,9 +1068,49 @@ export default function NpdDetailView() {
                   </div>
                 </div>
               </div>
-              <div className="mt-8 flex justify-end">
-                <Button className="bg-amber-600 hover:bg-amber-700 text-white font-medium px-8">
-                  Calculate & Push to AICM
+              <div className="mt-8 flex gap-3 justify-end">
+                <Button
+                  variant="outline"
+                  className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                  onClick={() => {
+                    const raw = localStorage.getItem("sample_cost_v1")
+                    const all: Record<string, unknown> = raw ? JSON.parse(raw) : {}
+                    all[npdId] = {
+                      unitCost:  (document.getElementById("sc-unit") as HTMLInputElement)?.value,
+                      tooling:   (document.getElementById("sc-tooling") as HTMLInputElement)?.value,
+                      primaryPkg:(document.getElementById("sc-ppkg") as HTMLInputElement)?.value,
+                      moq:       (document.getElementById("sc-moq") as HTMLInputElement)?.value,
+                      payment:   (document.getElementById("sc-payment") as HTMLSelectElement)?.value,
+                      savedAt:   new Date().toLocaleString("en-IN"),
+                    }
+                    localStorage.setItem("sample_cost_v1", JSON.stringify(all))
+                    setCostSaved(true)
+                  }}
+                >
+                  Save Draft
+                </Button>
+                <Button
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-medium px-8"
+                  onClick={() => {
+                    const raw = localStorage.getItem("sample_cost_v1")
+                    const all: Record<string, unknown> = raw ? JSON.parse(raw) : {}
+                    all[npdId] = {
+                      unitCost:  (document.getElementById("sc-unit") as HTMLInputElement)?.value,
+                      tooling:   (document.getElementById("sc-tooling") as HTMLInputElement)?.value,
+                      primaryPkg:(document.getElementById("sc-ppkg") as HTMLInputElement)?.value,
+                      moq:       (document.getElementById("sc-moq") as HTMLInputElement)?.value,
+                      payment:   (document.getElementById("sc-payment") as HTMLSelectElement)?.value,
+                      savedAt:   new Date().toLocaleString("en-IN"),
+                    }
+                    localStorage.setItem("sample_cost_v1", JSON.stringify(all))
+                    setCostSaved(true)
+                    if (activeStage < 10) {
+                      setActiveStage(10)
+                      updateNPD(npdId, { stage: 10, stageName: getStageName(10, npd.typeOfWork) })
+                    }
+                  }}
+                >
+                  Finalise & Push to AICM
                 </Button>
               </div>
             </CardContent>
@@ -894,6 +1256,117 @@ export default function NpdDetailView() {
                             </div>
                           ))}
                         </div>
+
+                        {/* Dispatch status response from vendor */}
+                        {(() => {
+                          const status = vendorStatuses[v.vendorName]
+                          if (!status) return null
+                          const dateDecision = dateApprovals[v.vendorName]
+                          const needsDateApproval = !status.onTime && status.newDate && !dateDecision
+                          return (
+                            <div className={`mb-3 rounded-lg border p-3 space-y-2 ${
+                              status.onTime          ? "bg-emerald-50 border-emerald-200" :
+                              dateDecision === "approved" ? "bg-emerald-50 border-emerald-200" :
+                              dateDecision === "rejected" ? "bg-red-50 border-red-200" :
+                              "bg-amber-50 border-amber-200"
+                            }`}>
+                              <p className={`text-xs font-bold flex items-center gap-1.5 ${
+                                status.onTime || dateDecision === "approved" ? "text-emerald-800" :
+                                dateDecision === "rejected" ? "text-red-700" : "text-amber-800"
+                              }`}>
+                                {status.onTime || dateDecision === "approved"
+                                  ? <CheckCircle className="w-3.5 h-3.5" />
+                                  : dateDecision === "rejected"
+                                  ? <XCircle className="w-3.5 h-3.5" />
+                                  : <AlertCircle className="w-3.5 h-3.5" />}
+                                {status.onTime ? "Vendor Status: On Track" :
+                                 dateDecision === "approved" ? "New Date Approved" :
+                                 dateDecision === "rejected" ? "New Date Rejected" :
+                                 "Date Change Requested — Action Required"}
+                                <span className="font-normal text-slate-400 ml-1">· {status.respondedAt}</span>
+                              </p>
+
+                              {!status.onTime && status.newDate && (
+                                <p className="text-sm font-semibold text-amber-900">
+                                  Proposed new date:{" "}
+                                  <span className="font-bold">
+                                    {new Date(status.newDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                                  </span>
+                                </p>
+                              )}
+                              {status.notes && (
+                                <p className="text-xs text-slate-600 italic">&ldquo;{status.notes}&rdquo;</p>
+                              )}
+
+                              {/* Approve / Reject new date */}
+                              {isSpocOrSourcing && needsDateApproval && (
+                                <div className="flex gap-2 pt-1 border-t border-amber-200">
+                                  <button
+                                    onClick={() => setDateApproval(v.vendorName, "rejected")}
+                                    className="flex items-center gap-1.5 text-xs font-semibold text-red-600 border border-red-200 bg-white hover:bg-red-50 rounded-lg px-3 py-1.5 transition-colors"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" /> Reject New Date
+                                  </button>
+                                  <button
+                                    onClick={() => setDateApproval(v.vendorName, "approved")}
+                                    className="flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-3 py-1.5 transition-colors"
+                                  >
+                                    <CheckCircle className="w-3.5 h-3.5" /> Approve New Date
+                                  </button>
+                                </div>
+                              )}
+                              {dateDecision && (
+                                <button
+                                  onClick={() => setDateApproval(v.vendorName, dateDecision === "approved" ? "rejected" : "approved")}
+                                  className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+                                >
+                                  Change decision
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })()}
+
+                        {/* Reminder email draft — shown when vendor has submitted and has a dispatch date */}
+                        {isSpocOrSourcing && isSubmitted && dispatchVal && !vendorStatuses[v.vendorName] && (() => {
+                          const { subject, body, statusLink } = buildReminderEmail(v.vendorName, dispatchVal)
+                          return (
+                            <div className="mb-3 border border-slate-200 rounded-xl overflow-hidden">
+                              <div className="bg-slate-100 border-b border-slate-200 px-3 py-2 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Mail className="w-3.5 h-3.5 text-slate-500" />
+                                  <span className="text-xs font-bold text-slate-700">Reminder Email Draft</span>
+                                  <span className="text-xs text-slate-400 truncate max-w-[200px]">{subject}</span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(`Subject: ${subject}\n\n${body.replace(/<[^>]+>/g, "")}`)
+                                      setCopiedReminder(v.vendorName)
+                                      setTimeout(() => setCopiedReminder(null), 2000)
+                                    }}
+                                    className="text-[10px] font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                    {copiedReminder === v.vendorName ? "Copied!" : "Copy"}
+                                  </button>
+                                  <a
+                                    href={statusLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] font-semibold text-slate-400 hover:text-blue-700 flex items-center gap-1"
+                                  >
+                                    <ExternalLink className="w-3 h-3" /> Preview
+                                  </a>
+                                </div>
+                              </div>
+                              <div
+                                className="p-4 text-sm text-slate-700 leading-relaxed bg-white [&_p]:mb-2"
+                                dangerouslySetInnerHTML={{ __html: body }}
+                              />
+                            </div>
+                          )
+                        })()}
 
                         {/* Inline re-negotiate message form */}
                         {isBeingRenegotiated && (
@@ -1066,6 +1539,105 @@ export default function NpdDetailView() {
               )}
             </CardContent>
           </Card>
+
+          {/* ── FPA (First Part Approval) ──────────────────────────────────── */}
+          {activeStage >= 8 && (
+            <Card className="border-purple-200 shadow-sm mt-6">
+              <CardHeader className="bg-purple-50 border-b border-purple-100 pb-3">
+                <CardTitle className="text-purple-900 flex items-center gap-2">
+                  <ClipboardCheck className="w-5 h-5" /> FPA — First Part Approval
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-5">
+                {fpaStatus === "done" ? (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-emerald-800">FPA Submitted</p>
+                      <p className="text-xs text-emerald-700 mt-0.5">First Part Approval has been logged and is on record.</p>
+                    </div>
+                  </div>
+                ) : fpaStatus === "form" ? (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1">FPA Reference Number</label>
+                        <input
+                          type="text"
+                          value={fpaNumber}
+                          onChange={e => setFpaNumber(e.target.value)}
+                          placeholder="e.g. FPA-2026-0019"
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1">FPA Date</label>
+                        <input
+                          type="date"
+                          value={fpaDate}
+                          onChange={e => setFpaDate(e.target.value)}
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1">Approved By</label>
+                        <input
+                          type="text"
+                          value={fpaApprover}
+                          onChange={e => setFpaApprover(e.target.value)}
+                          placeholder="Name of approving engineer"
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1">Remarks</label>
+                        <input
+                          type="text"
+                          value={fpaRemarks}
+                          onChange={e => setFpaRemarks(e.target.value)}
+                          placeholder="e.g. All dimensions within tolerance"
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="border-2 border-dashed border-purple-200 rounded-lg p-4 text-center hover:bg-purple-50 cursor-pointer">
+                      <p className="text-sm text-slate-500">Click to upload FPA signed document (PDF / image)</p>
+                    </div>
+                    <div className="flex gap-3 justify-end pt-2 border-t border-slate-100">
+                      <Button variant="outline" onClick={() => setFpaStatus("idle")}>Cancel</Button>
+                      <Button
+                        className="bg-purple-700 hover:bg-purple-800 text-white"
+                        disabled={!fpaNumber || !fpaDate}
+                        onClick={() => {
+                          const raw = localStorage.getItem("fpa_data_v1")
+                          const all: Record<string, unknown> = raw ? JSON.parse(raw) : {}
+                          all[npdId] = { fpaNumber, fpaDate, fpaApprover, fpaRemarks, submittedAt: new Date().toLocaleString("en-IN") }
+                          localStorage.setItem("fpa_data_v1", JSON.stringify(all))
+                          setFpaStatus("done")
+                          if (activeStage < 9) {
+                            setActiveStage(9)
+                            updateNPD(npdId, { stage: 9, stageName: "Sample Cost Finalization" })
+                          }
+                        }}
+                      >
+                        <ClipboardCheck className="w-4 h-4 mr-2" /> Submit FPA
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-purple-50/50 rounded-lg p-4 border border-purple-100">
+                    <div>
+                      <p className="text-sm font-semibold text-purple-900">First Part Approval pending</p>
+                      <p className="text-xs text-purple-700 mt-1">Log the FPA once the sample has been dimensionally verified and signed off.</p>
+                    </div>
+                    <Button className="bg-purple-700 hover:bg-purple-800 text-white shrink-0" onClick={() => setFpaStatus("form")}>
+                      <ClipboardCheck className="w-4 h-4 mr-2" /> Add FPA
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ── Integrated Mail Inbox ─────────────────────────────────────────── */}
