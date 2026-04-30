@@ -923,6 +923,79 @@ export default function NpdDetailView() {
                     </p>
                   </div>
                 </div>
+                {/* Vendor feasibility denial queries */}
+                {Object.entries(liveQuotes).some(([, lq]) => lq.feasible === false && lq.query) && (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vendor Queries</p>
+                    {Object.entries(liveQuotes)
+                      .filter(([, lq]) => lq.feasible === false && lq.query)
+                      .map(([vendorName, lq]) => (
+                        <div
+                          key={vendorName}
+                          className={`rounded-lg border p-3 ${lq.rndReply ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            {lq.rndReply
+                              ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                              : <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />}
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-bold ${lq.rndReply ? "text-emerald-800" : "text-amber-800"}`}>
+                                {vendorName} — {lq.rndReply ? "Query Resolved" : "Feasibility Denied"}
+                              </p>
+                              <p className="text-xs text-slate-600 mt-0.5 italic">Query: &quot;{lq.query}&quot;</p>
+                              {lq.rndReply ? (
+                                <div className="mt-1.5 space-y-0.5">
+                                  <p className="text-xs text-slate-700">Reply: {lq.rndReply}</p>
+                                  {lq.rndReplyDoc && (
+                                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                                      <FileText className="w-3 h-3" /> {lq.rndReplyDoc}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="mt-2 space-y-2">
+                                  <textarea
+                                    rows={2}
+                                    value={queryReplyText[vendorName] ?? ""}
+                                    onChange={e => setQueryReplyText(prev => ({ ...prev, [vendorName]: e.target.value }))}
+                                    placeholder="Type your reply to this query…"
+                                    className="w-full text-xs border border-amber-300 rounded-md px-2 py-1.5 focus:ring-amber-400 focus:border-amber-400 bg-white"
+                                  />
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div
+                                      onClick={() => {
+                                        const fakeDoc = `rnd_reply_${vendorName.toLowerCase().replace(/\s+/g, "_")}.pdf`
+                                        setQueryReplyDoc(prev => ({
+                                          ...prev,
+                                          [vendorName]: queryReplyDoc[vendorName] ? "" : fakeDoc,
+                                        }))
+                                      }}
+                                      className={`cursor-pointer flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border transition-colors ${
+                                        queryReplyDoc[vendorName]
+                                          ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                                          : "bg-white border-slate-300 text-slate-500 hover:border-amber-400"
+                                      }`}
+                                    >
+                                      <UploadCloud className="w-3 h-3" />
+                                      {queryReplyDoc[vendorName] ? queryReplyDoc[vendorName] : "Attach doc (optional)"}
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-7"
+                                      disabled={!(queryReplyText[vendorName]?.trim())}
+                                      onClick={() => submitQueryReply(vendorName)}
+                                    >
+                                      <Send className="w-3 h-3 mr-1" /> Send Reply
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
