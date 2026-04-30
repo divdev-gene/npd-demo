@@ -1727,46 +1727,100 @@ export default function NpdDetailView() {
                 <p className="text-sm text-slate-600">
                   Share the dispatch link with <strong>{npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? "the selected vendor"}</strong>. They must upload compliance documents and confirm dispatch.
                 </p>
-                {(() => {
-                  const vendor = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
-                  const dispatchUrl = `${baseUrl}/supplier/dispatch/${npdId}${vendor ? `?vendor=${encodeURIComponent(vendor)}` : ""}`
-                  return (
-                    <div className="flex items-center gap-2 bg-white border border-orange-200 rounded-lg px-3 py-2.5">
-                      <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="text-xs text-blue-700 font-mono truncate flex-1">{dispatchUrl}</span>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(dispatchUrl)
-                          setCopiedVendor("dispatch")
-                          setTimeout(() => setCopiedVendor(null), 2000)
-                        }}
-                        className="shrink-0 text-[10px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
-                      >
-                        <Copy className="w-3 h-3" />
-                        {copiedVendor === "dispatch" ? "Copied!" : "Copy"}
-                      </button>
-                      <a href={dispatchUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+
+                {dispatchInfo ? (
+                  <div className="bg-white border border-emerald-200 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Supplier Submitted Dispatch Details
+                      </p>
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                        deliveryHeadApproved
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {deliveryHeadApproved ? "Delivery Accepted" : "Pending RND Acceptance"}
+                      </span>
                     </div>
-                  )
-                })()}
-                {!defenceAdvanced ? (
-                  <Button
-                    className="bg-orange-600 hover:bg-orange-700 text-white text-xs"
-                    onClick={() => {
-                      setDefenceAdvanced(true)
-                      setActiveStage(5)
-                      updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
-                    }}
-                  >
-                    <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched &amp; Advance to RND Evaluation
-                  </Button>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-slate-400 uppercase tracking-wider font-bold">Supplier</p>
+                        <p className="text-slate-800 font-semibold mt-0.5">{dispatchInfo.vendorName}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 uppercase tracking-wider font-bold">Dispatch Date</p>
+                        <p className="text-slate-800 font-semibold mt-0.5">{dispatchInfo.dispatchDate}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 uppercase tracking-wider font-bold">Submitted</p>
+                        <p className="text-slate-800 font-semibold mt-0.5">{dispatchInfo.submittedAt}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 uppercase tracking-wider font-bold">Compliance Docs</p>
+                        <p className="text-slate-800 font-semibold mt-0.5">{dispatchInfo.docs.length} document{dispatchInfo.docs.length !== 1 ? "s" : ""}</p>
+                      </div>
+                    </div>
+                    {dispatchInfo.docs.length > 0 && (
+                      <ul className="space-y-1">
+                        {dispatchInfo.docs.map((doc, i) => (
+                          <li key={i} className="flex items-center gap-2 text-xs text-slate-600">
+                            <FileText className="w-3 h-3 text-slate-400 shrink-0" /> {doc}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 ) : (
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" /> Dispatched — Advanced to RND Evaluation
-                  </span>
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-400 italic flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" /> Awaiting dispatch submission from {npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? "supplier"}
+                    </p>
+                    {(() => {
+                      const vendor = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
+                      const dispatchUrl = `${baseUrl}/supplier/dispatch/${npdId}${vendor ? `?vendor=${encodeURIComponent(vendor)}` : ""}`
+                      return (
+                        <div className="flex items-center gap-2 bg-white border border-orange-200 rounded-lg px-3 py-2.5">
+                          <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="text-xs text-blue-700 font-mono truncate flex-1">{dispatchUrl}</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(dispatchUrl)
+                              setCopiedVendor("dispatch")
+                              setTimeout(() => setCopiedVendor(null), 2000)
+                            }}
+                            className="shrink-0 text-[10px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                          >
+                            <Copy className="w-3 h-3" />
+                            {copiedVendor === "dispatch" ? "Copied!" : "Copy"}
+                          </button>
+                          <a href={dispatchUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      )
+                    })()}
+                  </div>
                 )}
+
+                <div className="pt-1 border-t border-orange-100">
+                  <p className="text-[10px] text-slate-400 mb-2">Manual override (if supplier did not use portal):</p>
+                  {!defenceAdvanced ? (
+                    <Button
+                      className="bg-orange-600 hover:bg-orange-700 text-white text-xs"
+                      onClick={() => {
+                        setDefenceAdvanced(true)
+                        setActiveStage(5)
+                        updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
+                      }}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched &amp; Advance to RND Evaluation
+                    </Button>
+                  ) : (
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" /> Dispatched — Advanced to RND Evaluation
+                    </span>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}
