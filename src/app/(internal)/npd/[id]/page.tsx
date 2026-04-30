@@ -181,6 +181,14 @@ export default function NpdDetailView() {
     const rawDispatch = localStorage.getItem(SUPPLIER_DISPATCH_KEY)
     const allDispatch: Record<string, { vendorName: string; dispatchDate: string; docs: string[]; submittedAt: string }> = rawDispatch ? JSON.parse(rawDispatch) : {}
     setDispatchInfo(allDispatch[npdId] ?? null)
+
+    const rawAcceptance = localStorage.getItem(DELIVERY_ACCEPTANCE_KEY)
+    const allAcceptance: Record<string, { docName: string; acceptedAt: string; headApproved: boolean }> = rawAcceptance ? JSON.parse(rawAcceptance) : {}
+    if (allAcceptance[npdId]) {
+      setDeliveryDoc(allAcceptance[npdId].docName)
+      setDeliverySubmitted(true)
+      if (allAcceptance[npdId].headApproved) setDeliveryHeadApproved(true)
+    }
   }
 
   useEffect(() => {
