@@ -191,6 +191,8 @@ export type VendorQuotation = {
 export const VENDOR_QUOTE_APPROVALS_KEY = "vendor_quote_approvals_v1";
 export const ENQUIRY_SENT_KEY           = "enquiry_sent_vendors_v1";
 export const LIVE_QUOTATIONS_KEY        = "live_quotations_v1";
+export const SUPPLIER_DISPATCH_KEY      = "supplier_dispatch_submitted_v1"
+export const DELIVERY_ACCEPTANCE_KEY    = "delivery_acceptance_v1"
 
 export type LiveQuotation = {
   vendorName:         string;

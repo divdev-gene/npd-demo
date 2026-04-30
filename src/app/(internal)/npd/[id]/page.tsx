@@ -8,6 +8,7 @@ import {
   MOCK_VENDOR_QUOTATIONS, VENDOR_QUOTE_APPROVALS_KEY,
   LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY, VENDOR_RFQ_TEMPLATE_KEY, DEFAULT_RFQ_TEMPLATE, VENDOR_EMAIL, COMPOSED_EMAILS_KEY,
   VENDOR_STATUS_KEY, DEFAULT_STATUS_TEMPLATE, VENDOR_STATUS_TEMPLATE_KEY, VENDOR_DATE_APPROVAL_KEY,
+  SUPPLIER_DISPATCH_KEY, DELIVERY_ACCEPTANCE_KEY,
   type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse,
 } from "@/lib/mockData"
 import { useNPDs } from "@/lib/npdContext"
@@ -177,7 +178,7 @@ export default function NpdDetailView() {
     const allDateAppr: Record<string, Record<string, "approved" | "rejected">> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
     setDateApprovals(allDateAppr[npdId] ?? {})
 
-    const rawDispatch = localStorage.getItem("supplier_dispatch_submitted_v1")
+    const rawDispatch = localStorage.getItem(SUPPLIER_DISPATCH_KEY)
     const allDispatch: Record<string, { vendorName: string; dispatchDate: string; docs: string[]; submittedAt: string }> = rawDispatch ? JSON.parse(rawDispatch) : {}
     setDispatchInfo(allDispatch[npdId] ?? null)
   }
@@ -232,12 +233,12 @@ export default function NpdDetailView() {
     setDateApprovals(allDateAppr[npdId] ?? {})
 
     // Dispatch info from supplier portal
-    const rawDispatch = localStorage.getItem("supplier_dispatch_submitted_v1")
+    const rawDispatch = localStorage.getItem(SUPPLIER_DISPATCH_KEY)
     const allDispatch: Record<string, { vendorName: string; dispatchDate: string; docs: string[]; submittedAt: string }> = rawDispatch ? JSON.parse(rawDispatch) : {}
     setDispatchInfo(allDispatch[npdId] ?? null)
 
     // Delivery acceptance (two-step)
-    const rawAcceptance = localStorage.getItem("delivery_acceptance_v1")
+    const rawAcceptance = localStorage.getItem(DELIVERY_ACCEPTANCE_KEY)
     const allAcceptance: Record<string, { docName: string; acceptedAt: string; headApproved: boolean }> = rawAcceptance ? JSON.parse(rawAcceptance) : {}
     if (allAcceptance[npdId]) {
       setDeliveryDoc(allAcceptance[npdId].docName)
@@ -247,7 +248,7 @@ export default function NpdDetailView() {
 
     // Refresh live data when supplier submits in another tab
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY || e.key === "supplier_dispatch_submitted_v1") refreshLiveData()
+      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY || e.key === SUPPLIER_DISPATCH_KEY || e.key === DELIVERY_ACCEPTANCE_KEY) refreshLiveData()
     }
     const onFocus = () => refreshLiveData()
 
@@ -412,7 +413,6 @@ export default function NpdDetailView() {
       rndReply: reply,
       ...(queryReplyDoc[vendorName] ? { rndReplyDoc: queryReplyDoc[vendorName] } : {}),
     }
-    if (!all[npdId]) all[npdId] = {}
     all[npdId][vendorName] = updated
     localStorage.setItem(LIVE_QUOTATIONS_KEY, JSON.stringify(all))
     setLiveQuotes(prev => ({ ...prev, [vendorName]: updated }))
@@ -420,20 +420,18 @@ export default function NpdDetailView() {
 
   const submitDelivery = () => {
     const acceptance = { docName: deliveryDoc, acceptedAt: new Date().toLocaleString("en-IN"), headApproved: false }
-    const raw = localStorage.getItem("delivery_acceptance_v1")
+    const raw = localStorage.getItem(DELIVERY_ACCEPTANCE_KEY)
     const all: Record<string, typeof acceptance> = raw ? JSON.parse(raw) : {}
     all[npdId] = acceptance
-    localStorage.setItem("delivery_acceptance_v1", JSON.stringify(all))
+    localStorage.setItem(DELIVERY_ACCEPTANCE_KEY, JSON.stringify(all))
     setDeliverySubmitted(true)
   }
 
   const approveDelivery = () => {
-    const raw = localStorage.getItem("delivery_acceptance_v1")
+    const raw = localStorage.getItem(DELIVERY_ACCEPTANCE_KEY)
     const all: Record<string, { docName: string; acceptedAt: string; headApproved: boolean }> = raw ? JSON.parse(raw) : {}
-    if (all[npdId]) {
-      all[npdId].headApproved = true
-      localStorage.setItem("delivery_acceptance_v1", JSON.stringify(all))
-    }
+    all[npdId] = { ...(all[npdId] ?? { docName: deliveryDoc, acceptedAt: new Date().toLocaleString("en-IN") }), headApproved: true }
+    localStorage.setItem(DELIVERY_ACCEPTANCE_KEY, JSON.stringify(all))
     setDeliveryHeadApproved(true)
     setActiveStage(6)
     updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
