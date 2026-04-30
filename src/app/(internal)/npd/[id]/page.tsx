@@ -139,6 +139,19 @@ export default function NpdDetailView() {
 
   const [fpaImageUploaded, setFpaImageUploaded] = useState(false)
 
+  // ── Query reply form (keyed by vendorName) ──────────────────────────────
+  const [queryReplyText, setQueryReplyText] = useState<Record<string, string>>({})
+  const [queryReplyDoc,  setQueryReplyDoc]  = useState<Record<string, string>>({})
+
+  // ── Dispatch info from supplier portal ──────────────────────────────────
+  const [dispatchInfo, setDispatchInfo] = useState<{
+    vendorName: string; dispatchDate: string; docs: string[]; submittedAt: string
+  } | null>(null)
+
+  // ── Delivery acceptance (two-step: user submits, head approves) ──────────
+  const [deliveryDoc,          setDeliveryDoc]          = useState("")
+  const [deliverySubmitted,    setDeliverySubmitted]    = useState(false)
+  const [deliveryHeadApproved, setDeliveryHeadApproved] = useState(false)
 
   const enquiryValidUntil = (() => {
     const d = new Date()
@@ -163,6 +176,10 @@ export default function NpdDetailView() {
     const rawDateAppr = localStorage.getItem(VENDOR_DATE_APPROVAL_KEY)
     const allDateAppr: Record<string, Record<string, "approved" | "rejected">> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
     setDateApprovals(allDateAppr[npdId] ?? {})
+
+    const rawDispatch = localStorage.getItem("supplier_dispatch_submitted_v1")
+    const allDispatch: Record<string, { vendorName: string; dispatchDate: string; docs: string[]; submittedAt: string }> = rawDispatch ? JSON.parse(rawDispatch) : {}
+    setDispatchInfo(allDispatch[npdId] ?? null)
   }
 
   useEffect(() => {
@@ -214,9 +231,23 @@ export default function NpdDetailView() {
     const allDateAppr: Record<string, Record<string, "approved" | "rejected">> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
     setDateApprovals(allDateAppr[npdId] ?? {})
 
+    // Dispatch info from supplier portal
+    const rawDispatch = localStorage.getItem("supplier_dispatch_submitted_v1")
+    const allDispatch: Record<string, { vendorName: string; dispatchDate: string; docs: string[]; submittedAt: string }> = rawDispatch ? JSON.parse(rawDispatch) : {}
+    setDispatchInfo(allDispatch[npdId] ?? null)
+
+    // Delivery acceptance (two-step)
+    const rawAcceptance = localStorage.getItem("delivery_acceptance_v1")
+    const allAcceptance: Record<string, { docName: string; acceptedAt: string; headApproved: boolean }> = rawAcceptance ? JSON.parse(rawAcceptance) : {}
+    if (allAcceptance[npdId]) {
+      setDeliveryDoc(allAcceptance[npdId].docName)
+      setDeliverySubmitted(true)
+      if (allAcceptance[npdId].headApproved) setDeliveryHeadApproved(true)
+    }
+
     // Refresh live data when supplier submits in another tab
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY) refreshLiveData()
+      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY || e.key === "supplier_dispatch_submitted_v1") refreshLiveData()
     }
     const onFocus = () => refreshLiveData()
 
@@ -367,6 +398,45 @@ export default function NpdDetailView() {
       }
       updateNPD(npdId, updates)
     }
+  }
+
+  const submitQueryReply = (vendorName: string) => {
+    const reply = queryReplyText[vendorName]?.trim()
+    if (!reply) return
+    const raw = localStorage.getItem(LIVE_QUOTATIONS_KEY)
+    const all: Record<string, Record<string, LiveQuotation>> = raw ? JSON.parse(raw) : {}
+    const prev = all[npdId]?.[vendorName]
+    if (!prev) return
+    const updated: LiveQuotation = {
+      ...prev,
+      rndReply: reply,
+      ...(queryReplyDoc[vendorName] ? { rndReplyDoc: queryReplyDoc[vendorName] } : {}),
+    }
+    if (!all[npdId]) all[npdId] = {}
+    all[npdId][vendorName] = updated
+    localStorage.setItem(LIVE_QUOTATIONS_KEY, JSON.stringify(all))
+    setLiveQuotes(prev => ({ ...prev, [vendorName]: updated }))
+  }
+
+  const submitDelivery = () => {
+    const acceptance = { docName: deliveryDoc, acceptedAt: new Date().toLocaleString("en-IN"), headApproved: false }
+    const raw = localStorage.getItem("delivery_acceptance_v1")
+    const all: Record<string, typeof acceptance> = raw ? JSON.parse(raw) : {}
+    all[npdId] = acceptance
+    localStorage.setItem("delivery_acceptance_v1", JSON.stringify(all))
+    setDeliverySubmitted(true)
+  }
+
+  const approveDelivery = () => {
+    const raw = localStorage.getItem("delivery_acceptance_v1")
+    const all: Record<string, { docName: string; acceptedAt: string; headApproved: boolean }> = raw ? JSON.parse(raw) : {}
+    if (all[npdId]) {
+      all[npdId].headApproved = true
+      localStorage.setItem("delivery_acceptance_v1", JSON.stringify(all))
+    }
+    setDeliveryHeadApproved(true)
+    setActiveStage(6)
+    updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
   }
 
   const vendors = getVendors(npd.itemCategory)

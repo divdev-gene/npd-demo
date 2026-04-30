@@ -202,6 +202,8 @@ export type LiveQuotation = {
   query?:             string;    // clarification query raised by supplier when not feasible
   reNegotiationMsg?:  string;
   reNegotiationAt?:   string;
+  rndReply?:          string;    // RND's text reply to a feasibility denial query
+  rndReplyDoc?:       string;    // optional uploaded doc filename
 };
 
 export type ContactInfo = {
