@@ -187,6 +187,10 @@ export default function NpdDetailView() {
       setDeliveryDoc(allAcceptance[npdId].docName)
       setDeliverySubmitted(true)
       if (allAcceptance[npdId].headApproved) setDeliveryHeadApproved(true)
+    } else {
+      setDeliveryDoc("")
+      setDeliverySubmitted(false)
+      setDeliveryHeadApproved(false)
     }
   }
 
@@ -437,7 +441,8 @@ export default function NpdDetailView() {
   const approveDelivery = () => {
     const raw = localStorage.getItem(DELIVERY_ACCEPTANCE_KEY)
     const all: Record<string, { docName: string; acceptedAt: string; headApproved: boolean }> = raw ? JSON.parse(raw) : {}
-    all[npdId] = { ...(all[npdId] ?? { docName: deliveryDoc, acceptedAt: new Date().toLocaleString("en-IN") }), headApproved: true }
+    if (!all[npdId]) return
+    all[npdId].headApproved = true
     localStorage.setItem(DELIVERY_ACCEPTANCE_KEY, JSON.stringify(all))
     setDeliveryHeadApproved(true)
     setActiveStage(6)
