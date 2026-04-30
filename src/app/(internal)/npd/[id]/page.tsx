@@ -449,6 +449,46 @@ export default function NpdDetailView() {
     updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
   }
 
+  const demoAdvanceStage = () => {
+    if (activeStage >= TOTAL_NPD_STAGES) return
+    const next = activeStage + 1
+
+    // Stage 3→4: auto-approve first vendor if none locked yet
+    if (activeStage === 3 && (!npd.supplier || npd.supplier === "Pending Assignment")) {
+      const firstVendor = getVendors(npd.itemCategory)[0]?.name ?? sentVendors[0]
+      if (firstVendor) {
+        setVendorApproval(firstVendor, "approved") // internally advances to stage 4
+        return
+      }
+    }
+    // Stage 4→5: mark dispatch done
+    if (activeStage === 4) setDefenceAdvanced(true)
+    // Stage 5→6: auto-complete two-step delivery acceptance
+    if (activeStage === 5) {
+      const docName = "demo_delivery_confirmation.jpg"
+      const acceptance = { docName, acceptedAt: new Date().toLocaleString("en-IN"), headApproved: true }
+      const rawA = localStorage.getItem(DELIVERY_ACCEPTANCE_KEY)
+      const allA: Record<string, typeof acceptance> = rawA ? JSON.parse(rawA) : {}
+      allA[npdId] = acceptance
+      localStorage.setItem(DELIVERY_ACCEPTANCE_KEY, JSON.stringify(allA))
+      setDeliveryDoc(docName)
+      setDeliverySubmitted(true)
+      setDeliveryHeadApproved(true)
+    }
+    // Stage 6→7: auto-complete TQR
+    if (activeStage === 6) setTqrStatus("fully_approved")
+
+    setActiveStage(next)
+    updateNPD(npdId, { stage: next, stageName: NPD_STAGES[next - 1] })
+  }
+
+  const demoRevertStage = () => {
+    if (activeStage <= 1) return
+    const prev = activeStage - 1
+    setActiveStage(prev)
+    updateNPD(npdId, { stage: prev, stageName: NPD_STAGES[prev - 1] })
+  }
+
   const vendors = getVendors(npd.itemCategory)
 
   const tatLabel =
@@ -539,6 +579,29 @@ export default function NpdDetailView() {
                 {activeStage}. {NPD_STAGES[activeStage - 1] ?? getStageName(activeStage, npd.typeOfWork)}
               </p>
             </div>
+          </div>
+        </div>
+        {/* Demo navigation strip */}
+        <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Demo Controls</span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={activeStage <= 1}
+              onClick={demoRevertStage}
+              className="text-xs h-7 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+            >
+              ← Previous Stage
+            </Button>
+            <Button
+              size="sm"
+              disabled={activeStage >= TOTAL_NPD_STAGES}
+              onClick={demoAdvanceStage}
+              className="text-xs h-7 bg-slate-800 hover:bg-slate-700 text-white"
+            >
+              Demo: Next Stage →
+            </Button>
           </div>
         </div>
       </div>
