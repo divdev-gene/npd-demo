@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import {
   CheckCircle2, Circle, CheckCircle, Clock, AlertCircle, FileText,
   Send, MessageSquare, Mail, ShieldCheck, XCircle, Star, Copy, ExternalLink, Link2,
-  FolderOpen, UploadCloud, Download,
+  FolderOpen, UploadCloud, Download, Package,
 } from "lucide-react"
 
 
@@ -155,7 +155,6 @@ export default function NpdDetailView() {
   const [deliveryHeadApproved, setDeliveryHeadApproved] = useState(false)
 
   // ── Stage 8: Plant Delivery Acceptance ───────────────────────────────────
-  const [partNumberInput,        setPartNumberInput]        = useState("")
   const [partAssigned,           setPartAssigned]           = useState(false)
   const [assignedPartNumber,     setAssignedPartNumber]     = useState("")
   const [plantDeliveryDate,      setPlantDeliveryDate]      = useState("")
@@ -514,13 +513,15 @@ export default function NpdDetailView() {
     updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
   }
 
-  const assignPartNumber = () => {
-    if (!partNumberInput.trim()) return
+  const autoAssignPartNumber = (id: string): string => {
+    const seq = id.replace(/\D/g, "").slice(-4).padStart(4, "0")
+    const pn = `AMB-PT-${new Date().getFullYear()}-${seq}`
     const all: Record<string, { partNumber: string; assignedAt: string }> = JSON.parse(localStorage.getItem(PART_ASSIGNMENT_KEY) ?? "{}")
-    all[npdId] = { partNumber: partNumberInput.trim(), assignedAt: new Date().toLocaleString("en-IN") }
+    all[id] = { partNumber: pn, assignedAt: new Date().toLocaleString("en-IN") }
     localStorage.setItem(PART_ASSIGNMENT_KEY, JSON.stringify(all))
     setPartAssigned(true)
-    setAssignedPartNumber(partNumberInput.trim())
+    setAssignedPartNumber(pn)
+    return pn
   }
 
   const submitPlantSupplierResponse = () => {
@@ -583,15 +584,11 @@ export default function NpdDetailView() {
     }
     // Stage 6→7: auto-complete TQR
     if (activeStage === 6) setTqrStatus("fully_approved")
-    // Stage 8: auto-satisfy plant delivery acceptance (stage 8 is final — no further advance)
+    // Stage 7→8: auto-assign part number
+    if (activeStage === 7) autoAssignPartNumber(npdId)
+    // Stage 8: auto-satisfy supplier response + plant acceptance (stage 8 is final — no further advance)
     if (activeStage === 8) {
-      const dummyPart = `AMB-PT-2026-${npdId.slice(-4)}`
       const now = new Date().toLocaleString("en-IN")
-      const partAll: Record<string, { partNumber: string; assignedAt: string }> = JSON.parse(localStorage.getItem(PART_ASSIGNMENT_KEY) ?? "{}")
-      partAll[npdId] = { partNumber: dummyPart, assignedAt: now }
-      localStorage.setItem(PART_ASSIGNMENT_KEY, JSON.stringify(partAll))
-      setPartAssigned(true)
-      setAssignedPartNumber(dummyPart)
       const suppAll: Record<string, { deliveryDate: string; sampleQty: number; submittedAt: string }> = JSON.parse(localStorage.getItem(PLANT_SUPPLIER_RESP_KEY) ?? "{}")
       suppAll[npdId] = { deliveryDate: "30 May 2026", sampleQty: 5, submittedAt: now }
       localStorage.setItem(PLANT_SUPPLIER_RESP_KEY, JSON.stringify(suppAll))
@@ -1115,6 +1112,7 @@ export default function NpdDetailView() {
                       <Button
                         className="bg-purple-700 hover:bg-purple-800 text-white"
                         onClick={() => {
+                          if (!partAssigned) autoAssignPartNumber(npdId)
                           setActiveStage(8)
                           updateNPD(npdId, { stage: 8, stageName: NPD_STAGES[7] })
                         }}
@@ -1144,83 +1142,32 @@ export default function NpdDetailView() {
                   {activeStage === 8 && (
                     <div className="space-y-4">
 
-                      {/* Step A — Part number assignment */}
-                      {!partAssigned ? (
-                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                          <p className="text-sm font-bold text-slate-800 mb-1">Assign New Part Number</p>
-                          <p className="text-xs text-slate-500 mb-3">Assign the official part number for this approved component and notify the supplier to confirm delivery details.</p>
-                          {(currentRole === "rnd_head" || currentRole === "super_admin") ? (
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={partNumberInput}
-                                onChange={e => setPartNumberInput(e.target.value)}
-                                placeholder="e.g. AMB-PT-2026-0012"
-                                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                              />
-                              <Button size="sm" className="bg-orange-600 hover:bg-orange-700 text-white" disabled={!partNumberInput.trim()} onClick={assignPartNumber}>
-                                Assign &amp; Notify Supplier
-                              </Button>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-slate-400 italic">Awaiting RND Head to assign part number.</p>
-                          )}
+                      {/* RND work is complete — show approved status */}
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <p className="text-sm font-bold text-emerald-800">RND Approval Complete</p>
                         </div>
-                      ) : (
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <div>
-                              <p className="text-sm font-bold text-emerald-800">Part Number Assigned</p>
-                              <p className="text-xs text-emerald-700 mt-0.5">Part No: <strong>{assignedPartNumber}</strong></p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                        <p className="text-xs text-emerald-700">
+                          Part No: <strong>{assignedPartNumber}</strong> · Sourcing team has been notified to coordinate supplier delivery.
+                        </p>
+                        {plantVerdict === "accepted" && (
+                          <p className="text-xs text-emerald-700 mt-1.5 font-semibold">✓ Plant user accepted the part — NPD complete.</p>
+                        )}
+                        {plantVerdict === "not_good" && (
+                          <p className="text-xs text-red-700 mt-1.5 font-semibold">✗ Part failed plant testing — revision needed.</p>
+                        )}
+                        {!plantVerdict && (
+                          <p className="text-xs text-slate-500 mt-1.5 italic">
+                            {plantDeliveryAccepted ? "Plant user testing in progress…" :
+                             plantSupplierSubmitted ? "Awaiting plant user delivery acceptance…" :
+                             "Awaiting supplier delivery confirmation…"}
+                          </p>
+                        )}
+                      </div>
 
-                      {/* Step B — Supplier portal link for delivery details */}
-                      {partAssigned && !plantSupplierSubmitted && (() => {
-                        const supplier = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
-                        const portalUrl = supplier ? `${baseUrl}/supplier/plant-delivery/${npdId}?vendor=${encodeURIComponent(supplier)}` : ""
-                        return (
-                          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                            <p className="text-sm font-bold text-slate-800 mb-1">Request Supplier Delivery Details</p>
-                            <p className="text-xs text-slate-500 mb-3">Share the link below with <strong>{supplier || "the supplier"}</strong> so they can confirm their delivery date and sample quantity.</p>
-                            {portalUrl ? (
-                              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 mb-2">
-                                <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span className="text-xs text-blue-700 font-mono truncate flex-1">{portalUrl}</span>
-                                <button
-                                  onClick={() => { navigator.clipboard.writeText(portalUrl); setCopiedVendor("plant_delivery_link") ; setTimeout(() => setCopiedVendor(null), 2000) }}
-                                  className="shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
-                                >
-                                  {copiedVendor === "plant_delivery_link" ? "Copied!" : <><Copy className="w-3 h-3" /> Copy</>}
-                                </button>
-                                <a href={portalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                              </div>
-                            ) : (
-                              <p className="text-xs text-amber-600 italic mb-2">Lock a supplier first to generate the portal link.</p>
-                            )}
-                            <p className="text-[10px] text-slate-400">Waiting for supplier to submit · Page auto-updates on submission</p>
-                          </div>
-                        )
-                      })()}
-
-                      {partAssigned && plantSupplierSubmitted && !plantDeliveryAccepted && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                          <p className="text-xs font-bold text-blue-800 mb-1">Supplier Delivery Details</p>
-                          <div className="flex gap-4 text-xs text-blue-700">
-                            <span>Delivery Date: <strong>{plantDeliveryDate}</strong></span>
-                            <span>Sample Qty: <strong>{plantDeliveryQty} pcs</strong></span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Step C — Plant user delivery acceptance */}
-                      {plantSupplierSubmitted && !plantDeliveryAccepted && (
-                        isPlantUser ? (
+                      {/* Step C — Plant user delivery acceptance — shown for plant_user inside RND section too (super_admin) */}
+                      {plantSupplierSubmitted && !plantDeliveryAccepted && isPlantUser && (
                           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                             <p className="text-sm font-bold text-slate-800 mb-1">Accept Delivery</p>
                             <p className="text-xs text-slate-500 mb-3">Upload a delivery receipt or photo as proof of receipt.</p>
@@ -1242,16 +1189,10 @@ export default function NpdDetailView() {
                               Confirm Receipt
                             </Button>
                           </div>
-                        ) : (
-                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                            <p className="text-sm text-slate-400 italic">Awaiting plant user to confirm delivery receipt.</p>
-                          </div>
-                        )
                       )}
 
                       {/* Step D — Plant testing verdict */}
-                      {plantDeliveryAccepted && plantVerdict === null && (
-                        isPlantUser ? (
+                      {plantDeliveryAccepted && plantVerdict === null && isPlantUser && (
                           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                             <p className="text-sm font-bold text-slate-800 mb-0.5">Testing Verdict</p>
                             <p className="text-xs text-slate-500 mb-3">
@@ -1290,11 +1231,6 @@ export default function NpdDetailView() {
                               Submit Verdict
                             </Button>
                           </div>
-                        ) : (
-                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                            <p className="text-sm text-slate-400 italic">Awaiting plant user to submit testing verdict.</p>
-                          </div>
-                        )
                       )}
 
                       {/* Completed state */}
@@ -2363,6 +2299,64 @@ export default function NpdDetailView() {
               </CardContent>
             </Card>
           )}
+
+          {/* ── Section 2b: Plant Delivery (stage 8) ──────────────────────────── */}
+          {activeStage >= 8 && (() => {
+            const supplier = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
+            const portalUrl = supplier ? `${baseUrl}/supplier/plant-delivery/${npdId}?vendor=${encodeURIComponent(supplier)}` : ""
+            return (
+              <Card className="border-orange-300 shadow-sm">
+                <CardHeader className="bg-orange-50 border-b border-orange-200 pb-3">
+                  <CardTitle className="text-orange-900 flex items-center gap-2 text-base">
+                    <Package className="w-5 h-5" /> Plant Delivery Coordination
+                  </CardTitle>
+                  <p className="text-xs text-orange-700 mt-0.5">Part No: <strong>{assignedPartNumber || "—"}</strong> · Send the portal link to the supplier for delivery confirmation</p>
+                </CardHeader>
+                <CardContent className="pt-5 space-y-3">
+                  {!plantSupplierSubmitted ? (
+                    <>
+                      <p className="text-sm text-slate-600">
+                        Share the link below with <strong>{supplier || "the locked supplier"}</strong>. They will confirm their delivery date and sample quantity.
+                      </p>
+                      {portalUrl ? (
+                        <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2.5">
+                          <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="text-xs text-blue-700 font-mono truncate flex-1">{portalUrl}</span>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(portalUrl); setCopiedVendor("plant_sourcing_link"); setTimeout(() => setCopiedVendor(null), 2000) }}
+                            className="shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+                          >
+                            {copiedVendor === "plant_sourcing_link" ? "Copied!" : <><Copy className="w-3 h-3" /> Copy</>}
+                          </button>
+                          <a href={portalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-600 italic">Lock a supplier first to generate the portal link.</p>
+                      )}
+                      <p className="text-[10px] text-slate-400">⏳ Awaiting supplier response</p>
+                    </>
+                  ) : (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 space-y-1.5">
+                      <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5" /> Supplier Confirmed Delivery
+                      </p>
+                      <div className="flex gap-6 text-sm text-emerald-700">
+                        <span>Date: <strong>{plantDeliveryDate}</strong></span>
+                        <span>Qty: <strong>{plantDeliveryQty} pcs</strong></span>
+                      </div>
+                      {plantVerdict && (
+                        <p className={`text-xs font-semibold mt-1 ${plantVerdict === "accepted" ? "text-emerald-700" : "text-red-700"}`}>
+                          {plantVerdict === "accepted" ? "✓ Plant user accepted the part" : "✗ Plant user rejected — revision required"}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })()}
 
           {/* ── Section 3: Parts & Supplier Tracking ──────────────────────────── */}
           <Card className="shadow-sm">

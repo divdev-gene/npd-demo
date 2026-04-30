@@ -284,41 +284,37 @@ export default function NewRequestWizard() {
                 {hasRevision && (
                   <div className="space-y-4 pl-6 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Revision Number</Label>
-                      <Input
-                        placeholder="e.g. Rev 1, Rev A"
-                        value={revisionNo}
-                        onChange={e => setRevisionNo(e.target.value)}
-                        className="bg-white"
-                      />
+                      <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                        Previous Part Number
+                      </Label>
+                      {rejectedParts.length > 0 ? (
+                        <>
+                          <Select value={prevPartNo} onValueChange={v => { setPrevPartNo(v ?? ""); setRevisionNo(v ?? "") }}>
+                            <SelectTrigger className="bg-white">
+                              <SelectValue placeholder="Select previously rejected part…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {rejectedParts.map(r => (
+                                <SelectItem key={r.npdId} value={r.partNumber}>
+                                  <span className="font-semibold">{r.partNumber}</span>
+                                  <span className="ml-2 text-slate-500 text-xs">— {r.itemName}</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {prevPartNo && (
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Revising: <strong>{prevPartNo}</strong>
+                              <button onClick={() => { setPrevPartNo(""); setRevisionNo("") }} className="ml-2 text-red-400 hover:text-red-600">Clear</button>
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                          No rejected parts on record yet. Rejected parts from Stage 8 will appear here.
+                        </p>
+                      )}
                     </div>
-
-                    {rejectedParts.length > 0 && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                          Previous Part Number <span className="text-slate-400 font-normal normal-case">(optional — select if revising a rejected part)</span>
-                        </Label>
-                        <Select value={prevPartNo} onValueChange={v => setPrevPartNo(v ?? "")}>
-                          <SelectTrigger className="bg-white">
-                            <SelectValue placeholder="Select previous part number…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {rejectedParts.map(r => (
-                              <SelectItem key={r.npdId} value={r.partNumber}>
-                                <span className="font-semibold">{r.partNumber}</span>
-                                <span className="ml-2 text-slate-500 text-xs">— {r.itemName}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {prevPartNo && (
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            Selected: <strong>{prevPartNo}</strong>
-                            <button onClick={() => setPrevPartNo("")} className="ml-2 text-red-400 hover:text-red-600">Clear</button>
-                          </p>
-                        )}
-                      </div>
-                    )}
 
                     <div className="space-y-1.5">
                       <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
@@ -488,7 +484,7 @@ export default function NewRequestWizard() {
             <p><strong>Commodity:</strong> {commodity || "N/A"}</p>
             <p><strong>Product Line:</strong> {productLine || "N/A"}</p>
             {driveLink && <p><strong>Drawing Link:</strong> <span className="text-blue-600 underline">{driveLink}</span></p>}
-            {hasRevision && revisionNo && <p><strong>Revision No:</strong> {revisionNo}</p>}
+            {hasRevision && prevPartNo && <p><strong>Previous Part No:</strong> {prevPartNo}</p>}
           </div>
 
           <p className="text-slate-600 text-xs">Please log in to the Amber NPD portal to initiate Supplier ASR Sync and Bulk RFQ dispatch.</p>

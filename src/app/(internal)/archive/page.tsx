@@ -35,7 +35,15 @@ function getRoleLabel(role: string) {
   return "All NPD Requests"
 }
 
-function StageProgress({ stage, total = 10 }: { stage: number; total?: number }) {
+function getStageTotal(typeOfWork: string) {
+  if (typeOfWork.includes("ECN") || typeOfWork.includes("NTD")) return 10
+  if (typeOfWork.includes("Compliance")) return 6
+  if (typeOfWork.includes("PP")) return 4
+  return 8
+}
+
+function StageProgress({ stage, typeOfWork }: { stage: number; typeOfWork: string }) {
+  const total = getStageTotal(typeOfWork)
   const pct = Math.round((stage / total) * 100)
   return (
     <div className="space-y-1">
@@ -48,7 +56,7 @@ function StageProgress({ stage, total = 10 }: { stage: number; total?: number })
           className="h-full rounded-full transition-all"
           style={{
             width: `${pct}%`,
-            background: stage === 10 ? "#10B981" : stage >= 7 ? "#8B5CF6" : "#1E40AF",
+            background: stage >= total ? "#10B981" : stage >= 7 ? "#8B5CF6" : "#1E40AF",
           }}
         />
       </div>
@@ -246,7 +254,7 @@ export default function ArchivePage() {
                         <p className="text-[11px] text-slate-500 font-medium mb-1.5 truncate max-w-[160px]">
                           {getStageName(npd.stage, npd.typeOfWork)}
                         </p>
-                        <StageProgress stage={npd.stage} />
+                        <StageProgress stage={npd.stage} typeOfWork={npd.typeOfWork} />
                       </TableCell>
                       <TableCell className="py-3.5">
                         <span
