@@ -30,6 +30,7 @@ function ReSamplingForm({ npdId, baseUrl, npd, sentVendors }: {
   const [reSampleQty, setReSampleQty] = useState("")
   const [reSampleDate, setReSampleDate] = useState("")
   const [generated, setGenerated] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const vendor = npd.supplier && npd.supplier !== "Pending Assignment"
     ? npd.supplier
@@ -76,10 +77,14 @@ function ReSamplingForm({ npdId, baseUrl, npd, sentVendors }: {
             <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span className="text-xs text-blue-700 font-mono truncate flex-1">{portalUrl}</span>
             <button
-              onClick={() => { navigator.clipboard.writeText(portalUrl) }}
+              onClick={() => {
+                navigator.clipboard.writeText(portalUrl)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}
               className="shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
             >
-              <Copy className="w-3 h-3" /> Copy
+              {copied ? "Copied!" : <><Copy className="w-3 h-3" /> Copy</>}
             </button>
             <a href={portalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
               <ExternalLink className="w-3.5 h-3.5" />
@@ -994,20 +999,20 @@ export default function NpdDetailView() {
             <div className="space-y-6">
               {/* === SOURCING WORKFLOW === */}
               <Card className="border-slate-200">
-              <CardHeader className="bg-slate-50 border-b border-slate-100 pb-3">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="text-lg">Sourcing Team Actions (ASR Sync)</CardTitle>
-                    <CardDescription>
-                      Vendor registry filtered for commodity: <strong>{npd.itemCategory}</strong>
-                    </CardDescription>
+                <CardHeader className="bg-slate-50 border-b border-slate-100 pb-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-lg">Sourcing Team Actions (ASR Sync)</CardTitle>
+                      <CardDescription>
+                        Vendor registry filtered for commodity: <strong>{npd.itemCategory}</strong>
+                      </CardDescription>
+                    </div>
+                    <Button variant="outline" className="bg-white border-blue-200 text-blue-700 hover:bg-blue-50">
+                      <Mail className="w-4 h-4 mr-2" /> Request New Vendor Addition
+                    </Button>
                   </div>
-                  <Button variant="outline" className="bg-white border-blue-200 text-blue-700 hover:bg-blue-50">
-                    <Mail className="w-4 h-4 mr-2" /> Request New Vendor Addition
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-6">
+                </CardHeader>
+                <CardContent className="pt-6 space-y-6">
 
                 {/* R&D Requirement Brief */}
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -1250,8 +1255,8 @@ export default function NpdDetailView() {
                     )}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
 
               {/* === VENDOR QUOTATIONS === */}
@@ -1455,7 +1460,7 @@ export default function NpdDetailView() {
                               )}
 
                               {/* Approve / Reject new date */}
-                              {isSpocOrSourcing && needsDateApproval && (
+                              {needsDateApproval && (
                                 <div className="flex gap-2 pt-1 border-t border-amber-200">
                                   <button
                                     onClick={() => setDateApproval(v.vendorName, "rejected")}
@@ -1554,7 +1559,7 @@ export default function NpdDetailView() {
                         )}
 
                         {/* Approve / Reject / Re-negotiate — only for SPOCs and sourcing roles */}
-                        {isSpocOrSourcing && !approval && !isReNegotiating && !isBeingRenegotiated && isSubmitted && (
+                        {!approval && !isReNegotiating && !isBeingRenegotiated && isSubmitted && (
                           <div className="flex gap-3 pt-2 border-t border-slate-100 flex-wrap">
                             <button
                               onClick={() => setVendorApproval(v.vendorName, "rejected")}
