@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import {
-  getStageName, VENDOR_CATALOG, SPOC_NAMES,
+  getStageName, VENDOR_CATALOG, SPOC_NAMES, NPD_STAGES, TOTAL_NPD_STAGES,
   MOCK_SUPPLIER_DOCS, SUPPLIER_DOCS_KEY,
   MOCK_VENDOR_QUOTATIONS, VENDOR_QUOTE_APPROVALS_KEY,
   LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY, VENDOR_RFQ_TEMPLATE_KEY, DEFAULT_RFQ_TEMPLATE, VENDOR_EMAIL, COMPOSED_EMAILS_KEY,
@@ -19,16 +19,9 @@ import {
   CheckCircle2, Circle, CheckCircle, Clock, AlertCircle, FileText,
   Send, MessageSquare, Mail, ShieldCheck, XCircle, Star, Copy, ExternalLink, Link2,
   FolderOpen, UploadCloud, Download, DownloadCloud, ClipboardCheck,
-  Inbox, Pencil, CornerUpLeft, Bot, RefreshCw
+  Inbox, Bot, CornerUpLeft, RefreshCw,
 } from "lucide-react"
 
-const NTD_STAGES = [
-  "Request Initiation", "R&D Internal Review", "NPD Sourcing Allocation",
-  "Supplier Defense", "Sample Submission", "Sample Receipt / MRN",
-  "R&D Evaluation", "FPA (First Part Approval)", "Sample Cost Finalization",
-  "PP Lot Pricing"
-]
-const TOTAL_STAGES = NTD_STAGES.length // 10
 
 function getVendors(category: string): VendorRecord[] {
   for (const key of Object.keys(VENDOR_CATALOG)) {
@@ -67,12 +60,6 @@ export default function NpdDetailView() {
   const [dateApprovals,   setDateApprovals]   = useState<Record<string, "approved" | "rejected">>({})
   const [copiedReminder,  setCopiedReminder]  = useState<string | null>(null)
 
-  // ── Mail inbox ──────────────────────────────────────────────────────────
-  const [mailFolder,   setMailFolder]   = useState<"inbox" | "sent" | "system">("inbox")
-  const [selectedMail, setSelectedMail] = useState<number | null>(0)
-  const [replyText,    setReplyText]    = useState("")
-  const [replySent,    setReplySent]    = useState<Record<number, boolean>>({})
-
   // ── MRN / Delivery Acceptance ───────────────────────────────────────────
   const [mrnStatus,    setMrnStatus]    = useState<"idle" | "form" | "raised">("idle")
   const [mrnNumber,    setMrnNumber]    = useState("")
@@ -88,6 +75,12 @@ export default function NpdDetailView() {
   const [fpaDate,      setFpaDate]      = useState("")
   const [fpaApprover,  setFpaApprover]  = useState("")
   const [fpaRemarks,   setFpaRemarks]   = useState("")
+
+  // ── Mail inbox ──────────────────────────────────────────────────────────
+  const [mailFolder,   setMailFolder]   = useState<"inbox" | "sent" | "system">("inbox")
+  const [selectedMail, setSelectedMail] = useState<number | null>(0)
+  const [replyText,    setReplyText]    = useState("")
+  const [replySent,    setReplySent]    = useState<Record<number, boolean>>({})
 
   // ── Sample Cost ────────────────────────────────────────────────────────
   const [costSaved,    setCostSaved]    = useState(false)
@@ -223,30 +216,23 @@ export default function NpdDetailView() {
     }
   }, [])
 
-  const stageProgress = NTD_STAGES.map((name, idx) => ({
+  const stageProgress = NPD_STAGES.map((name, idx) => ({
     step: idx + 1,
     name,
     status: (idx + 1) < activeStage ? "complete" : (idx + 1) === activeStage ? "current" : "upcoming"
   }))
 
   const advanceStage = () => {
-    if (activeStage < TOTAL_STAGES) {
+    if (activeStage < TOTAL_NPD_STAGES) {
       const next = activeStage + 1
       setActiveStage(next)
-      updateNPD(npdId, { stage: next, stageName: getStageName(next, npd.typeOfWork) })
-    }
-  }
-
-  const deadvanceStage = () => {
-    if (activeStage > 1) {
-      const prev = activeStage - 1
-      setActiveStage(prev)
-      updateNPD(npdId, { stage: prev, stageName: getStageName(prev, npd.typeOfWork) })
+      updateNPD(npdId, { stage: next, stageName: NPD_STAGES[next - 1] ?? getStageName(next, npd.typeOfWork) })
     }
   }
 
   const isSpocOrSourcing = SPOC_NAMES.includes(currentRole) ||
     currentRole === "sourcing_head" || currentRole === "super_admin"
+  const isRnd = currentRole.startsWith("rnd") || currentRole === "super_admin"
 
   const dispatchEnquiry = () => {
     const vendorList = Array.from(selectedVendors)
@@ -288,10 +274,10 @@ export default function NpdDetailView() {
     allEmails[npdId] = emails
     localStorage.setItem(COMPOSED_EMAILS_KEY, JSON.stringify(allEmails))
 
-    // Advance stage to 4 — Supplier Defence
-    if (activeStage < 4) {
-      setActiveStage(4)
-      updateNPD(npdId, { stage: 4, stageName: getStageName(4, npd.typeOfWork) })
+    // Advance stage to 3 — NPD Sourcing Allocation
+    if (activeStage < 3) {
+      setActiveStage(3)
+      updateNPD(npdId, { stage: 3, stageName: NPD_STAGES[2] })
     }
   }
 
@@ -363,13 +349,13 @@ export default function NpdDetailView() {
     const all: Record<string, Record<string, "approved" | "rejected">> = raw ? JSON.parse(raw) : {}
     all[npdId] = next
     localStorage.setItem(VENDOR_QUOTE_APPROVALS_KEY, JSON.stringify(all))
-    // Approving a vendor updates the supplier name and advances to Stage 5 — Sample Submission
+    // Approving a vendor updates the supplier name and advances to Stage 4 — Supplier Defense
     if (decision === "approved") {
       const updates: Partial<typeof npd> = { supplier: vendorName }
-      if (activeStage < 5) {
-        setActiveStage(5)
-        updates.stage = 5
-        updates.stageName = getStageName(5, npd.typeOfWork)
+      if (activeStage < 4) {
+        setActiveStage(4)
+        updates.stage = 4
+        updates.stageName = NPD_STAGES[3]
       }
       updateNPD(npdId, updates)
     }
@@ -404,8 +390,8 @@ export default function NpdDetailView() {
         status:       "submitted" as const,
         unitCost:     parseFloat(lq.formValues.q3 || "") || null,
         toolingCost:  parseFloat(lq.formValues.q4 || "") || null,
-        dispatchDate: lq.formValues.q1 || null,
-        sampleQty:    parseInt(lq.formValues.q2 || "") || null,
+        dispatchDate: lq.formValues.supplyDate || lq.formValues.q1 || null,
+        sampleQty:    parseInt(lq.formValues.sampleQty || lq.formValues.q2 || "") || null,
         moq:          parseInt(lq.formValues.q9 || "") || null,
         paymentTerms: lq.formValues.q10 || null,
         leadTimeDays: parseInt(lq.formValues.q11 || "") || null,
@@ -446,17 +432,9 @@ export default function NpdDetailView() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={deadvanceStage}
-              variant="outline"
-              className="border-slate-300 text-slate-600"
-              disabled={activeStage === 1}
-            >
-              ← Prev
-            </Button>
-            <Button
               onClick={advanceStage}
               className="bg-slate-900 text-white"
-              disabled={activeStage === TOTAL_STAGES}
+              disabled={activeStage === TOTAL_NPD_STAGES}
             >
               Next → Demo
             </Button>
@@ -1361,11 +1339,11 @@ export default function NpdDetailView() {
                 const isReNegotiating = live?.status === "re_negotiation"
                 const revisionCount = live?.revisionCount ?? 0
 
-                // formValues are keyed by question ID (q1..q12)
+                // formValues: new form uses sampleQty/supplyDate keys; legacy mock data uses q1/q2 (fallback chain below)
                 const unitCostVal  = live ? (parseFloat(live.formValues.q3 || "") || null) : v.unitCost
                 const toolingVal   = live ? (parseFloat(live.formValues.q4 || "") || null) : v.toolingCost
-                const dispatchVal  = live ? (live.formValues.q1 || v.dispatchDate) : v.dispatchDate
-                const samplesVal   = live ? (parseInt(live.formValues.q2 || "") || null) : v.sampleQty
+                const dispatchVal  = live ? (live.formValues.supplyDate || live.formValues.q1 || v.dispatchDate) : v.dispatchDate
+                const samplesVal   = live ? (parseInt(live.formValues.sampleQty || live.formValues.q2 || "") || null) : v.sampleQty
                 const moqVal       = live ? (parseInt(live.formValues.q9 || "") || null) : v.moq
                 const paymentVal   = live ? (live.formValues.q10 || v.paymentTerms) : v.paymentTerms
                 const leadTimeVal  = live ? (parseInt(live.formValues.q11 || "") || null) : v.leadTimeDays
@@ -1380,9 +1358,11 @@ export default function NpdDetailView() {
                 const isCheapest = isSubmitted && unitCostVal !== null && unitCostVal === lowestCost && allCosts.length > 1
 
                 const isBeingRenegotiated = renegotiatingVendor === v.vendorName
+                const isNotFeasible = live?.feasible === false
 
                 return (
                   <Card key={v.vendorName} className={`border ${
+                    isNotFeasible    ? "border-red-200 bg-red-50/20 opacity-60" :
                     approval === "approved" ? "border-emerald-200 bg-emerald-50/30" :
                     approval === "rejected" ? "border-red-200 bg-red-50/20 opacity-60" :
                     isReNegotiating ? "border-amber-200 bg-amber-50/20" :
@@ -1402,15 +1382,19 @@ export default function NpdDetailView() {
                                 <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Rev {revisionCount}</span>
                               )}
                             </div>
-                            {(isSubmitted || isReNegotiating) && submittedAt && (
+                            {(isSubmitted || isReNegotiating || isNotFeasible) && submittedAt && (
                               <p className="text-xs text-slate-400 mt-0.5">
-                                {isReNegotiating ? "Re-negotiation sent" : "Submitted on"} {submittedAt}
+                                {isReNegotiating ? "Re-negotiation sent" : isNotFeasible ? "Responded on" : "Submitted on"} {submittedAt}
                               </p>
                             )}
                           </div>
                         </div>
                         {/* Status badge */}
-                        {approval === "approved" ? (
+                        {isNotFeasible ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full">
+                            <XCircle className="w-3.5 h-3.5" /> Not Feasible
+                          </span>
+                        ) : approval === "approved" ? (
                           <span className="inline-flex items-center gap-1 text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
                             <CheckCircle className="w-3.5 h-3.5" /> Approved
                           </span>
@@ -1434,7 +1418,20 @@ export default function NpdDetailView() {
                       </div>
                     </CardHeader>
 
-                    {(isSubmitted || isReNegotiating) ? (
+                    {isNotFeasible ? (
+                      <CardContent className="pt-4 pb-4 space-y-3">
+                        <p className="text-sm text-slate-500 italic">Vendor marked this requirement as not feasible.</p>
+                        {live?.query && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <p className="text-xs font-bold text-amber-800 mb-1 flex items-center gap-1.5">
+                              <MessageSquare className="w-3.5 h-3.5" /> Clarification Query from Vendor
+                            </p>
+                            <p className="text-sm text-amber-900 italic">&ldquo;{live.query}&rdquo;</p>
+                            <p className="text-[10px] text-amber-600 mt-1.5">Sent to R&amp;D Owner for review · {live.submittedAt}</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    ) : (isSubmitted || isReNegotiating) ? (
                       <CardContent className="pt-4">
                         {/* Re-negotiation message banner */}
                         {isReNegotiating && live?.reNegotiationMsg && (
