@@ -606,40 +606,33 @@ export default function NpdDetailView() {
         </div>
       </div>
 
-      {/* 8-Stage Progress Bar — read-only */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
-        <ul className="flex items-center justify-between min-w-[700px]">
-          {stageProgress.map((stage, idx) => (
-            <li key={stage.step} className="relative flex-1 text-center">
-              {idx !== 0 && (
-                <div className={`absolute top-4 left-[-10%] right-[50%] h-0.5 w-[120%] -z-10 ${
-                  stage.status === "complete" || stage.status === "current" ? "bg-blue-900" : "bg-slate-200"
-                }`} />
-              )}
-              <div className="flex flex-col items-center relative">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 bg-white ${
-                  stage.status === "complete" ? "border-blue-900 bg-blue-900 text-white" :
-                  stage.status === "current"  ? "border-blue-900 bg-blue-50 text-blue-900 ring-4 ring-blue-100" :
-                  "border-slate-300 text-slate-300"
-                }`}>
-                  {stage.status === "complete"
-                    ? <CheckCircle2 className="w-4 h-4" />
-                    : <span className="text-xs font-bold">{stage.step}</span>}
-                </div>
-                <div className="absolute top-10 w-20 text-center pointer-events-none">
-                  <span className={`text-[9px] leading-tight font-medium ${
-                    stage.status === "current"  ? "text-blue-900 font-bold" :
-                    stage.status === "complete" ? "text-slate-600" :
-                    "text-slate-400"
-                  }`}>
-                    {stage.name}
-                  </span>
-                </div>
-              </div>
-            </li>
+      {/* 8-Stage Progress Bar — segmented */}
+      <div className="bg-white px-6 py-4 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+        <div className="flex min-w-[700px] gap-1">
+          {stageProgress.map((stage) => (
+            <div
+              key={stage.step}
+              className={`flex-1 rounded-md px-2 py-2.5 flex flex-col gap-1 transition-all ${
+                stage.status === "complete" ? "bg-blue-900" :
+                stage.status === "current"  ? "bg-blue-700 ring-2 ring-blue-400 ring-offset-1" :
+                "bg-slate-100"
+              }`}
+            >
+              <span className={`text-[9px] font-bold uppercase tracking-wider ${
+                stage.status === "complete" || stage.status === "current" ? "text-blue-200" : "text-slate-400"
+              }`}>
+                Step {stage.step}
+              </span>
+              <span className={`text-[11px] font-semibold leading-tight ${
+                stage.status === "complete" ? "text-white" :
+                stage.status === "current"  ? "text-white" :
+                "text-slate-400"
+              }`}>
+                {stage.name}
+              </span>
+            </div>
           ))}
-        </ul>
-        <div className="h-10" />
+        </div>
       </div>
 
       {/* ═══════════════════ RND SECTION ═══════════════════ */}
