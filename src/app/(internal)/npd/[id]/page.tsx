@@ -402,49 +402,62 @@ export default function NpdDetailView() {
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
 
-      {/* Header */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1 flex-wrap">
-            <h1 className="text-3xl font-bold text-slate-900">{npd.id}</h1>
-            <Badge className="bg-blue-100 text-blue-900 border-none font-semibold text-sm">
-              {npd.typeOfWork.split(" ")[0]}
-            </Badge>
-            {npd.gradeA && (
-              <Badge className="bg-purple-100 text-purple-900 border-none flex items-center gap-1">
-                <Star className="w-3 h-3" /> Grade A
-              </Badge>
-            )}
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${priorityColor}`}>{npd.priority}</span>
+      {/* NPD Header Card */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col lg:flex-row justify-between items-start gap-6">
+          {/* Left column */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">{npd.id}</span>
+              {npd.gradeA && (
+                <Badge className="bg-purple-100 text-purple-900 border-none flex items-center gap-1 text-xs">
+                  <Star className="w-3 h-3" /> Grade A
+                </Badge>
+              )}
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900">{npd.itemName}</h1>
+            <p className="text-slate-500 text-sm">{npd.itemCategory} · {npd.productLine}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge className="bg-slate-100 text-slate-700 border-none text-xs">{npd.typeOfWork}</Badge>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${priorityColor}`}>{npd.priority}</span>
+            </div>
           </div>
-          <p className="text-slate-500 text-lg">{npd.itemName} · {npd.supplier} · {npd.productLine}</p>
-        </div>
-
-        <div className="flex items-center gap-6 text-right flex-wrap">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
-            <p className="text-base font-bold text-blue-900 mt-0.5">Stage {activeStage}: {getStageName(activeStage, npd.typeOfWork)}</p>
-          </div>
-          <div className="h-10 w-px bg-slate-200 hidden lg:block" />
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">TAT Health</p>
-            <p className={`text-base font-bold mt-0.5 ${tatColor}`}>{tatLabel}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={advanceStage}
-              className="bg-slate-900 text-white"
-              disabled={activeStage === TOTAL_NPD_STAGES}
-            >
-              Next → Demo
-            </Button>
+          {/* Right column: 2×2 info chips */}
+          <div className="grid grid-cols-2 gap-3 shrink-0">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 min-w-[140px]">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assigned SPOC</p>
+              <p className="text-sm font-semibold text-slate-800 mt-0.5">{npd.spoc}</p>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 min-w-[140px]">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Locked Supplier</p>
+              <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                {npd.supplier && npd.supplier !== "Pending Assignment"
+                  ? npd.supplier
+                  : <span className="text-slate-400 italic font-normal text-xs">Pending Assignment</span>}
+              </p>
+            </div>
+            <div className={`border rounded-lg px-4 py-2.5 min-w-[140px] ${
+              npd.tatHealth === "black" ? "bg-red-50 border-red-200" :
+              npd.tatHealth === "red"   ? "bg-red-50 border-red-200" :
+              npd.tatHealth === "amber" ? "bg-amber-50 border-amber-200" :
+              "bg-emerald-50 border-emerald-200"
+            }`}>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TAT Health</p>
+              <p className={`text-sm font-bold mt-0.5 ${tatColor}`}>{tatLabel}</p>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 min-w-[140px]">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
+              <p className="text-sm font-semibold text-blue-900 mt-0.5 leading-tight">
+                {activeStage}. {NPD_STAGES[activeStage - 1] ?? getStageName(activeStage, npd.typeOfWork)}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Progress Stepper */}
+      {/* 8-Stage Progress Bar — read-only */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
-        <ul className="flex items-center justify-between min-w-[900px]">
+        <ul className="flex items-center justify-between min-w-[700px]">
           {stageProgress.map((stage, idx) => (
             <li key={stage.step} className="relative flex-1 text-center">
               {idx !== 0 && (
@@ -452,19 +465,21 @@ export default function NpdDetailView() {
                   stage.status === "complete" || stage.status === "current" ? "bg-blue-900" : "bg-slate-200"
                 }`} />
               )}
-              <div className="flex flex-col items-center cursor-help relative">
+              <div className="flex flex-col items-center relative">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 bg-white ${
-                  stage.status === "complete" ? "border-emerald-500 text-emerald-500" :
+                  stage.status === "complete" ? "border-blue-900 bg-blue-900 text-white" :
                   stage.status === "current"  ? "border-blue-900 bg-blue-50 text-blue-900 ring-4 ring-blue-100" :
                   "border-slate-300 text-slate-300"
                 }`}>
                   {stage.status === "complete"
-                    ? <CheckCircle2 className="w-5 h-5" />
-                    : <span className="text-sm font-bold">{stage.step}</span>}
+                    ? <CheckCircle2 className="w-4 h-4" />
+                    : <span className="text-xs font-bold">{stage.step}</span>}
                 </div>
-                <div className="absolute top-10 w-24 text-center pointer-events-none">
-                  <span className={`text-[10px] leading-tight font-medium ${
-                    stage.status === "current" ? "text-blue-900 font-bold" : "text-slate-500"
+                <div className="absolute top-10 w-20 text-center pointer-events-none">
+                  <span className={`text-[9px] leading-tight font-medium ${
+                    stage.status === "current"  ? "text-blue-900 font-bold" :
+                    stage.status === "complete" ? "text-slate-600" :
+                    "text-slate-400"
                   }`}>
                     {stage.name}
                   </span>
