@@ -53,12 +53,13 @@ Read in `page.tsx` useEffect alongside other localStorage keys.
 {
   [npdId]: {
     docName: string         // filename of uploaded POD document
-    acceptedAt: string      // ISO timestamp
+    acceptedAt: string      // ISO timestamp of rnd_user confirmation
+    headApproved: boolean   // true once rnd_head approves — triggers stage advance
   }
 }
 ```
 
-Written from `page.tsx` when RND confirms receipt and advances to stage 6.
+Written in two steps from `page.tsx`: `headApproved: false` when RND user confirms receipt; updated to `true` when RND Head approves.
 
 ---
 
@@ -75,9 +76,10 @@ const [dispatchInfo, setDispatchInfo] = useState<{
   vendorName: string; dispatchDate: string; docs: string[]; submittedAt: string
 } | null>(null)
 
-// Delivery acceptance
-const [deliveryDoc,      setDeliveryDoc]      = useState("")      // filename of uploaded POD
-const [deliveryAccepted, setDeliveryAccepted] = useState(false)
+// Delivery acceptance — two-step: rnd_user uploads POD, then rnd_head approves
+const [deliveryDoc,           setDeliveryDoc]           = useState("")      // filename of uploaded POD
+const [deliverySubmitted,     setDeliverySubmitted]     = useState(false)   // rnd_user confirmed receipt
+const [deliveryHeadApproved,  setDeliveryHeadApproved]  = useState(false)   // rnd_head approved → advance stage
 ```
 
 ### useEffect additions
@@ -93,7 +95,8 @@ const rawAcceptance = localStorage.getItem("delivery_acceptance_v1")
 const allAcceptance = rawAcceptance ? JSON.parse(rawAcceptance) : {}
 if (allAcceptance[npdId]) {
   setDeliveryDoc(allAcceptance[npdId].docName)
-  setDeliveryAccepted(true)
+  setDeliverySubmitted(true)
+  if (allAcceptance[npdId].headApproved) setDeliveryHeadApproved(true)
 }
 ```
 
@@ -196,19 +199,37 @@ Background: blue-50, border: blue-200.
 If `dispatchInfo === null`:
 - Show muted note: "Dispatch details not submitted via portal. You can still accept below."
 
-**Part 2 — Delivery acceptance upload:**
+**Part 2 — Delivery acceptance upload (two-step):**
 
+**Step A — RND User (any `rnd_*` role):**
 ```
 Upload proof of delivery / delivery receipt
 [  drag-and-drop zone — PDF, PNG, JPG  ]
 
-[Confirm Receipt & Advance to Testing]   ← disabled until doc attached
+[Confirm Receipt — Send for RND Head Approval]   ← disabled until doc attached
 ```
 
 On click:
-1. Saves `{ docName, acceptedAt }` to `delivery_acceptance_v1[npdId]`
-2. Sets `deliveryAccepted = true`
+1. Saves `{ docName, acceptedAt, headApproved: false }` to `delivery_acceptance_v1[npdId]`
+2. Sets `deliverySubmitted = true`
+3. Does NOT advance stage — shows "Awaiting RND Head Approval" status badge (amber)
+
+**Step B — RND Head (`rnd_head` or `super_admin`) — shown when `deliverySubmitted === true`:**
+```
+┌────────────────────────────────────────────────┐
+│  ✓ RND User confirmed receipt                  │
+│    POD: {docName}                              │
+│                                                │
+│  [Approve & Advance to RND Testing]            │  ← rnd_head/super_admin only
+└────────────────────────────────────────────────┘
+```
+
+On Approve click:
+1. Updates `delivery_acceptance_v1[npdId].headApproved = true`
+2. Sets `deliveryHeadApproved = true`
 3. Advances `activeStage` to 6, calls `updateNPD({ stage: 6, stageName: NPD_STAGES[5] })`
+
+**After both steps complete:** card shows completed state with green "Receipt Accepted & Approved" badge.
 
 ---
 
