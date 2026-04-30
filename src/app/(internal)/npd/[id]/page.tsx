@@ -138,7 +138,6 @@ export default function NpdDetailView() {
   // ── Supplier Dispatch ───────────────────────────────────────────────────
   const [defenceAdvanced, setDefenceAdvanced] = useState(false)
 
-  const [fpaImageUploaded, setFpaImageUploaded] = useState(false)
 
   // ── Query reply form (keyed by vendorName) ──────────────────────────────
   const [queryReplyText, setQueryReplyText] = useState<Record<string, string>>({})
@@ -687,41 +686,101 @@ export default function NpdDetailView() {
                     {activeStage > 5 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
                   </div>
                   {activeStage === 5 && (
-                    <div className="space-y-3">
-                      <p className="text-sm text-slate-600">Samples received from supplier. Upload proof of delivery to confirm receipt and advance to testing.</p>
-                      <div
-                        onClick={() => setFpaImageUploaded(v => !v)}
-                        className={`rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all ${
-                          fpaImageUploaded ? "border-emerald-400 bg-emerald-50" : "border-blue-300 hover:border-blue-400 hover:bg-blue-50/40 bg-white"
-                        }`}
-                      >
-                        {fpaImageUploaded ? (
-                          <div className="flex flex-col items-center gap-1.5">
-                            <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
-                              <CheckCircle className="w-5 h-5 text-emerald-600" />
-                            </div>
-                            <p className="text-sm font-semibold text-emerald-700">delivery_confirmation.jpg</p>
-                            <p className="text-xs text-emerald-600">Click to remove</p>
+                    <div className="space-y-4">
+
+                      {/* Part 1 — Dispatch context strip */}
+                      {dispatchInfo ? (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <p className="text-xs font-bold text-blue-900 mb-2 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Dispatch Details (from supplier portal)
+                          </p>
+                          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-700">
+                            <span><span className="text-slate-400">Supplier:</span> <strong>{dispatchInfo.vendorName}</strong></span>
+                            <span><span className="text-slate-400">Dispatch Date:</span> <strong>{dispatchInfo.dispatchDate}</strong></span>
+                            <span><span className="text-slate-400">Docs:</span> <strong>{dispatchInfo.docs.length} submitted</strong></span>
                           </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-1">
-                            <UploadCloud className="w-8 h-8 text-blue-400 mb-1" />
-                            <p className="text-sm font-semibold text-slate-700">Upload proof of delivery</p>
-                            <p className="text-xs text-slate-400">PDF, PNG, JPG accepted</p>
-                          </div>
-                        )}
-                      </div>
-                      {fpaImageUploaded && (
-                        <Button
-                          className="bg-blue-900 hover:bg-blue-800 text-white"
-                          onClick={() => {
-                            setActiveStage(6)
-                            updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
-                          }}
-                        >
-                          <CheckCircle className="w-4 h-4 mr-2" /> Confirm Receipt &amp; Advance to Testing
-                        </Button>
+                          {dispatchInfo.docs.length > 0 && (
+                            <ul className="mt-2 space-y-0.5">
+                              {dispatchInfo.docs.map((doc, i) => (
+                                <li key={i} className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                                  <FileText className="w-3 h-3 shrink-0 text-slate-400" /> {doc}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Dispatch details not submitted via portal. You can still accept below.
+                        </p>
                       )}
+
+                      {/* Part 2 — Two-step acceptance */}
+                      {deliveryHeadApproved ? (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-800">Receipt Accepted &amp; Approved</p>
+                            <p className="text-xs text-emerald-600">POD: {deliveryDoc}</p>
+                          </div>
+                        </div>
+                      ) : deliverySubmitted ? (
+                        <div className="space-y-3">
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold text-amber-800">Awaiting RND Head Approval</p>
+                              <p className="text-xs text-amber-600">POD attached: {deliveryDoc}</p>
+                            </div>
+                          </div>
+                          {(currentRole === "rnd_head" || currentRole === "super_admin") && (
+                            <Button
+                              className="bg-purple-700 hover:bg-purple-800 text-white"
+                              onClick={approveDelivery}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" /> Approve &amp; Advance to RND Testing
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-slate-600">Upload proof of delivery to confirm receipt.</p>
+                          <div
+                            onClick={() => {
+                              if (!deliveryDoc) setDeliveryDoc("delivery_confirmation.jpg")
+                              else setDeliveryDoc("")
+                            }}
+                            className={`rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all ${
+                              deliveryDoc ? "border-emerald-400 bg-emerald-50" : "border-blue-300 hover:border-blue-400 hover:bg-blue-50/40 bg-white"
+                            }`}
+                          >
+                            {deliveryDoc ? (
+                              <div className="flex flex-col items-center gap-1.5">
+                                <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
+                                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                                </div>
+                                <p className="text-sm font-semibold text-emerald-700">{deliveryDoc}</p>
+                                <p className="text-xs text-emerald-600">Click to remove</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-1">
+                                <UploadCloud className="w-8 h-8 text-blue-400 mb-1" />
+                                <p className="text-sm font-semibold text-slate-700">Upload proof of delivery</p>
+                                <p className="text-xs text-slate-400">PDF, PNG, JPG accepted</p>
+                              </div>
+                            )}
+                          </div>
+                          {deliveryDoc && (
+                            <Button
+                              className="bg-blue-900 hover:bg-blue-800 text-white"
+                              onClick={submitDelivery}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" /> Confirm Receipt — Send for RND Head Approval
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
                     </div>
                   )}
                 </div>
