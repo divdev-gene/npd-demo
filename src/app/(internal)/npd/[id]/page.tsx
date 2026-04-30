@@ -13,7 +13,7 @@ import {
 import { useNPDs } from "@/lib/npdContext"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import {
   CheckCircle2, Circle, CheckCircle, Clock, AlertCircle, FileText,
@@ -491,451 +491,444 @@ export default function NpdDetailView() {
         <div className="h-10" />
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="bg-white border text-slate-600 border-slate-200 rounded-lg p-1 w-full justify-start overflow-x-auto">
-          <TabsTrigger value="overview"  className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-900">Overview</TabsTrigger>
-          <TabsTrigger value="supplier"  className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-900">Supplier Sourcing Workflow</TabsTrigger>
-          <TabsTrigger value="quotes"    className="data-[state=active]:bg-amber-50 data-[state=active]:text-amber-900">
-            Vendor Quotations
-            {(() => {
-              const liveOnlyCount = Object.values(liveQuotes)
-                .filter(lq => !vendorQuotations.find(vq => vq.vendorName === lq.vendorName) && lq.status !== "re_negotiation" && !quoteApprovals[lq.vendorName])
-                .length
-              const mockPending = vendorQuotations.filter(v => {
-                const live = liveQuotes[v.vendorName]
-                const isSubmitted = live ? live.status !== "re_negotiation" : v.status === "submitted"
-                return isSubmitted && !quoteApprovals[v.vendorName]
-              }).length
-              const pending = mockPending + liveOnlyCount
-              return pending > 0 ? <span className="ml-1.5 bg-amber-500 text-white text-[9px] font-bold rounded-full px-1.5 py-0.5">{pending}</span> : null
-            })()}
-          </TabsTrigger>
-          <TabsTrigger value="testing"   className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-900">R&D Testing & TQR</TabsTrigger>
-          <TabsTrigger value="costing"   className="data-[state=active]:bg-amber-50 data-[state=active]:text-amber-900">
-            Sample Cost
-          </TabsTrigger>
-          <TabsTrigger value="tracking"  className="data-[state=active]:bg-purple-50 data-[state=active]:text-purple-900">Parts & Supplier Tracking</TabsTrigger>
-          <TabsTrigger value="docs"      className="data-[state=active]:bg-slate-100">Documents Library</TabsTrigger>
-          <TabsTrigger value="mail"      className="data-[state=active]:bg-slate-100">Integrated Mail Inbox</TabsTrigger>
-        </TabsList>
-
-        {/* ── Overview ──────────────────────────────────────────────────────── */}
-        <TabsContent value="overview" className="mt-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            {/* Initiation Details — dynamic */}
-            <Card>
-              <CardHeader className="pb-3 border-b">
-                <CardTitle className="text-lg">Initiation Details</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-3 text-sm">
-                {[
-                  ["Item Name",    npd.itemName],
-                  ["Item Category",npd.itemCategory],
-                  ["Type of Work", npd.typeOfWork],
-                  ["Product Line", npd.productLine],
-                  ["R&D Division", npd.rAndDDivision || "—"],
-                  ["Priority",     npd.priority],
-                  ["SPOC",         npd.spoc],
-                  ["Raised By",    npd.raisedBy === "rnd_head" ? "R&D Head" : "R&D User"],
-                  ["Current Stage",`Stage ${activeStage}: ${getStageName(activeStage, npd.typeOfWork)}`],
-                  ["TAT Health",   tatLabel],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between border-b pb-2 last:border-0 last:pb-0">
-                    <span className="text-slate-500 shrink-0 mr-4">{label}</span>
-                    <span className="font-medium text-right text-slate-800">{value}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            {/* Activity Log */}
-            <Card>
-              <CardHeader className="pb-3 border-b">
-                <CardTitle className="text-lg">Activity Log</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 shrink-0"><CheckCircle className="w-4 h-4 text-emerald-500" /></div>
-                  <div>
-                    <p className="text-sm font-medium">Request Accepted by Supplier</p>
-                    <p className="text-xs text-slate-500">2 days ago · {npd.supplier}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 shrink-0"><Send className="w-4 h-4 text-blue-500" /></div>
-                  <div>
-                    <p className="text-sm font-medium">Request Dispatched via ASR</p>
-                    <p className="text-xs text-slate-500">3 days ago · {npd.spoc}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 shrink-0"><FileText className="w-4 h-4 text-slate-400" /></div>
-                  <div>
-                    <p className="text-sm font-medium">Request Initiated</p>
-                    <p className="text-xs text-slate-500">4 days ago · {npd.raisedBy === "rnd_head" ? "R&D Head" : "R&D User"}</p>
-                  </div>
-                </div>
-
-              </CardContent>
-            </Card>
-          </div>
-
-          {currentRole === "rnd_head" && activeStage < 3 && (
-            <Card className="border-emerald-200 bg-emerald-50 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-emerald-900">R&D Head Action Required</CardTitle>
-                <CardDescription className="text-emerald-700">
-                  Approve this request to automatically assign the appropriate Sourcing SPOC based on commodity ({npd.itemCategory}).
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
-                  onClick={() => {
-                    alert(`REQUEST APPROVED.\n\nAutomated hand-off email dispatched to Sourcing Head and ${npd.itemCategory} SPOC.\n\nStatus transitioning to 'NPD Sourcing Allocation'.`)
-                    if (activeStage < 3) setActiveStage(3)
-                    updateNPD(npdId, { stage: 3, stageName: getStageName(3, npd.typeOfWork) })
-                  }}
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" /> Approve Request & Trigger Handoff
-                </Button>
-              </CardContent>
-            </Card>
+      {/* ═══════════════════ RND SECTION ═══════════════════ */}
+      {isRnd && (
+        <div className="space-y-6">
+          {currentRole === "super_admin" && (
+            <div className="flex items-center gap-2">
+              <span className="bg-blue-900 text-white text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full">R&amp;D Team</span>
+            </div>
           )}
 
-          {/* ── Supplier Defence: dispatch link ────────────────────────────── */}
-          {activeStage === 4 && (
-            <Card className="border-orange-300 shadow-sm">
-              <CardHeader className="bg-orange-50 border-b border-orange-200 pb-3">
-                <CardTitle className="text-orange-900 flex items-center gap-2 text-base">
-                  <ShieldCheck className="w-5 h-5" /> Supplier Defence — Awaiting Dispatch
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-5 space-y-3">
-                <p className="text-sm text-slate-600">
-                  Share the link below with <strong>{npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? "the selected vendor"}</strong>. They must upload all compliance documents and confirm dispatch before this stage advances.
-                </p>
-                {(() => {
-                  const vendor = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
-                  const dispatchUrl = `${baseUrl}/supplier/dispatch/${npdId}${vendor ? `?vendor=${encodeURIComponent(vendor)}` : ""}`
-                  return (
-                    <div className="flex items-center gap-2 bg-white border border-orange-200 rounded-lg px-3 py-2.5">
-                      <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="text-xs text-blue-700 font-mono truncate flex-1">{dispatchUrl}</span>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(dispatchUrl)
-                          setCopiedVendor("dispatch")
-                          setTimeout(() => setCopiedVendor(null), 2000)
-                        }}
-                        className="shrink-0 text-[10px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
-                      >
-                        <Copy className="w-3 h-3" />
-                        {copiedVendor === "dispatch" ? "Copied!" : "Copy"}
-                      </button>
-                      <a href={dispatchUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+          {/* ── Section 1: My Actions ─────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-3 border-b bg-slate-50">
+              <CardTitle className="text-base">My Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-5 space-y-4">
+
+              {/* Stage 1 — Request Initialisation (read-only summary) */}
+              <div className={`rounded-xl border p-4 ${activeStage > 1 ? "bg-slate-50 border-slate-200" : "border-blue-300 bg-blue-50/30"}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  {activeStage > 1
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    : <Circle className="w-4 h-4 text-blue-700 shrink-0" />}
+                  <h4 className="font-bold text-slate-800 text-sm">Stage 1 — Request Initialisation</h4>
+                  {activeStage > 1 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                  {([
+                    ["Item", npd.itemName],
+                    ["Category", npd.itemCategory],
+                    ["Type of Work", npd.typeOfWork],
+                    ["Product Line", npd.productLine],
+                    ["R&D Division", npd.rAndDDivision || "—"],
+                    ["Raised By", npd.raisedBy === "rnd_head" ? "R&D Head" : "R&D User"],
+                  ] as [string, string][]).map(([label, value]) => (
+                    <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
+                      <span className="text-slate-400 text-xs">{label}</span>
+                      <span className="text-slate-800 font-medium text-xs text-right max-w-[140px] truncate">{value}</span>
                     </div>
-                  )
-                })()}
-                {!defenceAdvanced ? (
-                  <Button
-                    className="bg-orange-600 hover:bg-orange-700 text-white text-xs"
-                    onClick={() => {
-                      setDefenceAdvanced(true)
-                      setActiveStage(5)
-                      updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
-                    }}
-                  >
-                    <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched & Advance to Sample Submission
-                  </Button>
-                ) : (
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" /> Advanced to Sample Submission
-                  </span>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── Sample Submission ──────────────────────────────────────────── */}
-          {activeStage === 5 && (currentRole.startsWith("rnd") || currentRole === "super_admin") && (
-            <Card className="border-blue-400 shadow-md ring-2 ring-blue-100">
-              <CardHeader className="bg-blue-900 pb-4 rounded-t-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-white flex items-center gap-2 text-base">
-                      <DownloadCloud className="w-5 h-5" /> Sample Submission — Action Required
-                    </CardTitle>
-                    <p className="text-blue-200 text-xs mt-1">Supplier has dispatched samples. Verify delivery, review images, and log receipt to advance.</p>
-                  </div>
-                  <span className="bg-blue-700 border border-blue-500 text-blue-100 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">Stage 5</span>
+                  ))}
                 </div>
-              </CardHeader>
-              <CardContent className="pt-5 space-y-6">
+              </div>
 
-                {/* Static supplier sample images */}
-                <div>
-                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <FolderOpen className="w-4 h-4 text-slate-400" /> Supplier Sample Images
-                  </p>
-                  <div className="grid grid-cols-3 gap-3">
-                    {STATIC_SAMPLE_IMAGES.map(img => (
-                      <div key={img.name} className="rounded-lg overflow-hidden border border-slate-200">
-                        <div className={`${img.bg} h-28 flex items-center justify-center`}>
-                          <span className="text-slate-400 text-xs font-medium">{img.label}</span>
-                        </div>
-                        <div className="bg-white px-2.5 py-1.5 border-t border-slate-100">
-                          <p className="text-[10px] text-slate-500 truncate">{img.name}</p>
-                        </div>
-                      </div>
-                    ))}
+              {/* Stage 2 — RND Internal Review */}
+              {activeStage >= 2 && (
+                <div className={`rounded-xl border p-4 ${
+                  activeStage > 2  ? "bg-slate-50 border-slate-200 opacity-80" :
+                  activeStage === 2 ? "border-blue-400 bg-white shadow-sm" :
+                  "border-slate-200 bg-slate-50 opacity-50"
+                }`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    {activeStage > 2
+                      ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      : <div className="w-4 h-4 rounded-full border-2 border-blue-700 flex items-center justify-center shrink-0">
+                          <span className="text-[9px] font-bold text-blue-700">2</span>
+                        </div>}
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 2 — RND Internal Review</h4>
+                    {activeStage > 2 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Released to Sourcing</Badge>}
                   </div>
-                </div>
-
-                {/* RND FPA / delivery verification upload */}
-                <div>
-                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <UploadCloud className="w-4 h-4 text-blue-700" /> Upload FPA / Delivery Verification Image <span className="text-red-500">*</span>
-                  </p>
-                  <p className="text-[11px] text-slate-400 mb-2">R&D must upload the First Part Approval sheet or physical delivery photo to confirm receipt.</p>
-                  <div
-                    onClick={() => setFpaImageUploaded(v => !v)}
-                    className={`rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all ${
-                      fpaImageUploaded
-                        ? "border-emerald-400 bg-emerald-50"
-                        : "border-blue-300 hover:border-blue-400 hover:bg-blue-50/40 bg-white"
-                    }`}
-                  >
-                    {fpaImageUploaded ? (
-                      <div className="flex flex-col items-center gap-1.5">
-                        <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
-                          <CheckCircle className="w-5 h-5 text-emerald-600" />
-                        </div>
-                        <p className="text-sm font-semibold text-emerald-700">FPA_delivery_confirm.jpg</p>
-                        <p className="text-xs text-emerald-600">Click to remove</p>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1">
-                        <UploadCloud className="w-8 h-8 text-blue-400 mb-1" />
-                        <p className="text-sm font-semibold text-slate-700">Click to upload FPA or delivery photo</p>
-                        <p className="text-xs text-slate-400">PDF, PNG, JPG, XLSX accepted</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {mrnStatus === "idle" && (
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <div>
-                      <p className="text-sm font-semibold text-blue-900">Ready to log physical receipt?</p>
-                      <p className="text-xs text-blue-700 mt-1">Fill MRN details to move to Sample Receipt / MRN stage.</p>
-                    </div>
-                    <Button className="bg-blue-900 hover:bg-blue-800 text-white shrink-0" onClick={() => setMrnStatus("form")}>
-                      <DownloadCloud className="w-4 h-4 mr-2" /> Accept Delivery
-                    </Button>
-                  </div>
-                )}
-
-                {mrnStatus === "form" && (
-                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {activeStage === 2 && (
+                    <div className="space-y-3">
                       <div>
-                        <label className="text-sm font-medium text-slate-700 block mb-1">MRN Number <span className="text-red-500">*</span></label>
-                        <input
-                          type="text"
-                          value={mrnNumber}
-                          onChange={e => setMrnNumber(e.target.value)}
-                          placeholder="e.g. MRN-2026-0042"
-                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
-                        />
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Drawing / Spec Folder</p>
+                        {npd.driveLink ? (
+                          <a
+                            href={npd.driveLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2"
+                          >
+                            <ExternalLink className="w-4 h-4" /> Open Drive Folder
+                          </a>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic">No drawing link attached.</p>
+                        )}
                       </div>
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 block mb-1">Date of Receipt <span className="text-red-500">*</span></label>
-                        <input
-                          type="date"
-                          value={mrnDate}
-                          onChange={e => setMrnDate(e.target.value)}
-                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 block mb-1">Quantity Received <span className="text-red-500">*</span></label>
-                        <input
-                          type="number"
-                          value={mrnQty}
-                          onChange={e => setMrnQty(e.target.value)}
-                          placeholder="e.g. 5"
-                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 block mb-1">Condition</label>
-                        <select
-                          value={mrnCondition}
-                          onChange={e => setMrnCondition(e.target.value as "Good" | "Damaged" | "Partial")}
-                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                      {currentRole === "rnd_head" ? (
+                        <Button
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => {
+                            setActiveStage(3)
+                            updateNPD(npdId, { stage: 3, stageName: NPD_STAGES[2] })
+                          }}
                         >
-                          <option>Good</option>
-                          <option>Damaged</option>
-                          <option>Partial</option>
-                        </select>
+                          <CheckCircle className="w-4 h-4 mr-2" /> Approve &amp; Release to Sourcing
+                        </Button>
+                      ) : (
+                        <p className="text-sm text-slate-400 italic flex items-center gap-1.5">
+                          <Clock className="w-4 h-4 shrink-0" /> Awaiting R&amp;D Head sign-off to release to Sourcing.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Stage 5 — RND Evaluation (proof of delivery) */}
+              {activeStage >= 5 && (
+                <div className={`rounded-xl border p-4 ${
+                  activeStage > 5  ? "bg-slate-50 border-slate-200 opacity-80" :
+                  activeStage === 5 ? "border-blue-400 bg-white shadow-sm" :
+                  "border-slate-200 bg-slate-50 opacity-50"
+                }`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    {activeStage > 5
+                      ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      : <div className="w-4 h-4 rounded-full border-2 border-blue-700 flex items-center justify-center shrink-0">
+                          <span className="text-[9px] font-bold text-blue-700">5</span>
+                        </div>}
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 5 — RND Evaluation</h4>
+                    {activeStage > 5 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
+                  </div>
+                  {activeStage === 5 && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-slate-600">Samples received from supplier. Upload proof of delivery to confirm receipt and advance to testing.</p>
+                      <div
+                        onClick={() => setFpaImageUploaded(v => !v)}
+                        className={`rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all ${
+                          fpaImageUploaded ? "border-emerald-400 bg-emerald-50" : "border-blue-300 hover:border-blue-400 hover:bg-blue-50/40 bg-white"
+                        }`}
+                      >
+                        {fpaImageUploaded ? (
+                          <div className="flex flex-col items-center gap-1.5">
+                            <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
+                              <CheckCircle className="w-5 h-5 text-emerald-600" />
+                            </div>
+                            <p className="text-sm font-semibold text-emerald-700">delivery_confirmation.jpg</p>
+                            <p className="text-xs text-emerald-600">Click to remove</p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-1">
+                            <UploadCloud className="w-8 h-8 text-blue-400 mb-1" />
+                            <p className="text-sm font-semibold text-slate-700">Upload proof of delivery</p>
+                            <p className="text-xs text-slate-400">PDF, PNG, JPG accepted</p>
+                          </div>
+                        )}
                       </div>
+                      {fpaImageUploaded && (
+                        <Button
+                          className="bg-blue-900 hover:bg-blue-800 text-white"
+                          onClick={() => {
+                            setActiveStage(6)
+                            updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
+                          }}
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" /> Confirm Receipt &amp; Advance to Testing
+                        </Button>
+                      )}
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 block mb-1">Notes</label>
-                      <textarea
-                        rows={2}
-                        value={mrnNotes}
-                        onChange={e => setMrnNotes(e.target.value)}
-                        placeholder="Any observations about the received samples…"
-                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none"
-                      />
+                  )}
+                </div>
+              )}
+
+              {/* Stage 6 — RND Testing & TQR */}
+              {activeStage >= 6 && (
+                <div className={`rounded-xl border p-4 ${
+                  activeStage > 6  ? "bg-slate-50 border-slate-200 opacity-80" :
+                  activeStage === 6 ? "border-emerald-400 bg-white shadow-sm" :
+                  "border-slate-200 bg-slate-50 opacity-50"
+                }`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    {activeStage > 6
+                      ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      : <div className="w-4 h-4 rounded-full border-2 border-emerald-600 flex items-center justify-center shrink-0">
+                          <span className="text-[9px] font-bold text-emerald-600">6</span>
+                        </div>}
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 6 — RND Testing &amp; TQR</h4>
+                    {activeStage > 6 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
+                  </div>
+                  {activeStage === 6 && (
+                    <div className="space-y-4">
+                      {tqrStatus === "rejecting" ? (
+                        <div className="space-y-4 animate-in fade-in zoom-in-95">
+                          <div className="bg-red-50 border border-red-100 p-4 rounded-lg">
+                            <h3 className="text-red-800 font-bold mb-2">Initiate Sample Rejection</h3>
+                            <div className="space-y-4 mt-4">
+                              <div>
+                                <label className="text-sm font-medium text-slate-700">Reason for Rejection <span className="text-red-500">*</span></label>
+                                <textarea
+                                  className="w-full mt-1 border border-slate-300 rounded-md p-2 text-sm focus:ring-red-500 focus:border-red-500"
+                                  rows={3}
+                                  placeholder="Describe dimensional failures, performance gaps, etc."
+                                  onChange={e => setRejectReason(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-sm font-medium text-slate-700">Upload Revised Drawing (if any)</label>
+                                <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center mt-1 bg-white hover:bg-slate-50 cursor-pointer">
+                                  <p className="text-sm text-slate-500">Click or drag updated Teamcenter PDF here</p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-6 flex justify-end gap-3">
+                              <Button variant="outline" onClick={() => setTqrStatus("pending")}>Cancel</Button>
+                              <Button
+                                className="bg-red-600 hover:bg-red-700 text-white"
+                                disabled={!rejectReason}
+                                onClick={() => {
+                                  alert("SAMPLE REJECTED.\n\nAutomated email dispatched to Supplier &amp; Sourcing.")
+                                  setTqrStatus("rejected")
+                                }}
+                              >
+                                Confirm Rejection &amp; Notify Supplier
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : tqrStatus === "rejected" ? (
+                        <div className="bg-red-50 border border-red-200 text-red-800 p-5 rounded-lg text-center">
+                          <XCircle className="w-10 h-10 text-red-400 mx-auto mb-2" />
+                          <h3 className="text-base font-bold">Sample Rejected by R&amp;D</h3>
+                          <p className="text-sm mt-1">Supplier has been notified to provide an updated sample submission timeline.</p>
+                        </div>
+                      ) : tqrStatus === "fully_approved" ? (
+                        <div className="space-y-3">
+                          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-5 rounded-lg text-center">
+                            <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
+                            <h3 className="text-base font-bold">TQR Fully Approved</h3>
+                            <p className="text-sm mt-1">Both R&amp;D User and R&amp;D Head have approved. Auto-mail dispatched.</p>
+                          </div>
+                          <Button
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            onClick={() => {
+                              setActiveStage(7)
+                              updateNPD(npdId, { stage: 7, stageName: NPD_STAGES[6] })
+                            }}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-2" /> Advance to RND Approval
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col md:flex-row items-center justify-between bg-blue-50 p-5 rounded-lg border border-blue-100 gap-4">
+                          <div>
+                            <p className="text-sm font-bold text-blue-900">Sample Evaluation Actions</p>
+                            <p className="text-xs text-blue-700 mt-1">Review the physical sample and documentation before rendering a decision.</p>
+                          </div>
+                          {tqrStatus === "pending" ? (
+                            <div className="flex flex-col sm:flex-row gap-3">
+                              <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50 bg-white" onClick={() => setTqrStatus("rejecting")}>
+                                <XCircle className="w-4 h-4 mr-2" /> Reject Sample
+                              </Button>
+                              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setTqrStatus("approved_by_user")}>
+                                <CheckCircle2 className="w-4 h-4 mr-2" /> Approve (Route to R&amp;D Head)
+                              </Button>
+                            </div>
+                          ) : tqrStatus === "approved_by_user" && (currentRole === "rnd_head" || currentRole === "super_admin") ? (
+                            <div className="text-right">
+                              <p className="text-emerald-700 font-bold mb-2 text-sm">✓ R&amp;D User Approved. Awaiting Your Sign-off.</p>
+                              <div className="flex flex-col sm:flex-row gap-2 justify-end">
+                                <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50 bg-white" onClick={() => setTqrStatus("rejecting")}>
+                                  <XCircle className="w-4 h-4 mr-2" /> Override &amp; Reject
+                                </Button>
+                                <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
+                                  alert("APPROVAL COMPLETE.\n\nAuto-mail dispatched to Supplier &amp; Sourcing.")
+                                  setTqrStatus("fully_approved")
+                                }}>
+                                  <CheckCircle2 className="w-4 h-4 mr-2" /> Final R&amp;D Head Approval
+                                </Button>
+                              </div>
+                            </div>
+                          ) : tqrStatus === "approved_by_user" ? (
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-200 px-3 py-1 text-sm font-medium">
+                              <Clock className="w-4 h-4 mr-1" /> Pending R&amp;D Head Approval
+                            </Badge>
+                          ) : (
+                            <div className="text-slate-500 italic text-sm">Action locked for your current role.</div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex gap-3 justify-end pt-2 border-t border-slate-100">
-                      <Button variant="outline" onClick={() => setMrnStatus("idle")}>Cancel</Button>
+                  )}
+                </div>
+              )}
+
+              {/* Stage 7 — RND Approval (rnd_head only) */}
+              {activeStage >= 7 && (currentRole === "rnd_head" || currentRole === "super_admin") && (
+                <div className={`rounded-xl border p-4 ${
+                  activeStage > 7  ? "bg-slate-50 border-slate-200 opacity-80" :
+                  activeStage === 7 ? "border-purple-400 bg-purple-50/30 shadow-sm" :
+                  "border-slate-200 bg-slate-50 opacity-50"
+                }`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    {activeStage > 7
+                      ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      : <div className="w-4 h-4 rounded-full border-2 border-purple-700 flex items-center justify-center shrink-0">
+                          <span className="text-[9px] font-bold text-purple-700">7</span>
+                        </div>}
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 7 — RND Approval</h4>
+                    {activeStage > 7 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
+                  </div>
+                  {activeStage === 7 && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-slate-600">All testing complete and TQR approved. Final R&amp;D Head sign-off required before PP lot.</p>
                       <Button
-                        className="bg-blue-900 hover:bg-blue-800 text-white"
-                        disabled={!mrnNumber || !mrnDate || !mrnQty}
+                        className="bg-purple-700 hover:bg-purple-800 text-white"
                         onClick={() => {
-                          const rawMRN = localStorage.getItem("sample_receipt_v1")
-                          const allMRN: Record<string, unknown> = rawMRN ? JSON.parse(rawMRN) : {}
-                          allMRN[npdId] = {
-                            mrnNumber, receivedDate: mrnDate, receivedQty: parseInt(mrnQty),
-                            condition: mrnCondition, notes: mrnNotes,
-                            supplier: npd.supplier, raisedBy: currentRole,
-                            raisedAt: new Date().toLocaleString("en-IN"),
-                          }
-                          localStorage.setItem("sample_receipt_v1", JSON.stringify(allMRN))
-                          setMrnStatus("raised")
-                          setActiveStage(6)
-                          updateNPD(npdId, { stage: 6, stageName: "Sample Receipt / MRN" })
+                          setActiveStage(8)
+                          updateNPD(npdId, { stage: 8, stageName: NPD_STAGES[7] })
                         }}
                       >
-                        <CheckCircle className="w-4 h-4 mr-2" /> Log Receipt & Raise for Approval
+                        <CheckCircle className="w-4 h-4 mr-2" /> Final Approval — Advance to Re-Sampling
                       </Button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+              )}
 
-                {mrnStatus === "raised" && (
-                  <div className={`rounded-lg border p-4 flex items-start gap-3 ${mrnApproved ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
-                    {mrnApproved
-                      ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                      : <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
-                    <div>
-                      <p className={`text-sm font-bold ${mrnApproved ? "text-emerald-800" : "text-amber-800"}`}>
-                        {mrnApproved ? "MRN Approved — R&D Evaluation in Progress" : "MRN Raised — Pending R&D Head Approval"}
-                      </p>
-                      <p className={`text-xs mt-0.5 ${mrnApproved ? "text-emerald-700" : "text-amber-700"}`}>
-                        {mrnApproved
-                          ? "R&D Head has approved the sample receipt. Evaluation underway."
-                          : "MRN submitted. R&D Head needs to approve from the Approvals tab to begin evaluation."}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+            </CardContent>
+          </Card>
 
-          {activeStage >= 6 && mrnStatus !== "idle" && mrnStatus !== "form" && (
-            <Card className={`shadow-sm ${mrnApproved ? "border-emerald-200 bg-emerald-50/30" : "border-amber-200 bg-amber-50/30"}`}>
-              <CardContent className="py-4 px-5 flex items-center gap-3">
-                {mrnApproved
-                  ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                  : <Clock className="w-5 h-5 text-amber-500 shrink-0" />}
-                <div>
-                  <p className={`text-sm font-bold ${mrnApproved ? "text-emerald-800" : "text-amber-800"}`}>
-                    {mrnApproved ? "Sample Receipt Approved — R&D Evaluation Active" : "MRN Raised — Awaiting R&D Head Approval"}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {mrnApproved ? "Stage 7 in progress." : "Approve from the Approvals tab in the left sidebar."}
-                  </p>
+          {/* ── Section 2: Sourcing Info (read-only) ─────────────── */}
+          {activeStage >= 3 && (
+            <Card>
+              <CardHeader className="pb-3 border-b bg-slate-50">
+                <CardTitle className="text-base">Sourcing Status</CardTitle>
+                <p className="text-xs text-slate-500 mt-0.5">Read-only summary of sourcing progress</p>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vendors Contacted</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{sentVendors.length > 0 ? `${sentVendors.length} vendor${sentVendors.length !== 1 ? "s" : ""}` : "—"}</p>
+                    {sentVendors.length > 0 && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{sentVendors.slice(0,2).join(", ")}{sentVendors.length > 2 ? ` +${sentVendors.length - 2}` : ""}</p>}
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Locked Supplier</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                      {npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : <span className="text-slate-400 italic font-normal text-xs">Not yet locked</span>}
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dispatch Date</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                      {(() => {
+                        const live = npd.supplier && liveQuotes[npd.supplier]
+                        return (live ? (live.formValues.supplyDate || live.formValues.q1) : null) ?? "—"
+                      })()}
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sourcing Stage</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                      {activeStage < 3 ? "Awaiting Release" :
+                       activeStage === 3 ? "Awaiting Quotations" :
+                       activeStage === 4 ? "Awaiting Dispatch" :
+                       activeStage >= 5 ? "Supplier Dispatched" : "—"}
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* ── PP Lot Pricing ─────────────────────────────────────────────── */}
-          {activeStage >= 10 && (() => {
-            const raw  = localStorage.getItem("sample_cost_v1")
-            const cost = raw ? (JSON.parse(raw) as Record<string, Record<string, string>>)[npdId] : null
-            const rows = [
-              { label: "Approved Supplier",       value: npd.supplier },
-              { label: "Item",                     value: npd.itemName },
-              { label: "Unit Cost (₹)",            value: cost?.unitCost   ? `₹ ${parseFloat(cost.unitCost).toFixed(2)}` : "₹ 285.00" },
-              { label: "Tooling Cost (₹)",         value: cost?.tooling    ? `₹ ${parseFloat(cost.tooling).toFixed(2)}`   : "₹ 0.00"   },
-              { label: "Primary Packaging (₹)",    value: cost?.primaryPkg ? `₹ ${parseFloat(cost.primaryPkg).toFixed(2)}`: "₹ 2.50"   },
-              { label: "Confirmed MOQ",            value: cost?.moq        ? `${parseInt(cost.moq).toLocaleString()} pcs` : "5,000 pcs" },
-              { label: "Payment Terms",            value: cost?.payment    ?? "90 Days Credit" },
-              { label: "Product Line",             value: npd.productLine },
-              { label: "Commodity",                value: npd.itemCategory },
-            ]
-            const unitCost   = parseFloat(cost?.unitCost   ?? "285")
-            const tooling    = parseFloat(cost?.tooling    ?? "0")
-            const primaryPkg = parseFloat(cost?.primaryPkg ?? "2.5")
-            const transport  = 15
-            const totalUnit  = unitCost + primaryPkg + transport
-            return (
-              <Card className="border-purple-200 shadow-sm">
-                <CardHeader className="bg-purple-50 border-b border-purple-100 pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-purple-900 flex items-center gap-2 text-base">
-                      <ClipboardCheck className="w-5 h-5" /> PP Lot Pricing — Reference
-                    </CardTitle>
-                    <span className="text-[10px] font-bold text-purple-600 bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                      Fetched from Sample Cost
+          {/* ── Section 3: Document Library ──────────────────────── */}
+          <Card>
+            <CardHeader className="pb-3 border-b bg-slate-50">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-blue-700" /> Document Library
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-5 space-y-5">
+              {/* Design & Drawing Folder */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <FolderOpen className="w-4 h-4 text-blue-700" />
+                  <p className="text-sm font-semibold text-slate-700">Design &amp; Drawing Folder</p>
+                </div>
+                {npd.driveLink ? (
+                  <div className="flex items-center justify-between bg-white border border-blue-200 rounded-lg px-4 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-blue-700" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-800">Drawing / Spec Sheet Folder</p>
+                        <p className="text-xs text-slate-400 truncate max-w-sm">{npd.driveLink}</p>
+                      </div>
+                    </div>
+                    <a
+                      href={npd.driveLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 ml-4 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 transition-colors hover:bg-blue-100"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> Open Drive
+                    </a>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 italic">No drawing link was attached during request creation.</p>
+                )}
+              </div>
+              {/* Supplier Submitted Documents */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <UploadCloud className="w-4 h-4 text-emerald-700" />
+                    <p className="text-sm font-semibold text-slate-700">Supplier Submitted Documents</p>
+                  </div>
+                  {supplierDocs.length > 0 && (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-full">
+                      {supplierDocs.length} file{supplierDocs.length !== 1 ? "s" : ""}
                     </span>
+                  )}
+                </div>
+                {supplierDocs.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 border border-dashed border-slate-200 rounded-lg">
+                    <UploadCloud className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">No documents submitted yet.</p>
+                    <p className="text-xs mt-1">Supplier documents appear here after form submission.</p>
                   </div>
-                  <p className="text-xs text-purple-600 mt-1">
-                    Pricing locked at Sample Cost Finalization. Used as the reference for PP lot purchase order.
-                  </p>
-                </CardHeader>
-                <CardContent className="pt-5 space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {rows.map(({ label, value }) => (
-                      <div key={label} className="flex justify-between items-center border-b border-slate-100 pb-2">
-                        <span className="text-xs text-slate-500">{label}</span>
-                        <span className="text-sm font-semibold text-slate-800">{value}</span>
-                      </div>
-                    ))}
+                ) : (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">
+                    {supplierDocs.map((doc, i) => {
+                      const ext = doc.fileName.split(".").pop()?.toUpperCase() ?? "FILE"
+                      const extColor =
+                        ext === "PDF"  ? "bg-red-100 text-red-700"  :
+                        ext === "XLSX" ? "bg-green-100 text-green-700" :
+                        "bg-slate-100 text-slate-600"
+                      return (
+                        <div key={i} className="flex items-center gap-3 py-3 px-4">
+                          <div className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded ${extColor}`}>{ext}</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-800 truncate">{doc.fileName}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{doc.submittedBy} · {doc.submittedAt} · {doc.sizeMB} MB</p>
+                          </div>
+                          <button className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors">
+                            <Download className="w-3.5 h-3.5" /> Download
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-                  <div className="rounded-lg bg-purple-50 border border-purple-200 px-4 py-3 space-y-2">
-                    <p className="text-xs font-bold text-purple-700 uppercase tracking-wide mb-1">Landed Cost Breakdown</p>
-                    <div className="flex justify-between text-xs text-slate-600">
-                      <span>Unit Cost</span><span className="font-semibold">₹ {unitCost.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-slate-600">
-                      <span>Packaging (Primary)</span><span className="font-semibold">₹ {primaryPkg.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-slate-600">
-                      <span>Est. Transport / Unit</span><span className="font-semibold">₹ {transport.toFixed(2)}</span>
-                    </div>
-                    {tooling > 0 && (
-                      <div className="flex justify-between text-xs text-slate-600">
-                        <span>Tooling (amortized)</span><span className="font-semibold">₹ {tooling.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-sm font-bold text-purple-900 border-t border-purple-200 pt-2 mt-1">
-                      <span>Total Landed Cost / Unit</span>
-                      <span>₹ {(totalUnit + (tooling > 0 ? tooling : 0)).toFixed(2)}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5 text-xs font-semibold text-emerald-800">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" /> PP Lot pricing reference confirmed. Ready for purchase order.
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })()}
-        </TabsContent>
-
+        </div>
+      )}
         {/* ── Supplier Sourcing Workflow ─────────────────────────────────────── */}
         <TabsContent value="supplier" className="mt-6 space-y-6">
 
@@ -2254,97 +2247,6 @@ export default function NpdDetailView() {
           </Card>
         </TabsContent>
 
-        {/* ── Documents Library ─────────────────────────────────────────────── */}
-        <TabsContent value="docs" className="mt-6 space-y-5">
-
-          {/* Design & Drawing */}
-          <Card>
-            <CardHeader className="pb-3 border-b bg-blue-50/40">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-blue-700" /> Design & Drawing Folder
-              </CardTitle>
-              <CardDescription>Shared by R&D during request creation</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {npd.driveLink ? (
-                <div className="flex items-center justify-between bg-white border border-blue-200 rounded-lg px-4 py-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                      <FileText className="w-5 h-5 text-blue-700" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-800">Drawing / Spec Sheet Folder</p>
-                      <p className="text-xs text-slate-400 truncate max-w-sm">{npd.driveLink}</p>
-                    </div>
-                  </div>
-                  <a
-                    href={npd.driveLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 ml-4 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 transition-colors hover:bg-blue-100"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" /> Open Drive
-                  </a>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400 italic">No drawing link was attached during request creation.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Supplier Submissions */}
-          <Card>
-            <CardHeader className="pb-3 border-b bg-emerald-50/40">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <UploadCloud className="w-4 h-4 text-emerald-700" /> Supplier Submitted Documents
-                  </CardTitle>
-                  <CardDescription>Uploaded by suppliers via the enquiry form</CardDescription>
-                </div>
-                {supplierDocs.length > 0 && (
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-full">
-                    {supplierDocs.length} file{supplierDocs.length !== 1 ? "s" : ""}
-                  </span>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {supplierDocs.length === 0 ? (
-                <div className="text-center py-10 text-slate-400">
-                  <UploadCloud className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm font-medium">No documents submitted yet.</p>
-                  <p className="text-xs mt-1">Supplier documents will appear here after the enquiry form is submitted.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {supplierDocs.map((doc, i) => {
-                    const ext = doc.fileName.split(".").pop()?.toUpperCase() ?? "FILE"
-                    const extColor =
-                      ext === "PDF"  ? "bg-red-100 text-red-700"  :
-                      ext === "XLSX" ? "bg-green-100 text-green-700" :
-                      "bg-slate-100 text-slate-600"
-                    return (
-                      <div key={i} className="flex items-center gap-3 py-3">
-                        <div className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded ${extColor}`}>{ext}</div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{doc.fileName}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            {doc.submittedBy} · {doc.submittedAt} · {doc.sizeMB} MB
-                          </p>
-                        </div>
-                        <button className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors">
-                          <Download className="w-3.5 h-3.5" /> Download
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
     </div>
   )
 }
