@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ import {
   Link2, User
 } from "lucide-react"
 import { useNPDs } from "@/lib/npdContext"
-import { getStageName } from "@/lib/mockData"
+import { getStageName, REJECTED_PARTS_KEY } from "@/lib/mockData"
 
 const WORK_TYPES = [
   { id: "NCD",         title: "New Component Development", short: "NCD",   desc: "Brand new component. Full end-to-end lifecycle.", icon: Wrench,     tat: 45, stages: 11 },
@@ -74,9 +74,19 @@ export default function NewRequestWizard() {
   const [driveLink, setDriveLink]     = useState("")
   const [hasRevision, setHasRevision] = useState(false)
   const [revisionNo, setRevisionNo]   = useState("")
+  const [prevPartNo, setPrevPartNo]   = useState("")
   const [cplAttached, setCplAttached] = useState(false)
+  const [pocRole, setPocRole]         = useState("")
+  const [rejectedParts, setRejectedParts] = useState<Array<{ npdId: string; partNumber: string; itemName: string; rejectedAt: string }>>([])
+
+  useEffect(() => {
+    setPocRole(localStorage.getItem("poc_role") ?? "")
+    const raw = localStorage.getItem(REJECTED_PARTS_KEY)
+    if (raw) setRejectedParts(JSON.parse(raw))
+  }, [])
 
   const selectedType = WORK_TYPES.find(t => t.id === typeOfWork)
+  const isRndUser = pocRole === "rnd_user" || pocRole === "rnd_head"
 
   const handleConfirmDispatch = () => {
     const year = new Date().getFullYear()
@@ -86,6 +96,7 @@ export default function NewRequestWizard() {
       return isNaN(num) ? max : Math.max(max, num)
     }, 0)
     const newId = `NPD-FY-${year}-${String(maxSeq + 1).padStart(4, "0")}`
+    // Always store the canonical work-type string in the record, regardless of role label (e.g. "Cost Innovation" is UI-only).
     const workTypeLabel = WORK_TYPE_LABEL[typeOfWork] || typeOfWork
     const tat = TAT_MAP[typeOfWork] || 45
     const raisedBy = localStorage.getItem("poc_role") || "rnd_user"
@@ -144,9 +155,9 @@ export default function NewRequestWizard() {
                 <Icon className="w-5 h-5" />
               </div>
               <div className="flex items-center gap-2 mb-1">
-                <h3 className={`font-semibold text-sm leading-tight ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{type.title}</h3>
+                <h3 className={`font-semibold text-sm leading-tight ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{type.id === "PP" && isRndUser ? "Cost Innovation" : type.title}</h3>
               </div>
-              <p className="text-xs text-slate-500 leading-relaxed mb-3">{type.desc}</p>
+              <p className="text-xs text-slate-500 leading-relaxed mb-3">{type.id === "PP" && isRndUser ? "Production quantity for a cost-validated part." : type.desc}</p>
               <div className="flex items-center gap-3">
                 <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded-full ${isSelected ? "bg-blue-900 text-white" : "bg-slate-100 text-slate-500"}`}>{type.short}</span>
               </div>
@@ -170,7 +181,7 @@ export default function NewRequestWizard() {
       {/* Selected type banner */}
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm">
         {selectedType && <selectedType.icon className="w-4 h-4 text-blue-900 shrink-0" />}
-        <span className="font-semibold text-slate-800">{selectedType?.title} — Rajpura RAC</span>
+        <span className="font-semibold text-slate-800">{selectedType?.id === "PP" && isRndUser ? "Cost Innovation" : selectedType?.title} — Rajpura RAC</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -262,7 +273,7 @@ export default function NewRequestWizard() {
                     checked={hasRevision}
                     onCheckedChange={c => {
                       setHasRevision(c === true)
-                      if (!c) { setCplAttached(false); setRevisionNo("") }
+                      if (!c) { setCplAttached(false); setRevisionNo(""); setPrevPartNo("") }
                     }}
                   />
                   <Label htmlFor="hasRevision" className="text-sm font-medium text-slate-700 cursor-pointer">
@@ -281,6 +292,33 @@ export default function NewRequestWizard() {
                         className="bg-white"
                       />
                     </div>
+
+                    {rejectedParts.length > 0 && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                          Previous Part Number <span className="text-slate-400 font-normal normal-case">(optional — select if revising a rejected part)</span>
+                        </Label>
+                        <Select value={prevPartNo} onValueChange={v => setPrevPartNo(v ?? "")}>
+                          <SelectTrigger className="bg-white">
+                            <SelectValue placeholder="Select previous part number…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {rejectedParts.map(r => (
+                              <SelectItem key={r.npdId} value={r.partNumber}>
+                                <span className="font-semibold">{r.partNumber}</span>
+                                <span className="ml-2 text-slate-500 text-xs">— {r.itemName}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {prevPartNo && (
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Selected: <strong>{prevPartNo}</strong>
+                            <button onClick={() => setPrevPartNo("")} className="ml-2 text-red-400 hover:text-red-600">Clear</button>
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     <div className="space-y-1.5">
                       <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
@@ -404,7 +442,11 @@ export default function NewRequestWizard() {
   )
 
   // ── Step 3 ────────────────────────────────────────────────────────────────
-  const renderStep3 = () => (
+  const renderStep3 = () => {
+    const displayWorkTypeLabel =
+      typeOfWork === "PP" && isRndUser ? "Cost Innovation" : (WORK_TYPE_LABEL[typeOfWork] ?? typeOfWork)
+
+    return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-6 duration-400">
 
       {/* Summary strip */}
@@ -435,11 +477,11 @@ export default function NewRequestWizard() {
           <div className="grid grid-cols-[80px_1fr] gap-y-1 text-xs border-b border-slate-100 pb-3 mb-3">
             <span className="text-slate-400">From:</span>    <span className="font-semibold">Amber Auto-Bot &lt;noreply@amber.internal&gt;</span>
             <span className="text-slate-400">To:</span>      <span className="font-semibold">{commodity ? SPOC_DISPLAY_MAP[commodity] : "Sourcing SPOC"}</span>
-            <span className="text-slate-400">Subject:</span> <span className="font-semibold">ACTION REQUIRED — New {WORK_TYPE_LABEL[typeOfWork] || typeOfWork} for {commodity || "Component"}</span>
+            <span className="text-slate-400">Subject:</span> <span className="font-semibold">ACTION REQUIRED — New {displayWorkTypeLabel} for {commodity || "Component"}</span>
           </div>
 
           <p className="text-slate-600">Dear Sourcing Team,</p>
-          <p className="text-slate-600">A new <strong className="text-slate-800">{WORK_TYPE_LABEL[typeOfWork]}</strong> project has been initiated by R&D requiring immediate sourcing allocation.</p>
+          <p className="text-slate-600">A new <strong className="text-slate-800">{displayWorkTypeLabel}</strong> project has been initiated by R&D requiring immediate sourcing allocation.</p>
 
           <div className="rounded-md bg-slate-50 border border-slate-100 p-4 space-y-1 text-xs">
             <p><strong>Item Name:</strong> {itemName || "N/A"}</p>
@@ -462,7 +504,8 @@ export default function NewRequestWizard() {
         </Button>
       </div>
     </div>
-  )
+    )
+  }
 
   // ── Shell ─────────────────────────────────────────────────────────────────
   return (

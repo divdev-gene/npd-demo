@@ -175,17 +175,12 @@ export type SupplierDoc = {
 };
 
 export type VendorQuotation = {
-  vendorName:   string;
-  tier:         string;
-  status:       "submitted" | "pending";
-  unitCost:     number | null;
-  toolingCost:  number | null;
-  dispatchDate: string | null;
-  sampleQty:    number | null;
-  moq:          number | null;
-  paymentTerms: string | null;
-  leadTimeDays: number | null;
-  submittedAt:  string | null;
+  vendorName:  string;
+  tier:        string;
+  status:      "submitted" | "pending";
+  sampleQty:   number | null;
+  supplyDate:  string | null;
+  submittedAt: string | null;
 };
 
 export const VENDOR_QUOTE_APPROVALS_KEY = "vendor_quote_approvals_v1";
@@ -193,6 +188,10 @@ export const ENQUIRY_SENT_KEY           = "enquiry_sent_vendors_v1";
 export const LIVE_QUOTATIONS_KEY        = "live_quotations_v1";
 export const SUPPLIER_DISPATCH_KEY      = "supplier_dispatch_submitted_v1";
 export const DELIVERY_ACCEPTANCE_KEY    = "delivery_acceptance_v1";
+export const PART_ASSIGNMENT_KEY        = "part_assignment_v1";
+export const PLANT_SUPPLIER_RESP_KEY    = "plant_supplier_response_v1";
+export const PLANT_ACCEPTANCE_KEY       = "plant_acceptance_v1";
+export const REJECTED_PARTS_KEY         = "rejected_parts_v1";
 
 export type LiveQuotation = {
   vendorName:         string;
@@ -238,29 +237,29 @@ export const NPD_STAGES = [
   "RND Evaluation",                // 5
   "RND Testing & TQR",             // 6
   "RND Approval",                  // 7
-  "Re-Sampling",                   // 8
+  "Plant Delivery Acceptance",      // 8
 ] as const
 export const TOTAL_NPD_STAGES = 8
 
 export const MOCK_VENDOR_QUOTATIONS: Record<string, VendorQuotation[]> = {
   "NPD-FY-2026-0012": [
-    { vendorName: "Tubetech India Pvt Ltd",   tier: "Tier 1", status: "submitted", unitCost: 285, toolingCost: 0,   dispatchDate: "15 May 2026", sampleQty: 5, moq: 5000, paymentTerms: "90 Days Credit", leadTimeDays: 21, submittedAt: "14 Apr 2026" },
-    { vendorName: "Alpha Component Systems",  tier: "Tier 2", status: "submitted", unitCost: 310, toolingCost: 500, dispatchDate: "20 May 2026", sampleQty: 3, moq: 3000, paymentTerms: "60 Days Credit", leadTimeDays: 25, submittedAt: "15 Apr 2026" },
-    { vendorName: "National Metalfabs",       tier: "Tier 2", status: "pending",   unitCost: null, toolingCost: null, dispatchDate: null, sampleQty: null, moq: null, paymentTerms: null, leadTimeDays: null, submittedAt: null },
+    { vendorName: "Tubetech India Pvt Ltd",      tier: "Tier 1", status: "submitted", sampleQty: 5,  supplyDate: "15 May 2026", submittedAt: "14 Apr 2026" },
+    { vendorName: "Alpha Component Systems",     tier: "Tier 2", status: "submitted", sampleQty: 3,  supplyDate: "20 May 2026", submittedAt: "15 Apr 2026" },
+    { vendorName: "National Metalfabs",          tier: "Tier 2", status: "pending",   sampleQty: null, supplyDate: null,          submittedAt: null },
   ],
   "NPD-FY-2026-0014": [
-    { vendorName: "MicroElectrix Systems",    tier: "Tier 1", status: "submitted", unitCost: 1380, toolingCost: 0,    dispatchDate: "10 May 2026", sampleQty: 10, moq: 1000, paymentTerms: "90 Days Credit", leadTimeDays: 18, submittedAt: "18 Apr 2026" },
-    { vendorName: "Shenzhen Optoelectronics", tier: "Tier 2", status: "submitted", unitCost: 1290, toolingCost: 2000, dispatchDate: "22 May 2026", sampleQty: 8,  moq: 2000, paymentTerms: "LC",             leadTimeDays: 35, submittedAt: "19 Apr 2026" },
-    { vendorName: "Synapse Electronics Pvt Ltd", tier: "Tier 2", status: "pending", unitCost: null, toolingCost: null, dispatchDate: null, sampleQty: null, moq: null, paymentTerms: null, leadTimeDays: null, submittedAt: null },
+    { vendorName: "MicroElectrix Systems",       tier: "Tier 1", status: "submitted", sampleQty: 10, supplyDate: "10 May 2026", submittedAt: "18 Apr 2026" },
+    { vendorName: "Shenzhen Optoelectronics",    tier: "Tier 2", status: "submitted", sampleQty: 8,  supplyDate: "22 May 2026", submittedAt: "19 Apr 2026" },
+    { vendorName: "Synapse Electronics Pvt Ltd", tier: "Tier 2", status: "pending",   sampleQty: null, supplyDate: null,          submittedAt: null },
   ],
   "NPD-FY-2026-0027": [
-    { vendorName: "Shenzhen Optoelectronics", tier: "Tier 2", status: "submitted", unitCost: 870, toolingCost: 1500, dispatchDate: "28 May 2026", sampleQty: 6, moq: 1500, paymentTerms: "LC",             leadTimeDays: 30, submittedAt: "22 Apr 2026" },
-    { vendorName: "MicroElectrix Systems",    tier: "Tier 1", status: "pending",   unitCost: null, toolingCost: null, dispatchDate: null, sampleQty: null, moq: null, paymentTerms: null, leadTimeDays: null, submittedAt: null },
-    { vendorName: "Rexnord Controls India",   tier: "Tier 3", status: "pending",   unitCost: null, toolingCost: null, dispatchDate: null, sampleQty: null, moq: null, paymentTerms: null, leadTimeDays: null, submittedAt: null },
+    { vendorName: "Shenzhen Optoelectronics",    tier: "Tier 2", status: "submitted", sampleQty: 6,  supplyDate: "28 May 2026", submittedAt: "22 Apr 2026" },
+    { vendorName: "MicroElectrix Systems",       tier: "Tier 1", status: "pending",   sampleQty: null, supplyDate: null,          submittedAt: null },
+    { vendorName: "Rexnord Controls India",      tier: "Tier 3", status: "pending",   sampleQty: null, supplyDate: null,          submittedAt: null },
   ],
   "NPD-FY-2026-0018": [
-    { vendorName: "Packwell Solutions",       tier: "Tier 1", status: "submitted", unitCost: 48, toolingCost: 0, dispatchDate: "12 May 2026", sampleQty: 20, moq: 10000, paymentTerms: "60 Days Credit", leadTimeDays: 14, submittedAt: "24 Apr 2026" },
-    { vendorName: "PrintPack Industries",     tier: "Tier 2", status: "submitted", unitCost: 42, toolingCost: 0, dispatchDate: "18 May 2026", sampleQty: 15, moq: 8000,  paymentTerms: "60 Days Credit", leadTimeDays: 18, submittedAt: "25 Apr 2026" },
+    { vendorName: "Packwell Solutions",          tier: "Tier 1", status: "submitted", sampleQty: 20, supplyDate: "12 May 2026", submittedAt: "24 Apr 2026" },
+    { vendorName: "PrintPack Industries",        tier: "Tier 2", status: "submitted", sampleQty: 15, supplyDate: "18 May 2026", submittedAt: "25 Apr 2026" },
   ],
 };
 

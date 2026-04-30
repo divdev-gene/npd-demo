@@ -9,6 +9,7 @@ import {
   LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY, VENDOR_RFQ_TEMPLATE_KEY, DEFAULT_RFQ_TEMPLATE, VENDOR_EMAIL, COMPOSED_EMAILS_KEY,
   VENDOR_STATUS_KEY, DEFAULT_STATUS_TEMPLATE, VENDOR_STATUS_TEMPLATE_KEY, VENDOR_DATE_APPROVAL_KEY,
   SUPPLIER_DISPATCH_KEY, DELIVERY_ACCEPTANCE_KEY,
+  PART_ASSIGNMENT_KEY, PLANT_SUPPLIER_RESP_KEY, PLANT_ACCEPTANCE_KEY, REJECTED_PARTS_KEY,
   type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse,
 } from "@/lib/mockData"
 import { useNPDs } from "@/lib/npdContext"
@@ -153,6 +154,19 @@ export default function NpdDetailView() {
   const [deliverySubmitted,    setDeliverySubmitted]    = useState(false)
   const [deliveryHeadApproved, setDeliveryHeadApproved] = useState(false)
 
+  // ── Stage 8: Plant Delivery Acceptance ───────────────────────────────────
+  const [partNumberInput,        setPartNumberInput]        = useState("")
+  const [partAssigned,           setPartAssigned]           = useState(false)
+  const [assignedPartNumber,     setAssignedPartNumber]     = useState("")
+  const [plantDeliveryDate,      setPlantDeliveryDate]      = useState("")
+  const [plantDeliveryQty,       setPlantDeliveryQty]       = useState("")
+  const [plantSupplierSubmitted, setPlantSupplierSubmitted] = useState(false)
+  const [plantDeliveryDoc,       setPlantDeliveryDoc]       = useState("")
+  const [plantDeliveryAccepted,  setPlantDeliveryAccepted]  = useState(false)
+  const [plantVerdict,           setPlantVerdict]           = useState<"accepted" | "not_good" | null>(null)
+  const [verdictSelection,       setVerdictSelection]       = useState<"accepted" | "not_good" | null>(null)
+  const [plantRemarks,           setPlantRemarks]           = useState("")
+
   const enquiryValidUntil = (() => {
     const d = new Date()
     d.setDate(d.getDate() + 10)
@@ -191,6 +205,49 @@ export default function NpdDetailView() {
       setDeliveryDoc("")
       setDeliverySubmitted(false)
       setDeliveryHeadApproved(false)
+    }
+
+    // Stage 8 — part assignment
+    const rawPartAssign = localStorage.getItem(PART_ASSIGNMENT_KEY)
+    const allPartAssign: Record<string, { partNumber: string; assignedAt: string }> = rawPartAssign ? JSON.parse(rawPartAssign) : {}
+    if (allPartAssign[npdId]) {
+      setPartAssigned(true)
+      setAssignedPartNumber(allPartAssign[npdId].partNumber)
+    } else {
+      setPartAssigned(false)
+      setAssignedPartNumber("")
+    }
+
+    // Stage 8 — supplier delivery response
+    const rawPlantSupp = localStorage.getItem(PLANT_SUPPLIER_RESP_KEY)
+    const allPlantSupp: Record<string, { deliveryDate: string; sampleQty: number; submittedAt: string }> = rawPlantSupp ? JSON.parse(rawPlantSupp) : {}
+    if (allPlantSupp[npdId]) {
+      setPlantDeliveryDate(allPlantSupp[npdId].deliveryDate)
+      setPlantDeliveryQty(String(allPlantSupp[npdId].sampleQty))
+      setPlantSupplierSubmitted(true)
+    } else {
+      setPlantDeliveryDate("")
+      setPlantDeliveryQty("")
+      setPlantSupplierSubmitted(false)
+    }
+
+    // Stage 8 — plant acceptance + verdict
+    const rawPlantAcc = localStorage.getItem(PLANT_ACCEPTANCE_KEY)
+    const allPlantAcc: Record<string, { docName: string; acceptedAt: string; verdict?: "accepted" | "not_good"; remarks?: string }> = rawPlantAcc ? JSON.parse(rawPlantAcc) : {}
+    if (allPlantAcc[npdId]) {
+      setPlantDeliveryDoc(allPlantAcc[npdId].docName)
+      setPlantDeliveryAccepted(true)
+      if (allPlantAcc[npdId].verdict) {
+        setPlantVerdict(allPlantAcc[npdId].verdict!)
+        setVerdictSelection(allPlantAcc[npdId].verdict!)
+        setPlantRemarks(allPlantAcc[npdId].remarks ?? "")
+      }
+    } else {
+      setPlantDeliveryDoc("")
+      setPlantDeliveryAccepted(false)
+      setPlantVerdict(null)
+      setVerdictSelection(null)
+      setPlantRemarks("")
     }
   }
 
@@ -284,6 +341,7 @@ export default function NpdDetailView() {
   const isSpocOrSourcing = SPOC_NAMES.includes(currentRole) ||
     currentRole === "sourcing_head" || currentRole === "super_admin"
   const isRnd = currentRole.startsWith("rnd") || currentRole === "super_admin"
+  const isPlantUser = currentRole === "plant_user" || currentRole === "super_admin"
 
   const dispatchEnquiry = () => {
     const vendorList = Array.from(selectedVendors)
@@ -449,6 +507,47 @@ export default function NpdDetailView() {
     updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
   }
 
+  const assignPartNumber = () => {
+    if (!partNumberInput.trim()) return
+    const all: Record<string, { partNumber: string; assignedAt: string }> = JSON.parse(localStorage.getItem(PART_ASSIGNMENT_KEY) ?? "{}")
+    all[npdId] = { partNumber: partNumberInput.trim(), assignedAt: new Date().toLocaleString("en-IN") }
+    localStorage.setItem(PART_ASSIGNMENT_KEY, JSON.stringify(all))
+    setPartAssigned(true)
+    setAssignedPartNumber(partNumberInput.trim())
+  }
+
+  const submitPlantSupplierResponse = () => {
+    if (!plantDeliveryDate || !plantDeliveryQty) return
+    const all: Record<string, { deliveryDate: string; sampleQty: number; submittedAt: string }> = JSON.parse(localStorage.getItem(PLANT_SUPPLIER_RESP_KEY) ?? "{}")
+    all[npdId] = { deliveryDate: plantDeliveryDate, sampleQty: parseInt(plantDeliveryQty), submittedAt: new Date().toLocaleString("en-IN") }
+    localStorage.setItem(PLANT_SUPPLIER_RESP_KEY, JSON.stringify(all))
+    setPlantSupplierSubmitted(true)
+  }
+
+  const confirmPlantDelivery = () => {
+    if (!plantDeliveryDoc) return
+    const now = new Date().toLocaleString("en-IN")
+    const all: Record<string, { docName: string; acceptedAt: string; verdict?: string; remarks?: string }> = JSON.parse(localStorage.getItem(PLANT_ACCEPTANCE_KEY) ?? "{}")
+    all[npdId] = { docName: plantDeliveryDoc, acceptedAt: now }
+    localStorage.setItem(PLANT_ACCEPTANCE_KEY, JSON.stringify(all))
+    setPlantDeliveryAccepted(true)
+  }
+
+  const submitPlantVerdict = (verdict: "accepted" | "not_good") => {
+    const now = new Date().toLocaleString("en-IN")
+    const all: Record<string, { docName: string; acceptedAt: string; verdict?: string; remarks?: string }> = JSON.parse(localStorage.getItem(PLANT_ACCEPTANCE_KEY) ?? "{}")
+    all[npdId] = { ...(all[npdId] ?? { docName: plantDeliveryDoc, acceptedAt: now }), verdict, remarks: plantRemarks }
+    localStorage.setItem(PLANT_ACCEPTANCE_KEY, JSON.stringify(all))
+    setPlantVerdict(verdict)
+    if (verdict === "not_good" && assignedPartNumber) {
+      const rejected: Array<{ npdId: string; partNumber: string; itemName: string; rejectedAt: string }> = JSON.parse(localStorage.getItem(REJECTED_PARTS_KEY) ?? "[]")
+      if (!rejected.some(r => r.npdId === npdId)) {
+        rejected.push({ npdId, partNumber: assignedPartNumber, itemName: npd.itemName, rejectedAt: now })
+        localStorage.setItem(REJECTED_PARTS_KEY, JSON.stringify(rejected))
+      }
+    }
+  }
+
   const demoAdvanceStage = () => {
     if (activeStage >= TOTAL_NPD_STAGES) return
     const next = activeStage + 1
@@ -477,6 +576,30 @@ export default function NpdDetailView() {
     }
     // Stage 6→7: auto-complete TQR
     if (activeStage === 6) setTqrStatus("fully_approved")
+    // Stage 8: auto-satisfy plant delivery acceptance (stage 8 is final — no further advance)
+    if (activeStage === 8) {
+      const dummyPart = `AMB-PT-2026-${npdId.slice(-4)}`
+      const now = new Date().toLocaleString("en-IN")
+      const partAll: Record<string, { partNumber: string; assignedAt: string }> = JSON.parse(localStorage.getItem(PART_ASSIGNMENT_KEY) ?? "{}")
+      partAll[npdId] = { partNumber: dummyPart, assignedAt: now }
+      localStorage.setItem(PART_ASSIGNMENT_KEY, JSON.stringify(partAll))
+      setPartAssigned(true)
+      setAssignedPartNumber(dummyPart)
+      const suppAll: Record<string, { deliveryDate: string; sampleQty: number; submittedAt: string }> = JSON.parse(localStorage.getItem(PLANT_SUPPLIER_RESP_KEY) ?? "{}")
+      suppAll[npdId] = { deliveryDate: "30 May 2026", sampleQty: 5, submittedAt: now }
+      localStorage.setItem(PLANT_SUPPLIER_RESP_KEY, JSON.stringify(suppAll))
+      setPlantDeliveryDate("30 May 2026")
+      setPlantDeliveryQty("5")
+      setPlantSupplierSubmitted(true)
+      const accAll: Record<string, { docName: string; acceptedAt: string; verdict?: string; remarks?: string }> = JSON.parse(localStorage.getItem(PLANT_ACCEPTANCE_KEY) ?? "{}")
+      accAll[npdId] = { docName: "demo_plant_receipt.jpg", acceptedAt: now, verdict: "accepted", remarks: "" }
+      localStorage.setItem(PLANT_ACCEPTANCE_KEY, JSON.stringify(accAll))
+      setPlantDeliveryDoc("demo_plant_receipt.jpg")
+      setPlantDeliveryAccepted(true)
+      setPlantVerdict("accepted")
+      setVerdictSelection("accepted")
+      return
+    }
 
     setActiveStage(next)
     updateNPD(npdId, { stage: next, stageName: NPD_STAGES[next - 1] })
@@ -513,17 +636,12 @@ export default function NpdDetailView() {
     ...Object.values(liveQuotes)
       .filter(lq => !vendorQuotations.find(vq => vq.vendorName === lq.vendorName))
       .map(lq => ({
-        vendorName:   lq.vendorName,
-        tier:         "—",
-        status:       "submitted" as const,
-        unitCost:     parseFloat(lq.formValues.q3 || "") || null,
-        toolingCost:  parseFloat(lq.formValues.q4 || "") || null,
-        dispatchDate: lq.formValues.supplyDate || lq.formValues.q1 || null,
-        sampleQty:    parseInt(lq.formValues.sampleQty || lq.formValues.q2 || "") || null,
-        moq:          parseInt(lq.formValues.q9 || "") || null,
-        paymentTerms: lq.formValues.q10 || null,
-        leadTimeDays: parseInt(lq.formValues.q11 || "") || null,
-        submittedAt:  lq.submittedAt,
+        vendorName:  lq.vendorName,
+        tier:        "—",
+        status:      "submitted" as const,
+        sampleQty:   parseInt(lq.formValues.sampleQty || lq.formValues.q2 || "") || null,
+        supplyDate:  lq.formValues.supplyDate || lq.formValues.q1 || null,
+        submittedAt: lq.submittedAt,
       })),
   ]
 
@@ -994,8 +1112,205 @@ export default function NpdDetailView() {
                           updateNPD(npdId, { stage: 8, stageName: NPD_STAGES[7] })
                         }}
                       >
-                        <CheckCircle className="w-4 h-4 mr-2" /> Final Approval — Advance to Re-Sampling
+                        <CheckCircle className="w-4 h-4 mr-2" /> Final Approval — Advance to Plant Delivery
                       </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Stage 8: Plant Delivery Acceptance ── */}
+              {activeStage >= 8 && (
+                <div className={`rounded-xl border p-4 ${
+                  activeStage === 8 ? "border-orange-300 bg-orange-50/30 shadow-sm" : "border-slate-200 bg-slate-50 opacity-50"
+                }`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    {activeStage > 8
+                      ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      : <div className="w-4 h-4 rounded-full border-2 border-orange-600 flex items-center justify-center shrink-0">
+                          <span className="text-[9px] font-bold text-orange-600">8</span>
+                        </div>}
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 8 — Plant Delivery Acceptance</h4>
+                    {plantVerdict === "accepted" && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Part Accepted</Badge>}
+                    {plantVerdict === "not_good" && <Badge className="bg-red-100 text-red-700 border-none text-xs ml-auto">Not Good</Badge>}
+                  </div>
+                  {activeStage === 8 && (
+                    <div className="space-y-4">
+
+                      {/* Step A — Part number assignment */}
+                      {!partAssigned ? (
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                          <p className="text-sm font-bold text-slate-800 mb-1">Assign New Part Number</p>
+                          <p className="text-xs text-slate-500 mb-3">Assign the official part number for this approved component and notify the supplier to confirm delivery details.</p>
+                          {(currentRole === "rnd_head" || currentRole === "super_admin") ? (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={partNumberInput}
+                                onChange={e => setPartNumberInput(e.target.value)}
+                                placeholder="e.g. AMB-PT-2026-0012"
+                                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                              />
+                              <Button size="sm" className="bg-orange-600 hover:bg-orange-700 text-white" disabled={!partNumberInput.trim()} onClick={assignPartNumber}>
+                                Assign &amp; Notify Supplier
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-400 italic">Awaiting RND Head to assign part number.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <div>
+                              <p className="text-sm font-bold text-emerald-800">Part Number Assigned</p>
+                              <p className="text-xs text-emerald-700 mt-0.5">Part No: <strong>{assignedPartNumber}</strong></p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step B — Supplier delivery response */}
+                      {partAssigned && !plantSupplierSubmitted && (
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                          <p className="text-sm font-bold text-slate-800 mb-1">Record Supplier Delivery Details</p>
+                          <p className="text-xs text-slate-500 mb-3">Enter the delivery date and sample quantity confirmed by the supplier.</p>
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Delivery Date</label>
+                              <input
+                                type="date"
+                                value={plantDeliveryDate}
+                                onChange={e => setPlantDeliveryDate(e.target.value)}
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Sample Qty (pcs)</label>
+                              <input
+                                type="number"
+                                value={plantDeliveryQty}
+                                onChange={e => setPlantDeliveryQty(e.target.value)}
+                                placeholder="e.g. 5"
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                              />
+                            </div>
+                          </div>
+                          <Button size="sm" disabled={!plantDeliveryDate || !plantDeliveryQty} onClick={submitPlantSupplierResponse}>
+                            Submit Supplier Response
+                          </Button>
+                        </div>
+                      )}
+
+                      {partAssigned && plantSupplierSubmitted && !plantDeliveryAccepted && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                          <p className="text-xs font-bold text-blue-800 mb-1">Supplier Delivery Details</p>
+                          <div className="flex gap-4 text-xs text-blue-700">
+                            <span>Delivery Date: <strong>{plantDeliveryDate}</strong></span>
+                            <span>Sample Qty: <strong>{plantDeliveryQty} pcs</strong></span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step C — Plant user delivery acceptance */}
+                      {plantSupplierSubmitted && !plantDeliveryAccepted && (
+                        isPlantUser ? (
+                          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                            <p className="text-sm font-bold text-slate-800 mb-1">Accept Delivery</p>
+                            <p className="text-xs text-slate-500 mb-3">Upload a delivery receipt or photo as proof of receipt.</p>
+                            {plantDeliveryDoc ? (
+                              <div className="flex items-center gap-2 mb-3 text-sm text-slate-700">
+                                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                                <span className="font-medium">{plantDeliveryDoc}</span>
+                                <button onClick={() => setPlantDeliveryDoc("")} className="text-xs text-red-400 hover:text-red-600 ml-auto">Remove</button>
+                              </div>
+                            ) : (
+                              <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-slate-200 rounded-xl p-6 cursor-pointer hover:border-orange-400 hover:bg-orange-50/40 transition-colors mb-3">
+                                <span className="text-xs text-slate-400">PDF, PNG or JPG</span>
+                                <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg"
+                                  onChange={e => { if (e.target.files?.[0]) setPlantDeliveryDoc(e.target.files[0].name) }} />
+                                <span className="text-xs font-semibold text-orange-600">Click to upload</span>
+                              </label>
+                            )}
+                            <Button size="sm" disabled={!plantDeliveryDoc} onClick={confirmPlantDelivery}>
+                              Confirm Receipt
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                            <p className="text-sm text-slate-400 italic">Awaiting plant user to confirm delivery receipt.</p>
+                          </div>
+                        )
+                      )}
+
+                      {/* Step D — Plant testing verdict */}
+                      {plantDeliveryAccepted && plantVerdict === null && (
+                        isPlantUser ? (
+                          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                            <p className="text-sm font-bold text-slate-800 mb-0.5">Testing Verdict</p>
+                            <p className="text-xs text-slate-500 mb-3">
+                              <span className="text-emerald-600 font-semibold">✓ Delivery accepted</span> — {plantDeliveryDoc}. Submit testing result.
+                            </p>
+                            <div className="flex gap-2 mb-3">
+                              <button
+                                onClick={() => setVerdictSelection("accepted")}
+                                className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${
+                                  verdictSelection === "accepted"
+                                    ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                    : "border-slate-200 text-slate-600 hover:border-emerald-300 hover:bg-emerald-50/40"
+                                }`}
+                              >
+                                ✓ Accepted
+                              </button>
+                              <button
+                                onClick={() => setVerdictSelection("not_good")}
+                                className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${
+                                  verdictSelection === "not_good"
+                                    ? "border-red-400 bg-red-50 text-red-800"
+                                    : "border-slate-200 text-slate-600 hover:border-red-300 hover:bg-red-50/40"
+                                }`}
+                              >
+                                ✗ Not Good
+                              </button>
+                            </div>
+                            <textarea
+                              value={plantRemarks}
+                              onChange={e => setPlantRemarks(e.target.value)}
+                              placeholder="Remarks (optional)"
+                              rows={2}
+                              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none mb-3"
+                            />
+                            <Button size="sm" disabled={verdictSelection === null} onClick={() => verdictSelection && submitPlantVerdict(verdictSelection)}>
+                              Submit Verdict
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                            <p className="text-sm text-slate-400 italic">Awaiting plant user to submit testing verdict.</p>
+                          </div>
+                        )
+                      )}
+
+                      {/* Completed state */}
+                      {plantVerdict !== null && (
+                        plantVerdict === "accepted" ? (
+                          <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-5 text-center">
+                            <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                            <p className="text-base font-bold text-emerald-800">Part Accepted — NPD Complete</p>
+                            <p className="text-sm text-emerald-700 mt-1">Part No. <strong>{assignedPartNumber}</strong> has been approved for production.</p>
+                            {plantRemarks && <p className="text-xs text-emerald-600 mt-2 italic">&ldquo;{plantRemarks}&rdquo;</p>}
+                          </div>
+                        ) : (
+                          <div className="bg-red-50 border border-red-200 rounded-xl p-5 text-center">
+                            <XCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+                            <p className="text-base font-bold text-red-800">Part Not Good — Returned for Revision</p>
+                            <p className="text-sm text-red-700 mt-1">Part No. <strong>{assignedPartNumber}</strong> failed plant testing. Previous part number recorded for future revision requests.</p>
+                            {plantRemarks && <p className="text-xs text-red-600 mt-2 italic">&ldquo;{plantRemarks}&rdquo;</p>}
+                          </div>
+                        )
+                      )}
+
                     </div>
                   )}
                 </div>
@@ -1524,23 +1839,9 @@ export default function NpdDetailView() {
                 const isReNegotiating = live?.status === "re_negotiation"
                 const revisionCount = live?.revisionCount ?? 0
 
-                // formValues: new form uses sampleQty/supplyDate keys; legacy mock data uses q1/q2 (fallback chain below)
-                const unitCostVal  = live ? (parseFloat(live.formValues.q3 || "") || null) : v.unitCost
-                const toolingVal   = live ? (parseFloat(live.formValues.q4 || "") || null) : v.toolingCost
-                const dispatchVal  = live ? (live.formValues.supplyDate || live.formValues.q1 || v.dispatchDate) : v.dispatchDate
-                const samplesVal   = live ? (parseInt(live.formValues.sampleQty || live.formValues.q2 || "") || null) : v.sampleQty
-                const moqVal       = live ? (parseInt(live.formValues.q9 || "") || null) : v.moq
-                const paymentVal   = live ? (live.formValues.q10 || v.paymentTerms) : v.paymentTerms
-                const leadTimeVal  = live ? (parseInt(live.formValues.q11 || "") || null) : v.leadTimeDays
-                const submittedAt  = live ? live.submittedAt : v.submittedAt
-
-                // Find cheapest among all submitted vendors
-                const allCosts = displayQuotations.map(vq => {
-                  const lq = liveQuotes[vq.vendorName]
-                  return lq ? (parseFloat(lq.formValues.q3 || "") || null) : vq.unitCost
-                }).filter((c): c is number => c !== null)
-                const lowestCost = allCosts.length ? Math.min(...allCosts) : null
-                const isCheapest = isSubmitted && unitCostVal !== null && unitCostVal === lowestCost && allCosts.length > 1
+                const samplesVal  = live ? (parseInt(live.formValues.sampleQty || live.formValues.q2 || "") || null) : v.sampleQty
+                const supplyVal   = live ? (live.formValues.supplyDate || live.formValues.q1 || v.supplyDate) : v.supplyDate
+                const submittedAt = live ? live.submittedAt : v.submittedAt
 
                 const isBeingRenegotiated = renegotiatingVendor === v.vendorName
                 const isNotFeasible = live?.feasible === false
@@ -1560,9 +1861,6 @@ export default function NpdDetailView() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-slate-900">{v.vendorName}</span>
                               <span className="text-[10px] font-bold border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full">{v.tier}</span>
-                              {isCheapest && (
-                                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Lowest Price</span>
-                              )}
                               {revisionCount > 1 && (
                                 <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Rev {revisionCount}</span>
                               )}
@@ -1630,19 +1928,14 @@ export default function NpdDetailView() {
                         )}
 
                         {/* Quoted values grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                        <div className="grid grid-cols-2 gap-3 mb-4">
                           {[
-                            { label: "Unit Cost",     value: unitCostVal !== null ? `₹${unitCostVal.toLocaleString("en-IN")}` : "—" },
-                            { label: "Tooling Cost",  value: toolingVal  !== null ? (toolingVal === 0 ? "Nil" : `₹${toolingVal.toLocaleString("en-IN")}`) : "—" },
-                            { label: "Dispatch Date", value: dispatchVal ?? "—" },
-                            { label: "Samples",       value: samplesVal  !== null ? `${samplesVal} pcs` : "—" },
-                            { label: "MOQ",           value: moqVal      !== null ? `${moqVal.toLocaleString("en-IN")} pcs` : "—" },
-                            { label: "Payment Terms", value: paymentVal  ?? "—" },
-                            { label: "Lead Time",     value: leadTimeVal !== null ? `${leadTimeVal} days` : "—" },
+                            { label: "Supply Date", value: supplyVal  ?? "—" },
+                            { label: "Samples",     value: samplesVal !== null ? `${samplesVal} pcs` : "—" },
                           ].map(({ label, value }) => (
                             <div key={label} className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-                              <p className={`text-sm font-semibold mt-0.5 ${label === "Unit Cost" && isCheapest ? "text-emerald-700" : "text-slate-800"}`}>{value}</p>
+                              <p className="text-sm font-semibold mt-0.5 text-slate-800">{value}</p>
                             </div>
                           ))}
                         </div>
@@ -1717,9 +2010,9 @@ export default function NpdDetailView() {
                           )
                         })()}
 
-                        {/* Reminder email draft — shown when vendor has submitted and has a dispatch date */}
-                        {isSpocOrSourcing && isSubmitted && dispatchVal && !vendorStatuses[v.vendorName] && (() => {
-                          const { subject, body, statusLink } = buildReminderEmail(v.vendorName, dispatchVal)
+                        {/* Reminder email draft — shown when vendor has submitted and has a supply date */}
+                        {isSpocOrSourcing && isSubmitted && supplyVal && !vendorStatuses[v.vendorName] && (() => {
+                          const { subject, body, statusLink } = buildReminderEmail(v.vendorName, supplyVal)
                           return (
                             <div className="mb-3 border border-slate-200 rounded-xl overflow-hidden">
                               <div className="bg-slate-100 border-b border-slate-200 px-3 py-2 flex items-center justify-between">

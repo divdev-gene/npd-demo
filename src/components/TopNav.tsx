@@ -28,6 +28,12 @@ const ROLE_GROUPS = [
     ]
   },
   {
+    label: "Plant",
+    roles: [
+      { value: "plant_user", name: "Plant User", area: "Delivery & Testing" },
+    ]
+  },
+  {
     label: "Administration",
     roles: [
       { value: "super_admin", name: "Super Admin", area: "Full Access" },
@@ -45,6 +51,7 @@ function getRoleBg(value: string) {
   if (value.startsWith("rnd"))       return "bg-violet-600"
   if (value === "sourcing_head")     return "bg-blue-800"
   if (value === "super_admin")       return "bg-slate-700"
+  if (value === "plant_user")        return "bg-orange-600"
   return "bg-teal-600"
 }
 
