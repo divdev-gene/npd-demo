@@ -140,10 +140,6 @@ export default function NpdDetailView() {
 
   // ── FPA ────────────────────────────────────────────────────────────────
   const [fpaStatus,    setFpaStatus]    = useState<"idle" | "form" | "done">("idle")
-  const [fpaNumber,    setFpaNumber]    = useState("")
-  const [fpaDate,      setFpaDate]      = useState("")
-  const [fpaApprover,  setFpaApprover]  = useState("")
-  const [fpaRemarks,   setFpaRemarks]   = useState("")
 
   // ── Supplier Defence ────────────────────────────────────────────────────
   const [defenceAdvanced, setDefenceAdvanced] = useState(false)
@@ -988,7 +984,7 @@ export default function NpdDetailView() {
           {/* ── Section 1: Supplier Sourcing & Quotations ──── */}
           {activeStage < 3 ? (
             <Card>
-              <CardContent className="py-10 text-center text-slate-400">
+              <CardContent className="py-8 text-center text-slate-400">
                 <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 <p className="text-sm font-medium">Waiting for R&amp;D to release to Sourcing</p>
                 <p className="text-xs mt-1">R&amp;D Head must approve Stage 2 to unlock this section.</p>
@@ -1747,10 +1743,6 @@ export default function NpdDetailView() {
         </div>
       )}
 
-      {/* Dummy to suppress unused-var warnings for state still used by RND or other sections */}
-      {false && (
-        <div style={{ display: "none" }}>{composedEmails.length}{fpaNumber}{fpaDate}{fpaApprover}{fpaRemarks}</div>
-      )}
     </div>
   )
 }
