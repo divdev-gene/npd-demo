@@ -134,19 +134,7 @@ export default function NpdDetailView() {
   const [dateApprovals,   setDateApprovals]   = useState<Record<string, "approved" | "rejected">>({})
   const [copiedReminder,  setCopiedReminder]  = useState<string | null>(null)
 
-  // ── MRN / Delivery Acceptance ───────────────────────────────────────────
-  const [mrnStatus,    setMrnStatus]    = useState<"idle" | "form" | "raised">("idle")
-  const [mrnNumber,    setMrnNumber]    = useState("")
-  const [mrnDate,      setMrnDate]      = useState("")
-  const [mrnQty,       setMrnQty]       = useState("")
-  const [mrnCondition, setMrnCondition] = useState<"Good" | "Damaged" | "Partial">("Good")
-  const [mrnNotes,     setMrnNotes]     = useState("")
-  const [mrnApproved,  setMrnApproved]  = useState(false)
-
-  // ── FPA ────────────────────────────────────────────────────────────────
-  const [fpaStatus,    setFpaStatus]    = useState<"idle" | "form" | "done">("idle")
-
-  // ── Supplier Defence ────────────────────────────────────────────────────
+  // ── Supplier Dispatch ───────────────────────────────────────────────────
   const [defenceAdvanced, setDefenceAdvanced] = useState(false)
 
   const [fpaImageUploaded, setFpaImageUploaded] = useState(false)
@@ -226,26 +214,6 @@ export default function NpdDetailView() {
     const allDateAppr: Record<string, Record<string, "approved" | "rejected">> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
     setDateApprovals(allDateAppr[npdId] ?? {})
 
-    // Load MRN state
-    try {
-      const rawMRN = localStorage.getItem("sample_receipt_v1")
-      const allMRN: Record<string, { mrnNumber?: string }> = rawMRN ? JSON.parse(rawMRN) : {}
-      if (allMRN[npdId]?.mrnNumber) setMrnStatus("raised")
-      const rawAppr = localStorage.getItem("mrn_approval_v1")
-      const allAppr: Record<string, "approved" | "rejected"> = rawAppr ? JSON.parse(rawAppr) : {}
-      if (rawMRN && allMRN[npdId]?.mrnNumber) {
-        const key = allMRN[npdId].mrnNumber!
-        if (allAppr[key] === "approved") setMrnApproved(true)
-      }
-    } catch {}
-
-    // Load FPA state
-    try {
-      const rawFPA = localStorage.getItem("fpa_data_v1")
-      const allFPA: Record<string, unknown> = rawFPA ? JSON.parse(rawFPA) : {}
-      if (allFPA[npdId]) setFpaStatus("done")
-    } catch {}
-
     // Refresh live data when supplier submits in another tab
     const onStorage = (e: StorageEvent) => {
       if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY) refreshLiveData()
@@ -269,14 +237,6 @@ export default function NpdDetailView() {
     name,
     status: (idx + 1) < activeStage ? "complete" : (idx + 1) === activeStage ? "current" : "upcoming"
   }))
-
-  const advanceStage = () => {
-    if (activeStage < TOTAL_NPD_STAGES) {
-      const next = activeStage + 1
-      setActiveStage(next)
-      updateNPD(npdId, { stage: next, stageName: NPD_STAGES[next - 1] ?? getStageName(next, npd.typeOfWork) })
-    }
-  }
 
   const isSpocOrSourcing = SPOC_NAMES.includes(currentRole) ||
     currentRole === "sourcing_head" || currentRole === "super_admin"
@@ -397,7 +357,7 @@ export default function NpdDetailView() {
     const all: Record<string, Record<string, "approved" | "rejected">> = raw ? JSON.parse(raw) : {}
     all[npdId] = next
     localStorage.setItem(VENDOR_QUOTE_APPROVALS_KEY, JSON.stringify(all))
-    // Approving a vendor updates the supplier name and advances to Stage 4 — Supplier Defense
+    // Approving a vendor updates the supplier name and advances to Stage 4 — Supplier Dispatch
     if (decision === "approved") {
       const updates: Partial<typeof npd> = { supplier: vendorName }
       if (activeStage < 4) {
