@@ -929,6 +929,8 @@ export default function NpdDetailView() {
 
         </div>
       )}
+        {/* Temporary: hidden pending Task 5 Sourcing section restructure */}
+        <div className="hidden">
         {/* ── Supplier Sourcing Workflow ─────────────────────────────────────── */}
         <TabsContent value="supplier" className="mt-6 space-y-6">
 
@@ -2246,6 +2248,7 @@ export default function NpdDetailView() {
             </CardContent>
           </Card>
         </TabsContent>
+        </div>
 
     </div>
   )
