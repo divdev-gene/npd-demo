@@ -198,9 +198,45 @@ export type LiveQuotation = {
   formValues:         Record<string, string>;
   submittedAt:        string;
   revisionCount:      number;
+  feasible?:          boolean;   // undefined = legacy record; treat as feasible
+  query?:             string;    // clarification query raised by supplier when not feasible
   reNegotiationMsg?:  string;
   reNegotiationAt?:   string;
 };
+
+export type ContactInfo = {
+  name:  string;
+  email: string;
+  phone: string;
+};
+
+// Replace with fetchSpocContact(spocId) when connecting to DB
+export const SPOC_CONTACTS: Record<string, ContactInfo> = {
+  "Rahul Sharma": { name: "Rahul Sharma",  email: "rahul.sharma@amber.com",  phone: "+91 98100 11223" },
+  "Karan Mehta":  { name: "Karan Mehta",   email: "karan.mehta@amber.com",   phone: "+91 98100 44556" },
+  "Priya Rajan":  { name: "Priya Rajan",   email: "priya.rajan@amber.com",   phone: "+91 98100 77889" },
+  "Amit Kumar":   { name: "Amit Kumar",    email: "amit.kumar@amber.com",    phone: "+91 98100 22334" },
+  "Varun Joshi":  { name: "Varun Joshi",   email: "varun.joshi@amber.com",   phone: "+91 98100 55667" },
+};
+
+// Replace with fetchRndContact(raisedById) when connecting to DB
+export const DEFAULT_RND_CONTACT: ContactInfo = {
+  name:  "Ankit Verma",
+  email: "ankit.verma@amber.com",
+  phone: "+91 98100 99001",
+};
+
+export const NPD_STAGES = [
+  "Request Initialisation",        // 1
+  "RND Internal Review",           // 2
+  "Supplier Sourcing & Quotation", // 3
+  "Supplier Dispatch",             // 4
+  "RND Evaluation",                // 5
+  "RND Testing & TQR",             // 6
+  "RND Approval",                  // 7
+  "Re-Sampling",                   // 8
+] as const
+export const TOTAL_NPD_STAGES = 8
 
 export const MOCK_VENDOR_QUOTATIONS: Record<string, VendorQuotation[]> = {
   "NPD-FY-2026-0012": [
@@ -259,8 +295,8 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Room Air Conditioners",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Grade A",
-    stage: 5,
-    stageName: "Sample Submission",
+    stage: 4,
+    stageName: "Supplier Dispatch",
     tatHealth: "amber",
     tatDaysRemaining: 3,
     totalTat: 45,
@@ -280,8 +316,8 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Commercial Air Conditioners",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Commercial",
-    stage: 8,
-    stageName: "FPA (First Part Approval)",
+    stage: 6,
+    stageName: "RND Testing & TQR",
     tatHealth: "green",
     tatDaysRemaining: 1,
     totalTat: 45,
@@ -343,8 +379,8 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Tower ACs",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Sricity RAC",
-    stage: 10,
-    stageName: "PP Lot Pricing",
+    stage: 7,
+    stageName: "RND Approval",
     tatHealth: "green",
     tatDaysRemaining: 1,
     totalTat: 45,
@@ -365,7 +401,7 @@ export const mockNPDs: NPDRecord[] = [
     typeOfWork: "PP (Pre-Production) Repeat",
     rAndDDivision: "Rajpura Commercial",
     stage: 2,
-    stageName: "R&D Internal Review",
+    stageName: "RND Internal Review",
     tatHealth: "green",
     tatDaysRemaining: 2,
     totalTat: 5,
@@ -385,8 +421,8 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Water Dispensers",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Water Purifier Division",
-    stage: 5,
-    stageName: "Sample Submission",
+    stage: 4,
+    stageName: "Supplier Dispatch",
     tatHealth: "black",
     tatDaysRemaining: -2,
     totalTat: 45,
@@ -419,11 +455,5 @@ export const getStageName = (stage: number, type: string) => {
     return compStages[stage - 1] || "Unknown";
   }
 
-  const ntdStages = [
-    "Request Initiation", "R&D Internal Review", "NPD Sourcing Allocation",
-    "Supplier Defense", "Sample Submission", "Sample Receipt / MRN",
-    "R&D Evaluation", "FPA (First Part Approval)", "Sample Cost Finalization",
-    "PP Lot Pricing"
-  ];
-  return ntdStages[stage - 1] || "Unknown";
+  return NPD_STAGES[stage - 1] ?? "Unknown";
 };
