@@ -192,6 +192,82 @@ export const PART_ASSIGNMENT_KEY        = "part_assignment_v1";
 export const PLANT_SUPPLIER_RESP_KEY    = "plant_supplier_response_v1";
 export const PLANT_ACCEPTANCE_KEY       = "plant_acceptance_v1";
 export const REJECTED_PARTS_KEY         = "rejected_parts_v1";
+export const PUSH_NOTIFICATIONS_KEY     = "push_notifications_v1";
+export const RND_EVAL_KEY               = "rnd_eval_results_v1";
+
+export type TestTemplate = {
+  testName: string;
+  testType: string;
+  unit: string;
+  expectedRange?: string;
+  durationDays: number;
+};
+
+export type TestResult = {
+  testName: string;
+  value: string;
+  status: "pass" | "fail" | "pending";
+};
+
+export const TEST_TEMPLATES: Record<string, TestTemplate[]> = {
+  "Plastics": [
+    { testName: "Melt Flow Index",       testType: "Physical",   unit: "g/10min", expectedRange: "8–20",    durationDays: 0.5 },
+    { testName: "Tensile Strength",      testType: "Mechanical", unit: "MPa",     expectedRange: "30–60",   durationDays: 0.5 },
+    { testName: "Impact Strength",       testType: "Mechanical", unit: "kJ/m²",   expectedRange: "5–15",    durationDays: 0.5 },
+    { testName: "Heat Deflection Temp",  testType: "Thermal",    unit: "°C",      expectedRange: "80–120",  durationDays: 0.5 },
+    { testName: "Flammability",          testType: "Safety",     unit: "Rating",  expectedRange: "V0/V1",   durationDays: 1   },
+  ],
+  "Sheet Metal": [
+    { testName: "Thickness",             testType: "Dimensional", unit: "mm",     expectedRange: "0.5–2.0", durationDays: 0.2 },
+    { testName: "Tensile Strength",      testType: "Mechanical",  unit: "MPa",    expectedRange: "250–400", durationDays: 0.5 },
+    { testName: "Hardness",              testType: "Mechanical",  unit: "HRB",    expectedRange: "60–90",   durationDays: 0.3 },
+    { testName: "Salt Spray Test",       testType: "Corrosion",   unit: "Hours",  expectedRange: "24–72",   durationDays: 2   },
+    { testName: "Coating Adhesion",      testType: "Surface",     unit: "Grade",  expectedRange: "4B–5B",   durationDays: 0.5 },
+  ],
+  "Electronics & Electrical": [
+    { testName: "Insulation Resistance", testType: "Electrical",  unit: "MΩ",     expectedRange: ">100",    durationDays: 0.3 },
+    { testName: "High Voltage Test",     testType: "Safety",      unit: "kV",     expectedRange: "1.5–3",   durationDays: 0.3 },
+    { testName: "Functional Test",       testType: "Functional",  unit: "Pass/Fail",                        durationDays: 1   },
+    { testName: "Thermal Cycling",       testType: "Reliability", unit: "Cycles", expectedRange: "100–500", durationDays: 2   },
+    { testName: "EMI/EMC",               testType: "Compliance",  unit: "Pass/Fail",                        durationDays: 2   },
+  ],
+  "Compressors & Motors": [
+    { testName: "Performance Test",      testType: "Functional",  unit: "COP",    expectedRange: "2.5–4",   durationDays: 1   },
+    { testName: "Noise Level",           testType: "NVH",         unit: "dB",     expectedRange: "40–65",   durationDays: 0.5 },
+    { testName: "Leak Test",             testType: "Quality",     unit: "ppm",    expectedRange: "<10",     durationDays: 0.5 },
+    { testName: "Power Consumption",     testType: "Electrical",  unit: "Watts",                            durationDays: 0.5 },
+    { testName: "Endurance Test",        testType: "Reliability", unit: "Hours",  expectedRange: "500–2000",durationDays: 10  },
+  ],
+  "Packaging & Others": [
+    { testName: "Drop Test",             testType: "Mechanical",  unit: "Pass/Fail",                        durationDays: 0.5 },
+    { testName: "Compression Test",      testType: "Mechanical",  unit: "N",      expectedRange: "500–2000",durationDays: 0.5 },
+    { testName: "Vibration Test",        testType: "Transport",   unit: "Hours",  expectedRange: "2–6",     durationDays: 1   },
+    { testName: "Burst Strength",        testType: "Material",    unit: "kPa",    expectedRange: "200–600", durationDays: 0.5 },
+    { testName: "Environmental Test",    testType: "Reliability", unit: "Pass/Fail",                        durationDays: 2   },
+  ],
+  "Others": [
+    { testName: "Visual Inspection",     testType: "Quality",     unit: "Pass/Fail",                        durationDays: 0.2 },
+    { testName: "Dimensional Check",     testType: "QC",          unit: "mm",                               durationDays: 0.5 },
+    { testName: "Material Verification", testType: "Chemical",    unit: "%",                                durationDays: 1   },
+  ],
+};
+
+export const getTestsByCategory = (category: string): TestTemplate[] =>
+  TEST_TEMPLATES[category] || [];
+
+export const getTotalTestDays = (category: string): number =>
+  (TEST_TEMPLATES[category] || []).reduce((sum, t) => sum + t.durationDays, 0);
+
+export type PushNotification = {
+  id: string;
+  title: string;
+  body: string;
+  time: string;
+  to: string;
+  npdId: string;
+  icon: "alert" | "check" | "mail" | "package";
+  read: boolean;
+};
 
 export type LiveQuotation = {
   vendorName:         string;

@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect, useRef } from 'react'
-import { Search, Bell, AlertTriangle, FileText, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { Search, Bell, AlertTriangle, FileText, CheckCircle, ChevronDown, ChevronRight, Package } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
+import { PUSH_NOTIFICATIONS_KEY, type PushNotification } from '@/lib/mockData'
 
 const ROLE_GROUPS = [
   {
@@ -55,7 +56,11 @@ function getRoleBg(value: string) {
   return "bg-teal-600"
 }
 
-const NOTIF_COUNT = 3
+const FALLBACK_NOTIFS = [
+  { icon: "alert" as const, title: "NPD-FY-2026-0018 TAT Breach", body: "Transit Packaging SLA breached Stage 3. Overdue.", time: "10 mins ago" },
+  { icon: "check" as const, title: "TQR Verdict: Approved",       body: "BLDC Motor Controller structural sample approved.", time: "2 hours ago" },
+  { icon: "mail"  as const, title: "New Pricing Upload",          body: "Tubetech India uploaded costing for Copper Header Tube.", time: "Yesterday" },
+]
 
 const PAGE_LABELS: Record<string, { label: string; sub?: string }> = {
   "/dashboard/lead": { label: "Lead Dashboard",  sub: "Sourcing intelligence overview" },
@@ -72,13 +77,28 @@ export function TopNav() {
   const [showNotifs,     setShowNotifs]     = useState(false)
   const [showRolePicker, setShowRolePicker] = useState(false)
   const [currentRole,    setCurrentRole]    = useState("rnd_user")
+  const [pushNotifs,     setPushNotifs]     = useState<PushNotification[]>([])
   const roleRef  = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
+
+  const loadNotifs = () => {
+    const raw = localStorage.getItem(PUSH_NOTIFICATIONS_KEY)
+    if (raw) setPushNotifs(JSON.parse(raw))
+  }
 
   useEffect(() => {
     const stored = localStorage.getItem('poc_role')
     if (stored) setCurrentRole(stored)
     else localStorage.setItem('poc_role', 'rnd_user')
+    loadNotifs()
+    const onStorage = (e: StorageEvent) => { if (e.key === PUSH_NOTIFICATIONS_KEY) loadNotifs() }
+    const onPush = () => loadNotifs()
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('push_notification', onPush)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('push_notification', onPush)
+    }
   }, [])
 
   useEffect(() => {
@@ -97,6 +117,15 @@ export function TopNav() {
     window.dispatchEvent(new CustomEvent('rolechange', { detail: value }))
     router.push("/dashboard/lead")
   }
+
+  const markAllRead = () => {
+    const updated = pushNotifs.map(n => ({ ...n, read: true }))
+    setPushNotifs(updated)
+    localStorage.setItem(PUSH_NOTIFICATIONS_KEY, JSON.stringify(updated))
+  }
+
+  const unreadCount = pushNotifs.filter(n => !n.read).length
+  const displayNotifs = pushNotifs.length > 0 ? pushNotifs : null
 
   const active   = ALL_ROLES.find(r => r.value === currentRole) ?? ALL_ROLES[0]
   const pageMeta = PAGE_LABELS[pathname] ?? (pathname.startsWith("/npd/") ? { label: "NPD Detail", sub: "Record view" } : { label: "" })
@@ -191,15 +220,17 @@ export function TopNav() {
         {/* Notifications */}
         <div ref={notifRef} className="relative tour-notifications">
           <button
-            onClick={() => setShowNotifs(v => !v)}
+            onClick={() => { setShowNotifs(v => !v); if (!showNotifs) loadNotifs() }}
             className={`relative rounded-lg p-2 transition-colors ${
               showNotifs ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
             }`}
           >
             <Bell className="h-4 w-4" />
-            <span className="absolute top-1 right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold border-[1.5px] border-white leading-none">
-              {NOTIF_COUNT}
-            </span>
+            {(unreadCount > 0 || (displayNotifs === null && FALLBACK_NOTIFS.length > 0)) && (
+              <span className="absolute top-1 right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold border-[1.5px] border-white leading-none">
+                {unreadCount > 0 ? (unreadCount > 9 ? "9+" : unreadCount) : FALLBACK_NOTIFS.length}
+              </span>
+            )}
           </button>
 
           {showNotifs && (
@@ -207,32 +238,65 @@ export function TopNav() {
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <p className="text-[13px] font-bold text-slate-900">Notifications</p>
-                  <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">{NOTIF_COUNT} new</span>
+                  {(unreadCount > 0 || displayNotifs === null) && (
+                    <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">
+                      {unreadCount > 0 ? unreadCount : FALLBACK_NOTIFS.length} new
+                    </span>
+                  )}
                 </div>
-                <button className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors">
+                <button onClick={markAllRead} className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors">
                   Mark all read
                 </button>
               </div>
               <div className="max-h-72 overflow-y-auto">
-                {[
-                  { icon: AlertTriangle, color: "text-red-500", bg: "bg-red-50", title: "NPD-FY-2026-0018 TAT Breach", body: "Transit Packaging SLA breached Stage 3. Overdue.", time: "10 mins ago" },
-                  { icon: CheckCircle,  color: "text-emerald-500", bg: "bg-emerald-50", title: "TQR Verdict: Approved", body: "BLDC Motor Controller structural sample approved.", time: "2 hours ago" },
-                  { icon: FileText,     color: "text-blue-500", bg: "bg-blue-50", title: "New Pricing Upload", body: "Tubetech India uploaded costing for Copper Header Tube.", time: "Yesterday" },
-                ].map((n, i) => {
-                  const Icon = n.icon
-                  return (
-                    <div key={i} className="flex gap-3 px-4 py-3.5 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 transition-colors">
-                      <div className={`mt-0.5 w-7 h-7 rounded-lg ${n.bg} flex items-center justify-center shrink-0`}>
-                        <Icon className={`w-3.5 h-3.5 ${n.color}`} />
+                {displayNotifs ? (
+                  [...displayNotifs].reverse().map((n, i) => {
+                    const iconMap = {
+                      alert:   { Icon: AlertTriangle, color: "text-red-500",     bg: "bg-red-50"     },
+                      check:   { Icon: CheckCircle,   color: "text-emerald-500", bg: "bg-emerald-50" },
+                      mail:    { Icon: FileText,       color: "text-blue-500",   bg: "bg-blue-50"    },
+                      package: { Icon: Package,        color: "text-orange-500", bg: "bg-orange-50"  },
+                    }
+                    const { Icon, color, bg } = iconMap[n.icon] ?? iconMap.mail
+                    return (
+                      <div key={n.id} className={`flex gap-3 px-4 py-3.5 cursor-pointer border-b border-slate-50 last:border-0 transition-colors ${n.read ? "hover:bg-slate-50" : "bg-blue-50/40 hover:bg-blue-50/60"}`}>
+                        <div className={`mt-0.5 w-7 h-7 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                          <Icon className={`w-3.5 h-3.5 ${color}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-1">
+                            <p className="text-[12px] font-semibold text-slate-900 leading-tight mb-0.5">{n.title}</p>
+                            {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-1" />}
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">{n.body}</p>
+                          <p className="text-[10px] text-slate-400 mt-1 font-medium">{n.time}</p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[12px] font-semibold text-slate-900 leading-tight mb-0.5">{n.title}</p>
-                        <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">{n.body}</p>
-                        <p className="text-[10px] text-slate-400 mt-1 font-medium">{n.time}</p>
+                    )
+                  })
+                ) : (
+                  FALLBACK_NOTIFS.map((n, i) => {
+                    const iconMap = {
+                      alert:   { Icon: AlertTriangle, color: "text-red-500",     bg: "bg-red-50"     },
+                      check:   { Icon: CheckCircle,   color: "text-emerald-500", bg: "bg-emerald-50" },
+                      mail:    { Icon: FileText,       color: "text-blue-500",   bg: "bg-blue-50"    },
+                      package: { Icon: Package,        color: "text-orange-500", bg: "bg-orange-50"  },
+                    }
+                    const { Icon, color, bg } = iconMap[n.icon]
+                    return (
+                      <div key={i} className="flex gap-3 px-4 py-3.5 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 transition-colors">
+                        <div className={`mt-0.5 w-7 h-7 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                          <Icon className={`w-3.5 h-3.5 ${color}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[12px] font-semibold text-slate-900 leading-tight mb-0.5">{n.title}</p>
+                          <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">{n.body}</p>
+                          <p className="text-[10px] text-slate-400 mt-1 font-medium">{n.time}</p>
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                )}
               </div>
               <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/50 text-center">
                 <button
