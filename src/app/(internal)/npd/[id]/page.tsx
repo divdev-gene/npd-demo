@@ -632,7 +632,7 @@ export default function NpdDetailView() {
                     onClick={() => {
                       setDefenceAdvanced(true)
                       setActiveStage(5)
-                      updateNPD(npdId, { stage: 5, stageName: getStageName(5, npd.typeOfWork) })
+                      updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
                     }}
                   >
                     <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched & Advance to Sample Submission
