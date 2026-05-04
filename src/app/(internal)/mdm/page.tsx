@@ -39,7 +39,7 @@ const SEED_USERS: MDMUser[] = [
   { id: "u6",  name: "Amit Kumar",      role: "Sourcing SPOC",  department: "Sourcing",         email: "amit.kumar@amber.com",      phone: "+91 98100 22334" },
   { id: "u7",  name: "Varun Joshi",     role: "Sourcing SPOC",  department: "Sourcing",         email: "varun.joshi@amber.com",     phone: "+91 98100 55667" },
   { id: "u8",  name: "Sourcing Head",   role: "Sourcing Head",  department: "Leadership",       email: "sourcing.head@amber.com",   phone: "+91 98100 00001" },
-  { id: "u9",  name: "Plant User",      role: "Plant Ops",      department: "Plant Operations", email: "plant.user@amber.com",      phone: "+91 98100 00002" },
+  { id: "u9",  name: "Ankit Jain",      role: "R&D User",       department: "R&D",              email: "ankit.jain@amber.com",      phone: "+91 98100 00002" },
   { id: "u10", name: "Super Admin",     role: "Administrator",  department: "IT / Admin",       email: "admin@amber.com",           phone: "+91 98100 00000" },
 ]
 
@@ -188,7 +188,7 @@ function AddUserForm({ onAdd, onClose }: { onAdd: (u: MDMUser) => void; onClose:
       <Field label="Phone"         value={f.phone}      onChange={v => setF(p => ({ ...p, phone: v }))} />
       <Field label="Department"    value={f.department} onChange={v => setF(p => ({ ...p, department: v }))} />
       <SelectField label="Role" value={f.role} onChange={v => setF(p => ({ ...p, role: v }))}
-        options={["R&D User","R&D Head","Sourcing SPOC","Sourcing Head","Plant Ops","Administrator"]} />
+        options={["R&D User","R&D Head","Sourcing SPOC","Sourcing Head","Administrator"]} />
       <div className="col-span-2 flex gap-2 justify-end pt-1">
         <button type="button" onClick={onClose} className="px-3 py-1.5 text-[12px] font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg">Cancel</button>
         <button type="submit"                   className="px-3 py-1.5 text-[12px] font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-800">Add User</button>

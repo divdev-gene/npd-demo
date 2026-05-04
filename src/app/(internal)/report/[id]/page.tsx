@@ -25,9 +25,10 @@ type ReportData = {
   plantSupp:    { deliveryDate: string; sampleQty: number; submittedAt: string } | null
   plantAccept:  { verdict: "accepted" | "not_good"; remarks: string; verdictAt: string } | null
   partAssign:   { partNumber: string; assignedAt: string } | null
-  rndEval:      { startedAt: string; tests: Record<string, string> } | null
+  rndEval:      { startedAt: string; results: Record<string, string>; submittedAt: string } | null
   liveQuotes:   Record<string, any>
   sentVendors:  string[]
+  tqrStatus:    string
 }
 
 function readLS<T>(key: string, fallback: T): T {
@@ -45,6 +46,7 @@ function loadReport(npdId: string): ReportData {
     rndEval:     readLS<Record<string, any>>(RND_EVAL_KEY, {})[npdId] ?? null,
     liveQuotes:  readLS<Record<string, any>>(LIVE_QUOTATIONS_KEY, {})[npdId] ?? {},
     sentVendors: readLS<Record<string, string[]>>(ENQUIRY_SENT_KEY, {})[npdId] ?? [],
+    tqrStatus:   readLS<Record<string, string>>("tqr_status_v1", {})[npdId] ?? "",
   }
 }
 
@@ -336,8 +338,29 @@ export default function ReportPage() {
           <Field label="Test Start Date"   value={data.rndEval?.startedAt ? new Date(data.rndEval.startedAt).toLocaleDateString("en-IN") : "—"} />
           <Field label="Test Type"         value={tests.length > 0 ? [...new Set(tests.map(t => t.testType))].join(", ") : "—"} />
           <Field label="3rd Party Test"    value="Not Required" />
-          <Field label="TQR Status"        value={npd.tqrScore ? "Reviewed" : "Pending"} />
-          <Field label="Approved / Not Approved" value={data.plantAccept?.verdict === "accepted" ? "Approved" : data.plantAccept?.verdict === "not_good" ? "Not Approved" : npd.stage >= 7 ? "Pending" : "—"} accent={data.plantAccept?.verdict === "accepted" ? "text-emerald-600" : data.plantAccept?.verdict === "not_good" ? "text-red-600" : "text-slate-500"} />
+          <Field label="TQR Status"        value={
+            data.tqrStatus === "fully_approved" ? "Approved by R&D Head" :
+            data.tqrStatus === "approved_by_user" ? "Approved by R&D User — Awaiting Head" :
+            data.tqrStatus === "rejected" ? "Failed Tests & Evaluation" :
+            data.tqrStatus === "head_sent_back" ? "Sent Back for Re-testing" :
+            data.tqrStatus === "head_rejected_supplier" ? "Supplier Rejected by R&D Head" :
+            data.rndEval?.submittedAt ? "Evaluation Submitted" :
+            data.rndEval?.startedAt ? "In Progress" : "Pending"
+          } accent={
+            data.tqrStatus === "fully_approved" ? "text-emerald-600" :
+            data.tqrStatus === "rejected" || data.tqrStatus === "head_rejected_supplier" ? "text-red-600" :
+            data.tqrStatus === "approved_by_user" ? "text-blue-600" : "text-slate-500"
+          } />
+          <Field label="Approved / Not Approved" value={
+            data.tqrStatus === "fully_approved" ? "Approved" :
+            data.tqrStatus === "rejected" || data.tqrStatus === "head_rejected_supplier" ? "Not Approved" :
+            data.plantAccept?.verdict === "accepted" ? "Approved" :
+            data.plantAccept?.verdict === "not_good" ? "Not Approved" :
+            npd.stage >= 7 ? "Pending" : "—"
+          } accent={
+            (data.tqrStatus === "fully_approved" || data.plantAccept?.verdict === "accepted") ? "text-emerald-600" :
+            (data.tqrStatus === "rejected" || data.tqrStatus === "head_rejected_supplier" || data.plantAccept?.verdict === "not_good") ? "text-red-600" : "text-slate-500"
+          } />
         </FieldGrid>
 
         {tests.length > 0 && (
@@ -354,7 +377,7 @@ export default function ReportPage() {
                 </thead>
                 <tbody>
                   {tests.map((t, i) => {
-                    const result = data.rndEval?.tests?.[t.testName] ?? "—"
+                    const result = data.rndEval?.results?.[t.testName] ?? "—"
                     return (
                       <tr key={t.testName} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
                         <td className="px-4 py-2.5 font-medium text-slate-800">{t.testName}</td>

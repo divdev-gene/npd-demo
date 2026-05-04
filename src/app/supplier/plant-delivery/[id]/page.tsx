@@ -4,11 +4,35 @@ import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import {
   mockNPDs, PLANT_SUPPLIER_RESP_KEY, PART_ASSIGNMENT_KEY, DELIVERY_DETAILS_KEY,
-  type NPDRecord, SPOC_CONTACTS, DEFAULT_RND_CONTACT, type ContactInfo,
+  type NPDRecord, SPOC_CONTACTS, DEFAULT_RND_CONTACT, VENDOR_CATALOG, type ContactInfo,
 } from "@/lib/mockData"
 import {
   CheckCircle2, Package, UserCircle, Mail, Phone, MapPin,
 } from "lucide-react"
+
+function EmailCard({ to, subject, body }: { to: string; subject: string; body: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden text-left">
+      <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <span className="text-[11px] font-semibold text-slate-300 truncate">To: {to}</span>
+        </div>
+        <button
+          onClick={() => { navigator.clipboard.writeText(`To: ${to}\nSubject: ${subject}\n\n${body.replace(/<[^>]+>/g, "")}`); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+          className="shrink-0 text-[10px] font-semibold text-slate-400 hover:text-white flex items-center gap-1"
+        >
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <div className="px-4 py-3 space-y-1">
+        <p className="text-[11px] font-bold text-slate-500 truncate">{subject}</p>
+        <div className="text-[12px] text-slate-700 leading-relaxed space-y-1.5 pt-1" dangerouslySetInnerHTML={{ __html: body }} />
+      </div>
+    </div>
+  )
+}
 
 export default function SupplierPlantDeliveryPage() {
   const params  = useParams()
@@ -74,41 +98,42 @@ export default function SupplierPlantDeliveryPage() {
   )
 
   if (justSubmitted || alreadySubmitted) {
+    const spocContact: ContactInfo = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
+    const allCatalogV = Object.values(VENDOR_CATALOG).flat()
+    const vendorRec   = allCatalogV.find(v => v.name === vendorName)
+    const vendorSpoc  = vendorRec?.spocName ?? vendorName
+    const deliveryDateFormatted = deliveryDate
+      ? new Date(deliveryDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+      : deliveryDate
+    const detailTable = `<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px">${partNumber ? `<tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">Part Number</td><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">${partNumber}</td></tr>` : ""}<tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">NPD ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${vendorName}</td></tr>${deliveryLocation ? `<tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Delivery Location</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${deliveryLocation}</td></tr>` : ""}${requiredQty ? `<tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Required Qty</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${requiredQty} pcs</td></tr>` : ""}<tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Confirmed Delivery Date</td><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:700;color:#059669">${deliveryDateFormatted}</td></tr></table>`
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-md w-full text-center py-14 px-8">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
-            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Delivery Date Confirmed</h2>
-          <p className="text-slate-500 text-sm mb-5">
-            Thank you. Our sourcing team has been notified and will coordinate further.
-          </p>
-          <div className="bg-slate-50 rounded-xl p-4 text-left space-y-2.5 border border-slate-100">
-            {partNumber && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Part Number</span>
-                <span className="font-mono font-bold text-blue-800">{partNumber}</span>
-              </div>
-            )}
-            {deliveryLocation && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Delivery Location</span>
-                <span className="font-semibold text-slate-800 text-right max-w-[180px]">{deliveryLocation}</span>
-              </div>
-            )}
-            {requiredQty && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Required Qty</span>
-                <span className="font-semibold text-slate-800">{requiredQty} pcs</span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm border-t border-slate-100 pt-2.5">
-              <span className="text-slate-500">Your Delivery Date</span>
-              <span className="font-semibold text-slate-800">{deliveryDate}</span>
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-lg w-full py-10 px-8 space-y-6">
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-7 h-7 text-emerald-600" />
             </div>
+            <h2 className="text-xl font-bold text-slate-900">Delivery Date Confirmed</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Your delivery date has been submitted. The Amber sourcing team has been notified.
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mt-4">You may close this window.</p>
+
+          {/* Email to Sourcing SPOC */}
+          <EmailCard
+            to={spocContact.name}
+            subject={`Delivery Date Confirmed — ${npd.itemName} (${npdId})`}
+            body={`<p>Dear <strong>${spocContact.name}</strong>,</p><p><strong>${vendorName}</strong> has confirmed their delivery date for <em>${npd.itemName}</em> (${npdId}).</p>${detailTable}<p>Kindly coordinate receipt and update the NPD record accordingly.</p><p>Regards,<br/><strong>${vendorSpoc}</strong><br/><span style="color:#64748b;font-size:12px">${vendorName}</span></p>`}
+          />
+
+          {/* Email to R&D Contact */}
+          <EmailCard
+            to={DEFAULT_RND_CONTACT.name}
+            subject={`Delivery Date Confirmed — ${npd.itemName} (${npdId})`}
+            body={`<p>Dear <strong>${DEFAULT_RND_CONTACT.name}</strong>,</p><p><strong>${vendorName}</strong> has confirmed their delivery date for <em>${npd.itemName}</em> (${npdId}).</p>${detailTable}<p>Please be prepared to accept the delivery and initiate the acceptance process on arrival.</p><p>Regards,<br/><strong>${vendorSpoc}</strong><br/><span style="color:#64748b;font-size:12px">${vendorName}</span></p>`}
+          />
+
+          <p className="text-xs text-slate-400 text-center">You may close this window.</p>
         </div>
       </div>
     )

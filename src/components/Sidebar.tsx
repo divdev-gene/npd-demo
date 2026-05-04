@@ -17,7 +17,6 @@ const ROLE_META: Record<string, { name: string; label: string; colorClass: strin
   "Amit Kumar":   { name: "Amit Kumar",       label: "Compressors SPOC",    colorClass: "bg-teal-600",   dot: "bg-teal-500"   },
   "Varun Joshi":  { name: "Varun Joshi",      label: "Packaging SPOC",      colorClass: "bg-teal-600",   dot: "bg-teal-500"   },
   sourcing_head:  { name: "Sourcing Head",    label: "Sourcing Leadership", colorClass: "bg-blue-800",   dot: "bg-blue-700"   },
-  plant_user:     { name: "Plant User",       label: "Plant Operations",    colorClass: "bg-orange-600", dot: "bg-orange-500" },
   super_admin:    { name: "Super Admin",      label: "Full Access",         colorClass: "bg-slate-700",  dot: "bg-slate-500"  },
 }
 
@@ -33,7 +32,7 @@ type NavLink = {
 }
 
 const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"]
-const ALL_ROLES  = ["rnd_user", "rnd_head", ...SPOC_NAMES, "sourcing_head", "plant_user", "super_admin"]
+const ALL_ROLES  = ["rnd_user", "rnd_head", ...SPOC_NAMES, "sourcing_head", "super_admin"]
 
 const NAV: NavLink[] = [
   {
