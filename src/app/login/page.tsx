@@ -2,215 +2,170 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Box, ShieldCheck, FlaskConical, LayoutDashboard, Layers, Check, Zap, Lock } from "lucide-react"
-
-const ROLES = [
-  {
-    id: "spoc",
-    title: "Sourcing SPOC",
-    desc: "Commodity execution, RFQ management & supplier communication",
-    icon: Box,
-    accent: "#0891B2",
-    bg: "#ECFEFF",
-    border: "#A5F3FC",
-    activeBorder: "#0891B2",
-  },
-  {
-    id: "lead",
-    title: "Sourcing Lead",
-    desc: "Pipeline oversight, escalations, approvals & TAT analytics",
-    icon: LayoutDashboard,
-    accent: "#059669",
-    bg: "#ECFDF5",
-    border: "#A7F3D0",
-    activeBorder: "#059669",
-  },
-  {
-    id: "rnd",
-    title: "R&D Engineer",
-    desc: "Sample evaluation, FPA sign-off & technical quality review",
-    icon: FlaskConical,
-    accent: "#7C3AED",
-    bg: "#F5F3FF",
-    border: "#DDD6FE",
-    activeBorder: "#7C3AED",
-  },
-]
-
-const FEATURES = [
-  { label: "10-Stage NPD Pipeline",      sub: "End-to-end workflow visibility" },
-  { label: "Live TAT & SLA Monitoring",  sub: "Real-time breach alerts" },
-  { label: "Vendor RFQ & Quotations",    sub: "Sourcing intelligence layer" },
-  { label: "MRN, FPA & Cost Sign-offs",  sub: "Multi-role approval flows" },
-]
+import { Eye, EyeOff, ArrowRight } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 export default function LoginPage() {
   const router = useRouter()
-  const [selectedRole, setSelectedRole] = useState<string | null>(null)
-  const [isLoggingIn,  setIsLoggingIn]  = useState(false)
+  const [email,    setEmail]    = useState("")
+  const [password, setPassword] = useState("")
+  const [showPass, setShowPass] = useState(false)
+  const [error,    setError]    = useState("")
+  const [loading,  setLoading]  = useState(false)
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedRole) return
-    setIsLoggingIn(true)
+    setLoading(true)
     setTimeout(() => {
-      if (selectedRole === "spoc")       router.push("/")
-      else if (selectedRole === "lead")  router.push("/dashboard/lead")
-      else if (selectedRole === "rnd")   router.push("/dashboard/rnd")
-    }, 700)
+      localStorage.setItem("has_visited", "true")
+      localStorage.setItem("poc_role", "rnd_user")
+      window.dispatchEvent(new CustomEvent("rolechange", { detail: "rnd_user" }))
+      router.push("/dashboard/lead")
+    }, 600)
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#F8F9FC" }}>
+    <div className="relative h-screen w-screen overflow-hidden flex">
 
-      {/* ── Left panel ────────────────────────────────────── */}
+      {/* Full-bleed backdrop */}
       <div
-        className="hidden lg:flex lg:w-[420px] xl:w-[480px] flex-col justify-between p-10 shrink-0"
-        style={{ background: "#0F172A" }}
-      >
-        {/* Logo */}
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url("https://images.unsplash.com/photo-1565008447742-97f6f38c985c?auto=format&fit=crop&w=1920&q=80")` }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/50" />
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/50 via-transparent to-transparent" />
+
+      {/* Left — hero branding */}
+      <div className="relative z-10 flex flex-col justify-between flex-1 px-16 py-14 select-none">
+
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.1)" }}>
-            <Layers className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <p className="text-white text-[13px] font-bold leading-tight tracking-tight">NPD Command</p>
-            <p className="text-slate-400 text-[10px] leading-none tracking-widest uppercase">Amber Enterprises</p>
-          </div>
+          <img src="/amber-logo.png" alt="Amber" className="h-8 w-auto object-contain brightness-0 invert opacity-90" />
+          <div className="h-5 w-px bg-white/20" />
+          <span className="text-sm font-semibold text-white/55 tracking-wide">NPD Command</span>
         </div>
 
-        {/* Main copy */}
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full mb-6" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
-            <Zap className="w-3 h-3 text-amber-400" />
-            <span className="text-[10px] font-bold text-slate-300 tracking-widest uppercase">Sourcing Intelligence Platform</span>
-          </div>
-          <h1 className="text-white text-3xl font-extrabold leading-tight tracking-tight mb-4">
-            Smarter sourcing.<br />
-            Faster NPD cycles.
+        <div className="space-y-6 max-w-lg">
+          <p className="text-[11px] font-bold tracking-[0.2em] text-amber-400 uppercase">
+            New Product Development
+          </p>
+          <h1 className="text-[52px] leading-[1.05] font-black text-white tracking-tight">
+            Full pipeline<br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500">
+              visibility
+            </span>
+            , from<br />
+            request to closure.
           </h1>
-          <p className="text-slate-400 text-[14px] leading-relaxed mb-8">
-            From request initiation to PP Lot Pricing — every stage, every role, every decision in one unified workspace.
+          <p className="text-white/45 text-[15px] leading-relaxed">
+            Track sourcing, R&D evaluation, supplier dispatch,
+            and plant acceptance across all Amber plants.
           </p>
 
-          {/* Feature list */}
-          <div className="space-y-3">
-            {FEATURES.map((f, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(255,255,255,0.1)" }}>
-                  <Check className="w-3 h-3 text-emerald-400" />
+          <div className="flex flex-wrap gap-y-2 gap-x-1 pt-1 items-center">
+            {["Request", "Sourcing", "Dispatch", "R&D Eval", "TQR", "Plant Delivery", "Closure"].map((s, i, arr) => (
+              <div key={s} className="flex items-center">
+                <div className="flex items-center gap-1.5 bg-white/10 border border-white/10 rounded-full px-2.5 py-1">
+                  <span className="w-3.5 h-3.5 rounded-full bg-amber-400/80 flex items-center justify-center text-[7px] font-black text-slate-900 shrink-0">
+                    {i + 1}
+                  </span>
+                  <span className="text-[10px] font-semibold text-white/65 whitespace-nowrap">{s}</span>
                 </div>
-                <div>
-                  <p className="text-white text-[13px] font-semibold leading-tight">{f.label}</p>
-                  <p className="text-slate-500 text-[11px] mt-0.5">{f.sub}</p>
-                </div>
+                {i < arr.length - 1 && <div className="w-2.5 h-px bg-white/15 mx-0.5" />}
               </div>
             ))}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center gap-2">
-          <Lock className="w-3 h-3 text-slate-600" />
-          <p className="text-slate-600 text-[11px]">Amber Enterprises India Ltd. &copy; 2026 · Internal Demo</p>
-        </div>
+        <p className="text-white/20 text-[11px] tracking-wide">
+          Amber Enterprises Ltd. All rights reserved.
+        </p>
       </div>
 
-      {/* ── Right panel ───────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
-        <div className="w-full max-w-[420px]">
+      {/* Right — glass login card */}
+      <div className="relative z-10 flex items-center justify-center w-[440px] shrink-0 px-10 py-14">
+        <div className="w-full bg-white/10 backdrop-blur-2xl border border-white/15 rounded-3xl p-8 shadow-2xl">
 
-          {/* Mobile logo */}
-          <div className="flex items-center gap-2.5 mb-8 lg:hidden">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
-              <Layers className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <p className="text-slate-900 text-[13px] font-bold leading-tight">NPD Command</p>
-              <p className="text-slate-400 text-[10px]">Amber Enterprises</p>
-            </div>
+          {/* Header */}
+          <div className="mb-8">
+            <h2 className="text-[22px] font-bold text-white leading-tight">Sign in</h2>
+            <p className="text-white/40 text-sm mt-1">
+              Amber Enterprises NPD Portal
+            </p>
           </div>
 
-          {/* Form card */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-100/80 overflow-hidden">
-            <div className="px-7 pt-7 pb-6 border-b border-slate-50">
-              <h2 className="text-slate-900 text-xl font-bold tracking-tight">Sign in</h2>
-              <p className="text-slate-500 text-[13px] mt-1">Select a demo persona to continue.</p>
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Login ID */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-white/40 uppercase tracking-[0.15em]">
+                Login ID
+              </label>
+              <input
+                type="text"
+                autoComplete="username"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError("") }}
+                placeholder="yourname@amberenterprises.in"
+                className="w-full rounded-xl bg-white/10 border border-white/15 px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-amber-400/60 focus:border-amber-400/40 transition-all"
+              />
             </div>
 
-            <form onSubmit={handleLogin} className="px-7 py-6 space-y-6">
-              <div className="space-y-2.5">
-                {ROLES.map((role) => {
-                  const Icon = role.icon
-                  const selected = selectedRole === role.id
-                  return (
-                    <div
-                      key={role.id}
-                      onClick={() => setSelectedRole(role.id)}
-                      className="relative flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all duration-150"
-                      style={{
-                        border: selected ? `2px solid ${role.activeBorder}` : "2px solid #F1F5F9",
-                        background: selected ? role.bg : "#FAFAFA",
-                      }}
-                    >
-                      <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ background: selected ? role.accent : "#E2E8F0" }}
-                      >
-                        <Icon className="w-4 h-4" style={{ color: selected ? "#fff" : "#94A3B8" }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-slate-900 leading-tight">{role.title}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{role.desc}</p>
-                      </div>
-                      <div
-                        className="w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center shrink-0"
-                        style={{
-                          borderColor: selected ? role.activeBorder : "#CBD5E1",
-                          background: selected ? role.activeBorder : "transparent",
-                          width: 18, height: 18,
-                        }}
-                      >
-                        {selected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                      </div>
-                    </div>
-                  )
-                })}
+            {/* Password */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-white/40 uppercase tracking-[0.15em]">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPass ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError("") }}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl bg-white/10 border border-white/15 px-4 py-3 pr-11 text-sm text-white placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-amber-400/60 focus:border-amber-400/40 transition-all"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowPass(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/35 hover:text-white/70 transition-colors"
+                >
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
+            </div>
 
+            {error && (
+              <p className="text-[12px] text-red-400 font-medium">{error}</p>
+            )}
+
+            <div className="pt-2">
               <button
                 type="submit"
-                disabled={!selectedRole || isLoggingIn}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-bold text-white transition-all duration-150"
-                style={{
-                  background: !selectedRole ? "#CBD5E1" : isLoggingIn ? "#334155" : "#0F172A",
-                  cursor: !selectedRole ? "not-allowed" : isLoggingIn ? "wait" : "pointer",
-                  boxShadow: selectedRole && !isLoggingIn ? "0 2px 8px rgba(15,23,42,0.25)" : "none",
-                }}
+                disabled={loading}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-[14px] transition-all duration-200",
+                  loading
+                    ? "bg-white/10 text-white/30 cursor-not-allowed"
+                    : "bg-amber-400 hover:bg-amber-300 text-slate-900 shadow-lg shadow-amber-400/20 active:scale-[0.99]"
+                )}
               >
-                {isLoggingIn ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                     </svg>
-                    Launching workspace…
-                  </>
+                    Signing in…
+                  </span>
                 ) : (
-                  <>
-                    Enter Workspace
-                    <ArrowRight className="w-4 h-4" />
-                  </>
+                  <>Sign In <ArrowRight className="w-4 h-4" /></>
                 )}
               </button>
-            </form>
-          </div>
-
-          <p className="text-center text-[11px] text-slate-400 mt-5">
-            Amber Enterprises India Ltd. · Internal System Demo · 2026
-          </p>
+            </div>
+          </form>
         </div>
       </div>
+
     </div>
   )
 }

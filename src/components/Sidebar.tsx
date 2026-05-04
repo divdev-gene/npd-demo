@@ -1,10 +1,10 @@
 "use client"
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from "react"
 import {
   FilePlus, Archive, CheckCircle, BarChart3, Settings, Layers,
-  ChevronLeft, ChevronRight, FlaskConical, Package,
+  ChevronLeft, ChevronRight, LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -68,6 +68,7 @@ const NAV: NavLink[] = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router   = useRouter()
   const [currentRole, setCurrentRole] = useState("rnd_user")
   const [collapsed,   setCollapsed]   = useState(false)
 
@@ -86,6 +87,11 @@ export function Sidebar() {
     const next = !collapsed
     setCollapsed(next)
     localStorage.setItem('sidebar_collapsed', String(next))
+  }
+
+  const resetAndLogout = () => {
+    localStorage.removeItem("has_visited")
+    router.push("/login")
   }
 
   const meta = ROLE_META[currentRole] ?? ROLE_META.rnd_user
@@ -161,7 +167,7 @@ export function Sidebar() {
       </div>
 
       {/* User footer */}
-      <div className="border-t border-slate-100 p-2">
+      <div className="border-t border-slate-100 p-2 space-y-1">
         <div className={cn(
           "flex items-center rounded-lg hover:bg-slate-50 transition-colors cursor-default",
           collapsed ? "justify-center p-1.5" : "gap-2.5 px-2 py-1.5"
@@ -179,6 +185,19 @@ export function Sidebar() {
             </div>
           )}
         </div>
+
+        {/* Reset / logout */}
+        <button
+          onClick={resetAndLogout}
+          title="Reset & back to login"
+          className={cn(
+            "flex items-center rounded-lg text-[11px] font-medium text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors w-full",
+            collapsed ? "justify-center w-9 h-8 mx-auto" : "gap-2 px-2 py-1.5"
+          )}
+        >
+          <LogOut className="w-3.5 h-3.5 shrink-0" />
+          {!collapsed && <span>Reset session</span>}
+        </button>
       </div>
     </div>
   )
