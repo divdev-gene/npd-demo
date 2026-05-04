@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react"
 import {
   Plus, Trash2, Users, Package, MapPin, Building2,
-  ShieldCheck, AlertTriangle, CheckCircle2, Search, X,
+  ShieldCheck, AlertTriangle, CheckCircle2, Search, X, FlaskConical,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { TEST_TEMPLATES } from "@/lib/mockData"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,10 @@ type MDMPlant = {
 type MDMSupplier = {
   id: string; name: string; tier: "Tier 1" | "Tier 2" | "Tier 3"; commodity: string
   auditScore: number; certifications: string; status: "verified" | "audit_overdue" | "new"
+}
+type MDMTest = {
+  id: string; commodity: string; testName: string; testType: string
+  unit: string; expectedRange: string; durationDays: number
 }
 
 // ── Seed data ──────────────────────────────────────────────────────────────
@@ -48,6 +53,18 @@ const SEED_COMMODITIES: MDMCommodity[] = [
   { id: "c7", name: "Commodity-Based Component Development", spoc: "Rahul Sharma", vendorCount: 5, description: "Cross-category new component sourcing" },
   { id: "c8", name: "Others",                                spoc: "—",            vendorCount: 2, description: "Miscellaneous and unclassified items" },
 ]
+
+const SEED_TESTS: MDMTest[] = Object.entries(TEST_TEMPLATES).flatMap(([commodity, tests]) =>
+  tests.map((t, i) => ({
+    id: `t_${commodity.replace(/\s+/g, "_")}_${i}`,
+    commodity,
+    testName:      t.testName,
+    testType:      t.testType,
+    unit:          t.unit,
+    expectedRange: t.expectedRange ?? "",
+    durationDays:  t.durationDays,
+  }))
+)
 
 const SEED_PLANTS: MDMPlant[] = [
   { id: "p1", name: "Rajpura Plant – Grade A", city: "Rajpura",  state: "Punjab",        division: "Room Air Conditioners" },
@@ -81,6 +98,7 @@ const MDM_USERS_KEY      = "mdm_users_v1"
 const MDM_COMMODITIES_KEY= "mdm_commodities_v1"
 const MDM_PLANTS_KEY     = "mdm_plants_v1"
 const MDM_SUPPLIERS_KEY  = "mdm_suppliers_v1"
+const MDM_TESTS_KEY      = "mdm_tests_v1"
 
 function loadOrSeed<T>(key: string, seed: T[]): T[] {
   try {
@@ -94,13 +112,14 @@ function save<T>(key: string, data: T[]) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-type Tab = "users" | "commodities" | "plants" | "suppliers"
+type Tab = "users" | "commodities" | "plants" | "suppliers" | "tests"
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "users",       label: "Users",       icon: Users     },
-  { id: "commodities", label: "Commodities", icon: Package   },
-  { id: "plants",      label: "Plants",      icon: Building2 },
-  { id: "suppliers",   label: "Suppliers",   icon: MapPin    },
+  { id: "users",       label: "Users",       icon: Users        },
+  { id: "commodities", label: "Commodities", icon: Package      },
+  { id: "plants",      label: "Plants",      icon: Building2    },
+  { id: "suppliers",   label: "Suppliers",   icon: MapPin       },
+  { id: "tests",       label: "Tests",       icon: FlaskConical },
 ]
 
 function uid() {
@@ -278,6 +297,35 @@ function SelectField({ label, value, options, onChange }: { label: string; value
   )
 }
 
+function AddTestForm({ onAdd, onClose }: { onAdd: (t: MDMTest) => void; onClose: () => void }) {
+  const COMMODITY_OPTIONS = Object.keys(TEST_TEMPLATES)
+  const TEST_TYPE_OPTIONS  = ["Physical","Mechanical","Thermal","Safety","Dimensional","Corrosion","Surface","Electrical","Functional","Reliability","Compliance","NVH","Quality","Transport","Material","Chemical","QC"]
+  const [f, setF] = useState({
+    commodity: COMMODITY_OPTIONS[0], testName: "", testType: "Mechanical",
+    unit: "", expectedRange: "", durationDays: 1,
+  })
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!f.testName) return
+    onAdd({ id: uid(), ...f, durationDays: Number(f.durationDays) || 1 })
+    onClose()
+  }
+  return (
+    <form onSubmit={submit} className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 grid grid-cols-2 gap-3">
+      <SelectField label="Commodity" value={f.commodity} onChange={v => setF(p => ({ ...p, commodity: v }))} options={COMMODITY_OPTIONS} />
+      <Field label="Test Name *" value={f.testName} onChange={v => setF(p => ({ ...p, testName: v }))} />
+      <SelectField label="Test Type" value={f.testType} onChange={v => setF(p => ({ ...p, testType: v }))} options={TEST_TYPE_OPTIONS} />
+      <Field label="Unit" value={f.unit} onChange={v => setF(p => ({ ...p, unit: v }))} />
+      <Field label="Expected Range" value={f.expectedRange} onChange={v => setF(p => ({ ...p, expectedRange: v }))} />
+      <Field label="TAT (days)" value={String(f.durationDays)} onChange={v => setF(p => ({ ...p, durationDays: Number(v) || 1 }))} />
+      <div className="col-span-2 flex gap-2 justify-end pt-1">
+        <button type="button" onClick={onClose} className="px-3 py-1.5 text-[12px] font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg">Cancel</button>
+        <button type="submit"                   className="px-3 py-1.5 text-[12px] font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-800">Add Test</button>
+      </div>
+    </form>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export default function MDMPage() {
@@ -288,11 +336,13 @@ export default function MDMPage() {
   const [showAddComm,  setShowAddComm]  = useState(false)
   const [showAddPlant, setShowAddPlant] = useState(false)
   const [showAddSupp,  setShowAddSupp]  = useState(false)
+  const [showAddTest,  setShowAddTest]  = useState(false)
 
   const [users,       setUsers]       = useState<MDMUser[]>([])
   const [commodities, setCommodities] = useState<MDMCommodity[]>([])
   const [plants,      setPlants]      = useState<MDMPlant[]>([])
   const [suppliers,   setSuppliers]   = useState<MDMSupplier[]>([])
+  const [tests,       setTests]       = useState<MDMTest[]>([])
 
   useEffect(() => {
     setCurrentRole(localStorage.getItem("poc_role") || "")
@@ -300,6 +350,11 @@ export default function MDMPage() {
     setCommodities(loadOrSeed(MDM_COMMODITIES_KEY, SEED_COMMODITIES))
     setPlants(loadOrSeed(MDM_PLANTS_KEY, SEED_PLANTS))
     setSuppliers(loadOrSeed(MDM_SUPPLIERS_KEY, SEED_SUPPLIERS))
+    // Merge stored custom tests with seed so seed entries are never lost
+    const stored: MDMTest[] = loadOrSeed(MDM_TESTS_KEY, [])
+    const seedIds = new Set(SEED_TESTS.map(t => t.id))
+    const customOnly = stored.filter(t => !seedIds.has(t.id))
+    setTests([...SEED_TESTS, ...customOnly])
     const onRole = (e: CustomEvent) => setCurrentRole(e.detail)
     window.addEventListener("rolechange", onRole as EventListener)
     return () => window.removeEventListener("rolechange", onRole as EventListener)
@@ -312,6 +367,7 @@ export default function MDMPage() {
   const updateCommodities= (d: MDMCommodity[])  => { setCommodities(d); save(MDM_COMMODITIES_KEY, d) }
   const updatePlants     = (d: MDMPlant[])      => { setPlants(d);      save(MDM_PLANTS_KEY, d)      }
   const updateSuppliers  = (d: MDMSupplier[])   => { setSuppliers(d);   save(MDM_SUPPLIERS_KEY, d)   }
+  const updateTests      = (d: MDMTest[])       => { setTests(d); save(MDM_TESTS_KEY, d.filter(t => !new Set(SEED_TESTS.map(x => x.id)).has(t.id))) }
 
   const q = search.toLowerCase()
 
@@ -539,6 +595,80 @@ export default function MDMPage() {
           </table>
         </div>
       )}
+
+      {/* ── Tests ───────────────────────────────────────────────────────── */}
+      {activeTab === "tests" && (() => {
+        const TEST_TYPE_COLOR: Record<string, string> = {
+          Physical:    "bg-sky-50 text-sky-700 border-sky-200",
+          Mechanical:  "bg-violet-50 text-violet-700 border-violet-200",
+          Thermal:     "bg-orange-50 text-orange-700 border-orange-200",
+          Safety:      "bg-red-50 text-red-700 border-red-200",
+          Dimensional: "bg-slate-100 text-slate-600 border-slate-200",
+          Corrosion:   "bg-amber-50 text-amber-700 border-amber-200",
+          Surface:     "bg-teal-50 text-teal-700 border-teal-200",
+          Electrical:  "bg-blue-50 text-blue-700 border-blue-200",
+          Functional:  "bg-emerald-50 text-emerald-700 border-emerald-200",
+          Reliability: "bg-indigo-50 text-indigo-700 border-indigo-200",
+          Compliance:  "bg-pink-50 text-pink-700 border-pink-200",
+          NVH:         "bg-purple-50 text-purple-700 border-purple-200",
+          Quality:     "bg-green-50 text-green-700 border-green-200",
+          Transport:   "bg-cyan-50 text-cyan-700 border-cyan-200",
+          Material:    "bg-lime-50 text-lime-700 border-lime-200",
+          Chemical:    "bg-yellow-50 text-yellow-700 border-yellow-200",
+          QC:          "bg-slate-100 text-slate-600 border-slate-200",
+        }
+        const filtered = tests.filter(t =>
+          t.commodity.toLowerCase().includes(q) ||
+          t.testName.toLowerCase().includes(q) ||
+          t.testType.toLowerCase().includes(q)
+        )
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 pt-5 pb-4">
+              <SectionHeader title="R&D Test Templates" count={filtered.length} isAdmin={isAdmin} onAdd={() => setShowAddTest(v => !v)} />
+              {showAddTest && <AddTestForm onAdd={t => { updateTests([...tests, t]); setShowAddTest(false) }} onClose={() => setShowAddTest(false)} />}
+            </div>
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 border-y border-slate-100">
+                <tr>
+                  {["Commodity", "Test Name", "Test Type", "Unit", "Expected Range", "TAT (days)", ""].map(h => (
+                    <th key={h} className="px-5 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filtered.map(t => (
+                  <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-5 py-3">
+                      <span className="text-[12px] font-semibold text-teal-700 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full">{t.commodity}</span>
+                    </td>
+                    <td className="px-5 py-3 text-[13px] font-semibold text-slate-900">{t.testName}</td>
+                    <td className="px-5 py-3">
+                      <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full border", TEST_TYPE_COLOR[t.testType] ?? "bg-slate-100 text-slate-600 border-slate-200")}>
+                        {t.testType}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-[12px] font-mono text-slate-600">{t.unit}</td>
+                    <td className="px-5 py-3 text-[12px] text-slate-500">{t.expectedRange || "—"}</td>
+                    <td className="px-5 py-3">
+                      <span className={cn(
+                        "text-[12px] font-bold font-mono",
+                        t.durationDays <= 0.5 ? "text-emerald-600" : t.durationDays <= 2 ? "text-amber-600" : "text-red-600"
+                      )}>{t.durationDays}</span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <DeleteBtn onClick={() => updateTests(tests.filter(x => x.id !== t.id))} />
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={7} className="px-5 py-8 text-center text-[12px] text-slate-400">No tests found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )
+      })()}
 
     </div>
   )
