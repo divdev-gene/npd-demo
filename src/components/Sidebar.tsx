@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from "react"
 import {
-  FilePlus, Archive, CheckCircle, BarChart3, Settings, Layers,
+  FilePlus, Archive, CheckCircle, BarChart3, Settings,
   ChevronLeft, ChevronRight, LogOut, Database,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -112,20 +112,22 @@ export function Sidebar() {
       )}
     >
       {/* Branding */}
-      <div className={cn(
-        "flex items-center h-14 border-b border-slate-100 shrink-0",
-        collapsed ? "justify-center px-0" : "gap-2.5 px-4"
-      )}>
-        <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
-          <Layers className="w-3.5 h-3.5 text-white" />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0">
-            <p className="text-[13px] font-bold text-slate-900 leading-tight tracking-tight">NPD Command</p>
-            <p className="text-[10px] text-slate-400 leading-none tracking-wide">Amber Enterprises</p>
+      {collapsed ? (
+        <div className="flex items-center justify-center h-14 border-b border-slate-100 shrink-0">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm" style={{ background: "linear-gradient(135deg,#F59E0B,#D97706)" }}>
+            <span className="text-white text-[15px] font-black leading-none select-none">A</span>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="shrink-0 border-b border-slate-100 px-4 py-3 relative overflow-hidden">
+          {/* amber left glow accent */}
+          <div className="absolute left-0 top-0 bottom-0 w-0.5" style={{ background: "linear-gradient(180deg,#F59E0B,#D97706)" }} />
+          <div className="absolute left-0 top-0 bottom-0 w-8 opacity-[0.04]" style={{ background: "linear-gradient(90deg,#F59E0B,transparent)" }} />
+          <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain mb-1.5" />
+          <p className="text-[13px] font-bold text-slate-900 leading-tight tracking-tight">NPD Command</p>
+          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] mt-0.5" style={{ color: "#D97706" }}>Sourcing Tracker</p>
+        </div>
+      )}
 
       {/* Nav */}
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">

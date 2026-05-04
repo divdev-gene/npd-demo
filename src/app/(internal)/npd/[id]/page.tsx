@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { useParams } from "next/navigation"
 import {
   getStageName, VENDOR_CATALOG, SPOC_NAMES, NPD_STAGES, TOTAL_NPD_STAGES,
@@ -2039,111 +2040,200 @@ export default function NpdDetailView() {
 
       {/* ═══════════════════ STAGE 8 — NPD SUMMARY & CLOSURE ═══════════════════ */}
       {activeStage >= 8 && (
-        <Card className="border-blue-300 shadow-sm print:shadow-none">
-          <CardHeader className="bg-blue-50 border-b border-blue-200 pb-3">
-            <CardTitle className="text-blue-900 flex items-center gap-2 text-base">
-              <FileText className="w-5 h-5" /> Stage 8 — NPD Summary &amp; Closure
+        <Card className="border-emerald-200 shadow-sm">
+          <CardHeader className="bg-emerald-50 border-b border-emerald-200 pb-3">
+            <CardTitle className="text-emerald-900 flex items-center gap-2 text-base">
+              <CheckCircle2 className="w-5 h-5" /> Stage 8 — NPD Summary &amp; Closure
             </CardTitle>
-            <p className="text-xs text-blue-700 mt-0.5">Final summary of this NPD. Download or share this report.</p>
+            <p className="text-xs text-emerald-700 mt-0.5">Full lifecycle record for this NPD. View the complete MIS report.</p>
           </CardHeader>
-          <CardContent className="pt-5 space-y-6">
+          <CardContent className="pt-5 space-y-5">
 
-            {/* Summary grid */}
-            <div id="npd-summary-print" className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Part Number</p>
-                  <p className="text-sm font-mono font-bold text-blue-800 mt-0.5">{assignedPartNumber || "—"}</p>
+            {/* ── A: Project Details ─────────────────────────── */}
+            <div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">A. Project Details</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                {[
+                  { label: "NPD ID",      value: npdId },
+                  { label: "Item",        value: npd.itemName },
+                  { label: "Category",    value: npd.itemCategory },
+                  { label: "Product Line",value: npd.productLine },
+                  { label: "Location",    value: npd.rAndDDivision },
+                  { label: "SPOC",        value: npd.spoc },
+                  { label: "Type of Work",value: npd.typeOfWork },
+                  { label: "Total TAT",   value: `${npd.totalTat} days` },
+                ].map(item => (
+                  <div key={item.label} className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{item.label}</p>
+                    <p className="text-[12px] font-semibold text-slate-800 mt-0.5 truncate" title={item.value}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── B: Supplier & Sourcing ─────────────────────── */}
+            <div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">B. Supplier &amp; Sourcing</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Allocated Supplier</p>
+                  <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : "—"}</p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Item</p>
-                  <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{npd.itemName}</p>
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">RFQ Sent To</p>
+                  <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{sentVendors.length > 0 ? sentVendors.join(", ") : npd.supplier ?? "—"}</p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supplier</p>
-                  <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : "—"}</p>
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Delivery Location (Required)</p>
+                  <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{deliveryLocation || "—"}</p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Category</p>
-                  <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{npd.itemCategory}</p>
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Required Sample Qty</p>
+                  <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{deliveryReqQty ? `${deliveryReqQty} pcs` : "—"}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Quotations Received</p>
+                  <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{Object.keys(liveQuotes).length > 0 ? `${Object.keys(liveQuotes).length} vendor(s)` : "—"}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">R&amp;D Owner</p>
+                  <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{DEFAULT_RND_CONTACT.name}</p>
                 </div>
               </div>
+            </div>
 
-              {/* Plant verdict */}
-              {plantVerdict && (
+            {/* ── C: Dispatch & Delivery Timeline ───────────── */}
+            <div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">C. Dispatch &amp; Delivery</p>
+              {dispatchInfo ? (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
+                  {[
+                    { label: "Dispatching Supplier", value: dispatchInfo.vendorName },
+                    { label: "Dispatch Date (Actual)", value: dispatchInfo.dispatchDate },
+                    { label: "No. of Samples Provided", value: plantDeliveryQty ? `${plantDeliveryQty} pcs` : deliveryReqQty ? `${deliveryReqQty} pcs` : "—" },
+                    { label: "Proof of Dispatch", value: dispatchInfo.docs.length > 0 ? dispatchInfo.docs[0] : "Submitted" },
+                    { label: "Supplier Confirmed Delivery", value: plantDeliveryDate || "—" },
+                  ].map(item => (
+                    <div key={item.label} className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                      <p className="text-[9px] font-bold text-blue-400 uppercase tracking-wider">{item.label}</p>
+                      <p className="text-[12px] font-semibold text-blue-900 mt-0.5 truncate" title={item.value}>{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[12px] text-slate-400 italic">Dispatch details not yet recorded.</p>
+              )}
+            </div>
+
+            {/* ── D: R&D Testing ─────────────────────────────── */}
+            {(() => {
+              const tests = getTestsByCategory(npd.itemCategory)
+              if (tests.length === 0) return null
+              return (
+                <div>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">D. R&amp;D Test Results</p>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between">
+                      <span className="text-sm font-bold text-white">{npd.itemCategory}</span>
+                      <div className="flex items-center gap-4 text-xs text-slate-400">
+                        {evalStartedAt && <span>Started: {new Date(evalStartedAt).toLocaleDateString("en-IN")}</span>}
+                        <span>{tests.length} tests</span>
+                      </div>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          {["Test Name","Type","Unit","Expected","Result"].map(h => (
+                            <th key={h} className={`px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider ${h === "Test Name" ? "text-left" : "text-center"}`}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tests.map((t, i) => (
+                          <tr key={t.testName} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                            <td className="px-4 py-2 font-medium text-slate-800">{t.testName}</td>
+                            <td className="px-3 py-2 text-center text-xs text-slate-500">{t.testType}</td>
+                            <td className="px-3 py-2 text-center text-xs text-slate-500">{t.unit}</td>
+                            <td className="px-3 py-2 text-center text-xs text-slate-500">{t.expectedRange ?? "—"}</td>
+                            <td className="px-3 py-2 text-center font-semibold text-slate-800">{testResults[t.testName] ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {npd.tqrScore && (
+                    <div className="mt-2.5 grid grid-cols-4 gap-2">
+                      {[
+                        { label: "Technology (T)", value: npd.tqrScore.t },
+                        { label: "Quality (Q)",    value: npd.tqrScore.q },
+                        { label: "Reliability (R)",value: npd.tqrScore.r },
+                        { label: "TQR Composite",  value: npd.tqrScore.composite },
+                      ].map(s => (
+                        <div key={s.label} className="bg-violet-50 border border-violet-100 rounded-lg px-3 py-2 text-center">
+                          <p className="text-[9px] font-bold text-violet-400 uppercase tracking-wider">{s.label}</p>
+                          <p className="text-[18px] font-black text-violet-800 leading-tight">{s.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* ── E: Plant Verdict ───────────────────────────── */}
+            {plantVerdict && (
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">E. Plant Verdict</p>
                 <div className={`rounded-xl border p-4 flex items-center gap-3 ${plantVerdict === "accepted" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
                   {plantVerdict === "accepted"
                     ? <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                    : <XCircle className="w-5 h-5 text-red-500 shrink-0" />}
+                    : <XCircle    className="w-5 h-5 text-red-500 shrink-0" />}
                   <div>
                     <p className={`text-sm font-bold ${plantVerdict === "accepted" ? "text-emerald-800" : "text-red-800"}`}>
-                      Plant Verdict: {plantVerdict === "accepted" ? "Accepted — Approved for Production" : "Not Good — Returned for Revision"}
+                      {plantVerdict === "accepted" ? "Accepted — Approved for Production" : "Not Good — Returned for Revision"}
                     </p>
                     {plantRemarks && <p className="text-xs mt-0.5 text-slate-500 italic">{plantRemarks}</p>}
                   </div>
                 </div>
-              )}
-
-              {/* TAT status */}
-              <div className={`rounded-xl border p-3 flex items-center gap-2 text-sm ${
-                npd.tatHealth === "green" ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                : npd.tatHealth === "amber" ? "bg-amber-50 border-amber-200 text-amber-800"
-                : "bg-red-50 border-red-200 text-red-800"
-              }`}>
-                <Clock className="w-4 h-4 shrink-0" />
-                <span className="font-semibold">
-                  TAT: {npd.tatHealth === "black" || npd.tatHealth === "red" ? "Overdue" : `${npd.tatDaysRemaining}d remaining`} of {npd.totalTat}d
-                </span>
               </div>
+            )}
 
-              {/* Test results table */}
-              {(() => {
-                const tests = getTestsByCategory(npd.itemCategory)
-                if (tests.length === 0) return null
-                return (
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
-                    <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between">
-                      <span className="text-sm font-bold text-white">R&amp;D Test Results — {npd.itemCategory}</span>
-                      <span className="text-xs text-slate-400">{tests.length} tests</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="text-left px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Test</th>
-                            <th className="text-left px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Type</th>
-                            <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unit</th>
-                            <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Expected</th>
-                            <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Result</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tests.map((t, i) => (
-                            <tr key={t.testName} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                              <td className="px-4 py-2 font-medium text-slate-800">{t.testName}</td>
-                              <td className="px-3 py-2 text-slate-500 text-xs">{t.testType}</td>
-                              <td className="px-3 py-2 text-center text-xs text-slate-500">{t.unit}</td>
-                              <td className="px-3 py-2 text-center text-xs text-slate-500">{t.expectedRange ?? "—"}</td>
-                              <td className="px-3 py-2 text-center font-semibold text-slate-800">{testResults[t.testName] ?? "—"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )
-              })()}
+            {/* ── F: Closure Details ─────────────────────────── */}
+            <div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">F. Closure</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Part Number</p>
+                  <p className="text-[13px] font-mono font-bold text-blue-800 mt-0.5">{assignedPartNumber || "—"}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Cost from AICM</p>
+                  <p className="text-[13px] font-bold text-slate-800 mt-0.5">{npd.cost != null ? `₹ ${npd.cost.toFixed(2)}` : "—"}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Final Status</p>
+                  <p className="text-[12px] font-semibold text-emerald-700 mt-0.5">{plantVerdict === "accepted" ? "Closed — Approved" : "Closed — Pending Revision"}</p>
+                </div>
+                <div className={`rounded-lg border p-3 flex items-center gap-2 text-sm ${
+                  npd.tatHealth === "green" ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : npd.tatHealth === "amber" ? "bg-amber-50 border-amber-200 text-amber-800"
+                  : "bg-red-50 border-red-200 text-red-800"
+                }`}>
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[11px] font-bold">
+                    TAT: {npd.tatHealth === "black" || npd.tatHealth === "red" ? "Overdue" : `${npd.tatDaysRemaining}d left`} / {npd.totalTat}d
+                  </span>
+                </div>
+              </div>
             </div>
 
-            {/* Actions row */}
+            {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-slate-100">
-              {/* Download Report */}
-              <Button
-                className="bg-blue-900 hover:bg-blue-800 text-white"
-                onClick={() => window.print()}
-              >
-                <Download className="w-4 h-4 mr-2" /> Download Report
-              </Button>
+              <Link href={`/report/${npdId}`}>
+                <Button className="bg-emerald-700 hover:bg-emerald-600 text-white">
+                  <FileText className="w-4 h-4 mr-2" /> View NPD Report
+                </Button>
+              </Link>
 
               {/* Fetch Part Details from AICM */}
               <Button

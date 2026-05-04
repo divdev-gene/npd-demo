@@ -70,6 +70,7 @@ const PAGE_LABELS: Record<string, { label: string; sub?: string }> = {
   "/approvals":      { label: "Approvals",        sub: "Pending actions" },
   "/settings":       { label: "Settings",         sub: "System configuration" },
   "/mdm":            { label: "Master Data",      sub: "Users, commodities, plants & suppliers" },
+  "/report/all":     { label: "MIS Report",       sub: "Full NPD sourcing tracker" },
 }
 
 export function TopNav() {
@@ -129,7 +130,10 @@ export function TopNav() {
   const displayNotifs = pushNotifs.length > 0 ? pushNotifs : null
 
   const active   = ALL_ROLES.find(r => r.value === currentRole) ?? ALL_ROLES[0]
-  const pageMeta = PAGE_LABELS[pathname] ?? (pathname.startsWith("/npd/") ? { label: "NPD Detail", sub: "Record view" } : { label: "" })
+  const pageMeta = PAGE_LABELS[pathname]
+    ?? (pathname.startsWith("/npd/")    ? { label: "NPD Detail",    sub: "Record view"       } :
+        pathname.startsWith("/report/") ? { label: "NPD Report",    sub: "MIS sourcing view" } :
+        { label: "" })
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-slate-100 bg-white px-5 relative z-50 shrink-0">

@@ -7,7 +7,7 @@ import { useNPDs } from "@/lib/npdContext"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Search, AlertTriangle, Star, Activity, Layers, Filter } from "lucide-react"
+import { Search, AlertTriangle, Star, Activity, Layers, Filter, FileText, BarChart2 } from "lucide-react"
 
 const FULL_ACCESS_ROLES = ["sourcing_head", "super_admin", "rnd_head"]
 const SPOC_NAMES        = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"]
@@ -169,9 +169,18 @@ export default function ArchivePage() {
               </button>
             ))}
           </div>
-          <span className="ml-auto text-[11px] text-slate-400 font-medium whitespace-nowrap">
-            {filteredNPDs.length} of {visibleNPDs.length}
-          </span>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">
+              {filteredNPDs.length} of {visibleNPDs.length}
+            </span>
+            <Link
+              href="/report/all"
+              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              View Full MIS Report
+            </Link>
+          </div>
         </div>
 
         {/* Table */}
@@ -187,12 +196,13 @@ export default function ArchivePage() {
                 <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">TAT Status</TableHead>
                 <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">SPOC</TableHead>
                 {showRaisedBy && <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3">Raised By</TableHead>}
+                <TableHead className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] py-3 pr-5">Report</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredNPDs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={showRaisedBy ? 8 : 7} className="py-20 text-center">
+                  <TableCell colSpan={showRaisedBy ? 9 : 8} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <Layers className="w-8 h-8 text-slate-200" />
                       <p className="text-[13px] font-semibold text-slate-400">No NPDs found</p>
@@ -270,6 +280,14 @@ export default function ArchivePage() {
                           {npd.raisedBy === "rnd_head" ? "R&D Head" : "R&D User"}
                         </TableCell>
                       )}
+                      <TableCell className="py-3.5 pr-5">
+                        <Link
+                          href={`/report/${npd.id}`}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> View
+                        </Link>
+                      </TableCell>
                     </TableRow>
                   )
                 })
