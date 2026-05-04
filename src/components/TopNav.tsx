@@ -8,8 +8,8 @@ const ROLE_GROUPS = [
   {
     label: "R&D",
     roles: [
-      { value: "rnd_user", name: "R&D User",     area: "New Requests" },
-      { value: "rnd_head", name: "R&D Head",      area: "All R&D" },
+      { value: "rnd_user", name: "Ankit Jain",    area: "New Requests" },
+      { value: "rnd_head", name: "Harshit Kumar", area: "All R&D" },
     ]
   },
   {

@@ -194,6 +194,14 @@ export const PLANT_ACCEPTANCE_KEY       = "plant_acceptance_v1";
 export const REJECTED_PARTS_KEY         = "rejected_parts_v1";
 export const PUSH_NOTIFICATIONS_KEY     = "push_notifications_v1";
 export const RND_EVAL_KEY               = "rnd_eval_results_v1";
+export const DELIVERY_DETAILS_KEY       = "sourcing_delivery_details_v1";
+
+export const AMBER_PLANTS = [
+  "Rajpura Plant (Phase 2)",
+  "Jhajjar Plant",
+  "Chennai Plant",
+  "Pune Plant (Ranjangaon)",
+] as const;
 
 export type TestTemplate = {
   testName: string;
@@ -281,6 +289,8 @@ export type LiveQuotation = {
   reNegotiationAt?:   string;
   rndReply?:          string;    // RND's text reply to a feasibility denial query
   rndReplyDoc?:       string;    // optional uploaded doc filename
+  rndRepliedAt?:      string;    // timestamp of RND's reply
+  queryHistory?:      Array<{ query: string; rndReply: string; rndReplyDoc?: string; repliedAt?: string }>;
 };
 
 export type ContactInfo = {
@@ -300,22 +310,29 @@ export const SPOC_CONTACTS: Record<string, ContactInfo> = {
 
 // Replace with fetchRndContact(raisedById) when connecting to DB
 export const DEFAULT_RND_CONTACT: ContactInfo = {
-  name:  "Ankit Verma",
-  email: "ankit.verma@amber.com",
+  name:  "Ankit Jain",
+  email: "ankit.jain@amber.com",
   phone: "+91 98100 99001",
+};
+
+export const DEFAULT_RND_HEAD: ContactInfo = {
+  name:  "Harshit Kumar",
+  email: "harshit.kumar@amber.com",
+  phone: "+91 98100 88002",
 };
 
 export const NPD_STAGES = [
   "Request Initialisation",        // 1
-  "RND Internal Review",           // 2
-  "Supplier Sourcing & Quotation", // 3
-  "Supplier Dispatch",             // 4
-  "RND Evaluation",                // 5
-  "RND Testing & TQR",             // 6
-  "RND Approval",                  // 7
-  "Plant Delivery Acceptance",      // 8
+  "Supplier Sourcing & Quotation", // 2
+  "Supplier Dispatch",             // 3
+  "RND Evaluation",                // 4
+  "RND Testing & TQR",             // 5
+  "RND Approval",                  // 6
+  "Plant Delivery Acceptance",     // 7
+  "NPD Summary & Closure",         // 8
 ] as const
 export const TOTAL_NPD_STAGES = 8
+export const AICM_FETCH_KEY = "aicm_fetch_v1"
 
 export const MOCK_VENDOR_QUOTATIONS: Record<string, VendorQuotation[]> = {
   "NPD-FY-2026-0012": [
@@ -336,6 +353,10 @@ export const MOCK_VENDOR_QUOTATIONS: Record<string, VendorQuotation[]> = {
   "NPD-FY-2026-0018": [
     { vendorName: "Packwell Solutions",          tier: "Tier 1", status: "submitted", sampleQty: 20, supplyDate: "12 May 2026", submittedAt: "24 Apr 2026" },
     { vendorName: "PrintPack Industries",        tier: "Tier 2", status: "submitted", sampleQty: 15, supplyDate: "18 May 2026", submittedAt: "25 Apr 2026" },
+  ],
+  "NPD-FY-2026-0029": [
+    { vendorName: "MicroElectrix Systems",       tier: "Tier 1", status: "pending",   sampleQty: null, supplyDate: null, submittedAt: null },
+    { vendorName: "Shenzhen Optoelectronics",    tier: "Tier 2", status: "pending",   sampleQty: null, supplyDate: null, submittedAt: null },
   ],
 };
 
@@ -374,7 +395,7 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Room Air Conditioners",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Grade A",
-    stage: 4,
+    stage: 3,
     stageName: "Supplier Dispatch",
     tatHealth: "amber",
     tatDaysRemaining: 3,
@@ -395,7 +416,7 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Commercial Air Conditioners",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Commercial",
-    stage: 6,
+    stage: 5,
     stageName: "RND Testing & TQR",
     tatHealth: "green",
     tatDaysRemaining: 1,
@@ -458,7 +479,7 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Tower ACs",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Sricity RAC",
-    stage: 7,
+    stage: 6,
     stageName: "RND Approval",
     tatHealth: "green",
     tatDaysRemaining: 1,
@@ -480,7 +501,7 @@ export const mockNPDs: NPDRecord[] = [
     typeOfWork: "PP (Pre-Production) Repeat",
     rAndDDivision: "Rajpura Commercial",
     stage: 2,
-    stageName: "RND Internal Review",
+    stageName: "Supplier Sourcing & Quotation",
     tatHealth: "green",
     tatDaysRemaining: 2,
     totalTat: 5,
@@ -500,7 +521,7 @@ export const mockNPDs: NPDRecord[] = [
     productLine: "Water Dispensers",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Water Purifier Division",
-    stage: 4,
+    stage: 3,
     stageName: "Supplier Dispatch",
     tatHealth: "black",
     tatDaysRemaining: -2,
@@ -513,6 +534,48 @@ export const mockNPDs: NPDRecord[] = [
     cost: null,
     raisedBy: "rnd_user",
     driveLink: "https://drive.google.com/drive/folders/mock-led-display-panel"
+  },
+  {
+    id: "NPD-FY-2026-0029",
+    itemName: "BLDC Inverter Module",
+    itemCategory: "Electronics & Electrical",
+    productLine: "Commercial Air Conditioners",
+    typeOfWork: "New Component Development (NCD)",
+    rAndDDivision: "Rajpura Commercial",
+    stage: 2,
+    stageName: "Supplier Sourcing & Quotation",
+    tatHealth: "green",
+    tatDaysRemaining: 10,
+    totalTat: 45,
+    spoc: "Priya Rajan",
+    supplier: "MicroElectrix Systems",
+    priority: "High",
+    gradeA: true,
+    tqrScore: null,
+    cost: null,
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-bldc-inverter-module"
+  },
+  {
+    id: "NPD-FY-2026-0028",
+    itemName: "Sheet Metal Bracket",
+    itemCategory: "Sheet Metal",
+    productLine: "Room Air Conditioners",
+    typeOfWork: "New Component Development (NCD)",
+    rAndDDivision: "Rajpura Grade A",
+    stage: 4,
+    stageName: "RND Evaluation",
+    tatHealth: "amber",
+    tatDaysRemaining: 4,
+    totalTat: 45,
+    spoc: "Rahul Sharma",
+    supplier: "MetalWorks India",
+    priority: "Normal",
+    gradeA: false,
+    tqrScore: null,
+    cost: null,
+    raisedBy: "rnd_user",
+    driveLink: "https://drive.google.com/drive/folders/mock-sheet-metal-bracket"
   }
 ];
 

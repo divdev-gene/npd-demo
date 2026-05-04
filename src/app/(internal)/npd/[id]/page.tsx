@@ -10,7 +10,9 @@ import {
   VENDOR_STATUS_KEY, DEFAULT_STATUS_TEMPLATE, VENDOR_STATUS_TEMPLATE_KEY, VENDOR_DATE_APPROVAL_KEY,
   SUPPLIER_DISPATCH_KEY, DELIVERY_ACCEPTANCE_KEY,
   PART_ASSIGNMENT_KEY, PLANT_SUPPLIER_RESP_KEY, PLANT_ACCEPTANCE_KEY, REJECTED_PARTS_KEY,
-  PUSH_NOTIFICATIONS_KEY, RND_EVAL_KEY,
+  PUSH_NOTIFICATIONS_KEY, RND_EVAL_KEY, AICM_FETCH_KEY,
+  DELIVERY_DETAILS_KEY, AMBER_PLANTS,
+  DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD,
   getTestsByCategory, getTotalTestDays,
   type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse, type PushNotification, type TestResult,
 } from "@/lib/mockData"
@@ -168,7 +170,15 @@ export default function NpdDetailView() {
   const npd = npds.find(n => n.id === npdId) || npds[0]
   const [activeStage, setActiveStage] = useState(npd?.stage ?? 1)
   const [currentRole, setCurrentRole] = useState("rnd_user")
-  const [tqrStatus, setTqrStatus] = useState("pending")
+  const TQR_STATUS_KEY = `tqr_status_v1`
+  const [tqrStatus, setTqrStatusState] = useState("pending")
+  const setTqrStatus = (s: string) => {
+    setTqrStatusState(s)
+    const raw = localStorage.getItem(TQR_STATUS_KEY)
+    const all: Record<string, string> = raw ? JSON.parse(raw) : {}
+    all[npdId] = s
+    localStorage.setItem(TQR_STATUS_KEY, JSON.stringify(all))
+  }
   const [rejectReason, setRejectReason] = useState("")
   const [baseUrl, setBaseUrl] = useState("")
   const [enquiryDispatched, setEnquiryDispatched] = useState(false)
@@ -189,6 +199,12 @@ export default function NpdDetailView() {
 
   // ── Supplier Dispatch ───────────────────────────────────────────────────
   const [defenceAdvanced, setDefenceAdvanced] = useState(false)
+
+  // ── Delivery Details (sourcing fills location + qty for stage 7) ─────────
+  const [deliveryDetails, setDeliveryDetails] = useState<{ location: string; requiredQty: string; setAt: string } | null>(null)
+  const [deliveryLocation, setDeliveryLocation] = useState("")
+  const [deliveryReqQty,   setDeliveryReqQty]   = useState("")
+  const [deliveryDetailsSubmitted, setDeliveryDetailsSubmitted] = useState(false)
 
 
   // ── Query reply form (keyed by vendorName) ──────────────────────────────
@@ -219,6 +235,9 @@ export default function NpdDetailView() {
   const [testResults,            setTestResults]            = useState<Record<string, string>>({})
   const [evalSubmitted,          setEvalSubmitted]          = useState(false)
   const [evalStartedAt,          setEvalStartedAt]          = useState<string | null>(null)
+  const [aicmFetched,            setAicmFetched]            = useState(false)
+  const [aicmLoading,            setAicmLoading]            = useState(false)
+  const [aicmPanelOpen,          setAicmPanelOpen]          = useState(false)
 
   const enquiryValidUntil = (() => {
     const d = new Date()
@@ -258,6 +277,15 @@ export default function NpdDetailView() {
       setDeliveryDoc("")
       setDeliverySubmitted(false)
       setDeliveryHeadApproved(false)
+    }
+
+    const rawDD = localStorage.getItem(DELIVERY_DETAILS_KEY)
+    const allDD: Record<string, { location: string; requiredQty: string; setAt: string }> = rawDD ? JSON.parse(rawDD) : {}
+    if (allDD[npdId]) {
+      setDeliveryDetails(allDD[npdId])
+      setDeliveryLocation(allDD[npdId].location)
+      setDeliveryReqQty(allDD[npdId].requiredQty)
+      setDeliveryDetailsSubmitted(true)
     }
 
     // Stage 8 — part assignment
@@ -308,6 +336,11 @@ export default function NpdDetailView() {
     const stored = localStorage.getItem("poc_role")
     if (stored) setCurrentRole(stored)
     setBaseUrl(window.location.origin)
+
+    // TQR status
+    const rawTqr = localStorage.getItem(TQR_STATUS_KEY)
+    const allTqr: Record<string, string> = rawTqr ? JSON.parse(rawTqr) : {}
+    if (allTqr[npdId]) setTqrStatusState(allTqr[npdId])
 
     // Supplier docs (initial)
     const mockDocs  = MOCK_SUPPLIER_DOCS[npdId] ?? []
@@ -372,13 +405,28 @@ export default function NpdDetailView() {
     const allEval: Record<string, { results: Record<string, string>; submittedAt: string; startedAt: string }> = rawEval ? JSON.parse(rawEval) : {}
     if (allEval[npdId]) {
       setTestResults(allEval[npdId].results)
-      setEvalSubmitted(true)
+      if (allEval[npdId].submittedAt) setEvalSubmitted(true)
       setEvalStartedAt(allEval[npdId].startedAt)
     }
 
+    // Delivery details (sourcing-set location + qty for stage 7)
+    const rawDD = localStorage.getItem(DELIVERY_DETAILS_KEY)
+    const allDD: Record<string, { location: string; requiredQty: string; setAt: string }> = rawDD ? JSON.parse(rawDD) : {}
+    if (allDD[npdId]) {
+      setDeliveryDetails(allDD[npdId])
+      setDeliveryLocation(allDD[npdId].location)
+      setDeliveryReqQty(allDD[npdId].requiredQty)
+      setDeliveryDetailsSubmitted(true)
+    }
+
+    // AICM fetch state
+    const rawAicm = localStorage.getItem(AICM_FETCH_KEY)
+    const allAicm: Record<string, boolean> = rawAicm ? JSON.parse(rawAicm) : {}
+    if (allAicm[npdId]) setAicmFetched(true)
+
     // Refresh live data when supplier submits in another tab
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY || e.key === SUPPLIER_DISPATCH_KEY || e.key === DELIVERY_ACCEPTANCE_KEY) refreshLiveData()
+      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY || e.key === SUPPLIER_DISPATCH_KEY || e.key === DELIVERY_ACCEPTANCE_KEY || e.key === PLANT_SUPPLIER_RESP_KEY || e.key === PLANT_ACCEPTANCE_KEY) refreshLiveData()
     }
     const onFocus = () => refreshLiveData()
 
@@ -394,9 +442,9 @@ export default function NpdDetailView() {
     }
   }, [])
 
-  // Track when stage 6 starts + fire reminder push when overdue or 1 day left
+  // Track when stage 5 starts + fire reminder push when overdue or 1 day left
   useEffect(() => {
-    if (activeStage !== 6) return
+    if (activeStage !== 5) return
     const totalDays = getTotalTestDays(npd.itemCategory)
     if (totalDays === 0) return
     const rawEval = localStorage.getItem(RND_EVAL_KEY)
@@ -417,6 +465,38 @@ export default function NpdDetailView() {
       setEvalStartedAt(allEval[npdId].startedAt)
     }
   }, [activeStage])
+
+  // Auto-advance to stage 7 when TQR is fully approved (stage 6 is a pass-through milestone)
+  useEffect(() => {
+    if (tqrStatus === "fully_approved" && activeStage < 7) {
+      const pn = partAssigned ? assignedPartNumber : autoAssignPartNumber(npdId)
+      setActiveStage(7)
+      updateNPD(npdId, { stage: 7, stageName: NPD_STAGES[6] })
+    }
+  }, [tqrStatus])
+
+  // Auto-advance to stage 4 when supplier submits dispatch via portal
+  useEffect(() => {
+    if (dispatchInfo && activeStage < 4) {
+      setActiveStage(4)
+      updateNPD(npdId, { stage: 4, stageName: NPD_STAGES[3] })
+    }
+  }, [dispatchInfo])
+
+  // Auto-assign part number if stage is ≥ 6 and none is assigned yet
+  useEffect(() => {
+    if (activeStage >= 6 && !partAssigned) {
+      autoAssignPartNumber(npdId)
+    }
+  }, [activeStage, partAssigned])
+
+  // Auto-advance to stage 8 (Summary & Closure) when plant accepts the part
+  useEffect(() => {
+    if (plantVerdict === "accepted" && activeStage < 8) {
+      setActiveStage(8)
+      updateNPD(npdId, { stage: 8, stageName: NPD_STAGES[7] })
+    }
+  }, [plantVerdict])
 
   const totalStages = (() => {
     const t = npd.typeOfWork
@@ -457,6 +537,7 @@ export default function NpdDetailView() {
         .replace(/{portal_link}/g,  portalLink)
         .replace(/{valid_until}/g,  enquiryValidUntil)
         .replace(/{drawing_link}/g, npd.driveLink || "Not attached")
+      .replace(/Amber Sourcing Operations/g, npd.spoc)
       const lines = filled.split("\n")
       const subject = lines[0].replace(/^Subject:\s*/i, "").trim()
       const bodyLines = lines.slice(1)
@@ -476,10 +557,10 @@ export default function NpdDetailView() {
     allEmails[npdId] = emails
     localStorage.setItem(COMPOSED_EMAILS_KEY, JSON.stringify(allEmails))
 
-    // Advance stage to 3 — NPD Sourcing Allocation
-    if (activeStage < 3) {
-      setActiveStage(3)
-      updateNPD(npdId, { stage: 3, stageName: NPD_STAGES[2] })
+    // Advance stage to 2 — Supplier Sourcing & Quotation
+    if (activeStage < 2) {
+      setActiveStage(2)
+      updateNPD(npdId, { stage: 2, stageName: NPD_STAGES[1] })
     }
   }
 
@@ -551,13 +632,13 @@ export default function NpdDetailView() {
     const all: Record<string, Record<string, "approved" | "rejected">> = raw ? JSON.parse(raw) : {}
     all[npdId] = next
     localStorage.setItem(VENDOR_QUOTE_APPROVALS_KEY, JSON.stringify(all))
-    // Approving a vendor updates the supplier name and advances to Stage 4 — Supplier Dispatch
+    // Approving a vendor updates the supplier name and advances to Stage 3 — Supplier Dispatch
     if (decision === "approved") {
       const updates: Partial<typeof npd> = { supplier: vendorName }
-      if (activeStage < 4) {
-        setActiveStage(4)
-        updates.stage = 4
-        updates.stageName = NPD_STAGES[3]
+      if (activeStage < 3) {
+        setActiveStage(3)
+        updates.stage = 3
+        updates.stageName = NPD_STAGES[2]
       }
       updateNPD(npdId, updates)
     }
@@ -573,24 +654,29 @@ export default function NpdDetailView() {
     const updated: LiveQuotation = {
       ...prev,
       rndReply: reply,
-      status: "submitted",
-      feasible: true,
+      rndRepliedAt: new Date().toLocaleString("en-IN"),
+      // keep feasible: false so supplier must re-assess via the portal link
       ...(queryReplyDoc[vendorName] ? { rndReplyDoc: queryReplyDoc[vendorName] } : {}),
     }
     all[npdId][vendorName] = updated
     localStorage.setItem(LIVE_QUOTATIONS_KEY, JSON.stringify(all))
     setLiveQuotes(prev => ({ ...prev, [vendorName]: updated }))
-    savePush(`Query Resolved — ${npdId}`, `R&D replied to ${vendorName}'s feasibility query for ${npd.itemName}. Supplier re-invited to quote.`, npdId, "mail")
+    setQueryReplyText(prev => { const next = { ...prev }; delete next[vendorName]; return next })
+    setQueryReplyDoc(prev => { const next = { ...prev }; delete next[vendorName]; return next })
+    savePush(`R&D Replied to Query — ${npdId}`, `R&D sent clarification to ${vendorName} for ${npd.itemName}. Awaiting supplier re-assessment.`, npdId, "mail")
   }
 
   const submitDelivery = () => {
-    const acceptance = { docName: deliveryDoc, acceptedAt: new Date().toLocaleString("en-IN"), headApproved: false }
+    const acceptance = { docName: deliveryDoc, acceptedAt: new Date().toLocaleString("en-IN"), headApproved: true }
     const raw = localStorage.getItem(DELIVERY_ACCEPTANCE_KEY)
     const all: Record<string, typeof acceptance> = raw ? JSON.parse(raw) : {}
     all[npdId] = acceptance
     localStorage.setItem(DELIVERY_ACCEPTANCE_KEY, JSON.stringify(all))
     setDeliverySubmitted(true)
-    savePush(`Delivery Receipt — ${npdId}`, `R&D User attached proof of delivery for ${npd.itemName}. Awaiting your approval.`, npdId, "check")
+    setDeliveryHeadApproved(true)
+    setActiveStage(5)
+    updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
+    savePush(`Delivery Confirmed — ${npdId}`, `R&D User confirmed receipt for ${npd.itemName}. Advancing to RND Testing.`, npdId, "check")
   }
 
   const approveDelivery = () => {
@@ -600,8 +686,8 @@ export default function NpdDetailView() {
     all[npdId].headApproved = true
     localStorage.setItem(DELIVERY_ACCEPTANCE_KEY, JSON.stringify(all))
     setDeliveryHeadApproved(true)
-    setActiveStage(6)
-    updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
+    setActiveStage(5)
+    updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
     savePush(`Delivery Approved — ${npdId}`, `R&D Head approved the delivery for ${npd.itemName}. Advancing to RND Testing.`, npdId, "check")
   }
 
@@ -657,18 +743,18 @@ export default function NpdDetailView() {
     if (activeStage >= TOTAL_NPD_STAGES) return
     const next = activeStage + 1
 
-    // Stage 3→4: auto-approve first vendor if none locked yet
-    if (activeStage === 3 && (!npd.supplier || npd.supplier === "Pending Assignment")) {
+    // Stage 2→3: auto-approve first vendor if none locked yet
+    if (activeStage === 2 && (!npd.supplier || npd.supplier === "Pending Assignment")) {
       const firstVendor = getVendors(npd.itemCategory)[0]?.name ?? sentVendors[0]
       if (firstVendor) {
-        setVendorApproval(firstVendor, "approved") // internally advances to stage 4
+        setVendorApproval(firstVendor, "approved") // internally advances to stage 3
         return
       }
     }
-    // Stage 4→5: mark dispatch done
-    if (activeStage === 4) setDefenceAdvanced(true)
-    // Stage 5→6: auto-complete two-step delivery acceptance
-    if (activeStage === 5) {
+    // Stage 3→4: mark dispatch done
+    if (activeStage === 3) setDefenceAdvanced(true)
+    // Stage 4→5: auto-complete two-step delivery acceptance
+    if (activeStage === 4) {
       const docName = "demo_delivery_confirmation.jpg"
       const acceptance = { docName, acceptedAt: new Date().toLocaleString("en-IN"), headApproved: true }
       const rawA = localStorage.getItem(DELIVERY_ACCEPTANCE_KEY)
@@ -679,12 +765,12 @@ export default function NpdDetailView() {
       setDeliverySubmitted(true)
       setDeliveryHeadApproved(true)
     }
-    // Stage 6→7: auto-complete TQR
-    if (activeStage === 6) setTqrStatus("fully_approved")
-    // Stage 7→8: auto-assign part number
-    if (activeStage === 7) autoAssignPartNumber(npdId)
-    // Stage 8: auto-satisfy supplier response + plant acceptance (stage 8 is final — no further advance)
-    if (activeStage === 8) {
+    // Stage 5→6: auto-complete TQR
+    if (activeStage === 5) setTqrStatus("fully_approved")
+    // Stage 6→7: auto-assign part number
+    if (activeStage === 6) autoAssignPartNumber(npdId)
+    // Stage 7→8: auto-satisfy supplier response + plant acceptance, then advance to stage 8
+    if (activeStage === 7) {
       const now = new Date().toLocaleString("en-IN")
       const suppAll: Record<string, { deliveryDate: string; sampleQty: number; submittedAt: string }> = JSON.parse(localStorage.getItem(PLANT_SUPPLIER_RESP_KEY) ?? "{}")
       suppAll[npdId] = { deliveryDate: "30 May 2026", sampleQty: 5, submittedAt: now }
@@ -699,7 +785,6 @@ export default function NpdDetailView() {
       setPlantDeliveryAccepted(true)
       setPlantVerdict("accepted")
       setVerdictSelection("accepted")
-      return
     }
 
     setActiveStage(next)
@@ -868,7 +953,7 @@ export default function NpdDetailView() {
             <CardHeader className="pb-3 border-b bg-slate-50">
               <CardTitle className="text-base">My Actions</CardTitle>
             </CardHeader>
-            <CardContent className="pt-5 space-y-4">
+            <CardContent className="pt-5 flex flex-col-reverse gap-4">
 
               {/* Stage 1 — Request Initialisation (read-only summary) */}
               <div className={`rounded-xl border p-4 ${activeStage > 1 ? "bg-slate-50 border-slate-200" : "border-blue-300 bg-blue-50/30"}`}>
@@ -886,7 +971,7 @@ export default function NpdDetailView() {
                     ["Type of Work", npd.typeOfWork],
                     ["Product Line", npd.productLine],
                     ["R&D Division", npd.rAndDDivision || "—"],
-                    ["Raised By", npd.raisedBy === "rnd_head" ? "R&D Head" : "R&D User"],
+                    ["Raised By", npd.raisedBy === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name],
                   ] as [string, string][]).map(([label, value]) => (
                     <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
                       <span className="text-slate-400 text-xs">{label}</span>
@@ -896,88 +981,23 @@ export default function NpdDetailView() {
                 </div>
               </div>
 
-              {/* Stage 2 — RND Internal Review */}
-              {activeStage >= 2 && (
+              {/* Stage 4 — RND Evaluation (proof of delivery) */}
+              {activeStage >= 4 && (
                 <div className={`rounded-xl border p-4 ${
-                  activeStage > 2  ? "bg-slate-50 border-slate-200 opacity-80" :
-                  activeStage === 2 ? "border-blue-400 bg-white shadow-sm" :
+                  activeStage > 4  ? "bg-slate-50 border-slate-200 opacity-80" :
+                  activeStage === 4 ? "border-blue-400 bg-white shadow-sm" :
                   "border-slate-200 bg-slate-50 opacity-50"
                 }`}>
                   <div className="flex items-center gap-2 mb-3">
-                    {activeStage > 2
+                    {activeStage > 4
                       ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                       : <div className="w-4 h-4 rounded-full border-2 border-blue-700 flex items-center justify-center shrink-0">
-                          <span className="text-[9px] font-bold text-blue-700">2</span>
+                          <span className="text-[9px] font-bold text-blue-700">4</span>
                         </div>}
-                    <h4 className="font-bold text-slate-800 text-sm">Stage 2 — RND Internal Review</h4>
-                    {activeStage > 2 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Released to Sourcing</Badge>}
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 4 — RND Evaluation</h4>
+                    {activeStage > 4 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
                   </div>
-                  {activeStage > 2 && (
-                    <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Notifications sent</p>
-                      <EmailCard
-                        to={npd.spoc}
-                        subject={`NPD Assigned — ${npd.id}: ${npd.itemName}`}
-                        body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>A new NPD request has been assigned to you for sourcing.</p><p><strong>NPD ID:</strong> ${npd.id}<br/><strong>Item:</strong> ${npd.itemName}<br/><strong>Category:</strong> ${npd.itemCategory}<br/><strong>Type of Work:</strong> ${npd.typeOfWork}</p><p>Please log in to initiate vendor selection and enquiry dispatch.</p><p>Amber Enterprises NPD System</p>`}
-                      />
-                      <PushSentBadge to={npd.spoc} />
-                    </div>
-                  )}
-                  {activeStage === 2 && (
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Drawing / Spec Folder</p>
-                        {npd.driveLink ? (
-                          <a
-                            href={npd.driveLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2"
-                          >
-                            <ExternalLink className="w-4 h-4" /> Open Drive Folder
-                          </a>
-                        ) : (
-                          <p className="text-sm text-slate-400 italic">No drawing link attached.</p>
-                        )}
-                      </div>
-                      {currentRole === "rnd_head" ? (
-                        <Button
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                          onClick={() => {
-                            setActiveStage(3)
-                            updateNPD(npdId, { stage: 3, stageName: NPD_STAGES[2] })
-                            savePush(`NPD Assigned — ${npdId}`, `New NPD assigned to ${npd.spoc}: ${npd.itemName}. Please initiate sourcing.`, npdId, "mail")
-                          }}
-                        >
-                          <CheckCircle className="w-4 h-4 mr-2" /> Approve &amp; Release to Sourcing
-                        </Button>
-                      ) : (
-                        <p className="text-sm text-slate-400 italic flex items-center gap-1.5">
-                          <Clock className="w-4 h-4 shrink-0" /> Awaiting R&amp;D Head sign-off to release to Sourcing.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Stage 5 — RND Evaluation (proof of delivery) */}
-              {activeStage >= 5 && (
-                <div className={`rounded-xl border p-4 ${
-                  activeStage > 5  ? "bg-slate-50 border-slate-200 opacity-80" :
-                  activeStage === 5 ? "border-blue-400 bg-white shadow-sm" :
-                  "border-slate-200 bg-slate-50 opacity-50"
-                }`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    {activeStage > 5
-                      ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                      : <div className="w-4 h-4 rounded-full border-2 border-blue-700 flex items-center justify-center shrink-0">
-                          <span className="text-[9px] font-bold text-blue-700">5</span>
-                        </div>}
-                    <h4 className="font-bold text-slate-800 text-sm">Stage 5 — RND Evaluation</h4>
-                    {activeStage > 5 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
-                  </div>
-                  {activeStage === 5 && (
+                  {activeStage === 4 && (
                     <div className="space-y-4">
 
                       {/* Part 1 — Dispatch context strip */}
@@ -989,7 +1009,7 @@ export default function NpdDetailView() {
                           <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-700">
                             <span><span className="text-slate-400">Supplier:</span> <strong>{dispatchInfo.vendorName}</strong></span>
                             <span><span className="text-slate-400">Dispatch Date:</span> <strong>{dispatchInfo.dispatchDate}</strong></span>
-                            <span><span className="text-slate-400">Docs:</span> <strong>{dispatchInfo.docs.length} submitted</strong></span>
+                            <span><span className="text-slate-400">Proof of Dispatch:</span> <strong>{dispatchInfo.docs.length > 0 ? dispatchInfo.docs[0] : "—"}</strong></span>
                           </div>
                           {dispatchInfo.docs.length > 0 && (
                             <ul className="mt-2 space-y-0.5">
@@ -1007,33 +1027,14 @@ export default function NpdDetailView() {
                         </p>
                       )}
 
-                      {/* Part 2 — Two-step acceptance */}
-                      {deliveryHeadApproved ? (
+                      {/* Part 2 — Delivery acceptance */}
+                      {deliverySubmitted ? (
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                           <div>
-                            <p className="text-sm font-semibold text-emerald-800">Receipt Accepted &amp; Approved</p>
+                            <p className="text-sm font-semibold text-emerald-800">Receipt Confirmed</p>
                             <p className="text-xs text-emerald-600">POD: {deliveryDoc}</p>
                           </div>
-                        </div>
-                      ) : deliverySubmitted ? (
-                        <div className="space-y-3">
-                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold text-amber-800">Awaiting RND Head Approval</p>
-                              <p className="text-xs text-amber-600">POD attached: {deliveryDoc}</p>
-                            </div>
-                          </div>
-                          <PushSentBadge to="R&D Head" />
-                          {(currentRole === "rnd_head" || currentRole === "super_admin") && (
-                            <Button
-                              className="bg-purple-700 hover:bg-purple-800 text-white"
-                              onClick={approveDelivery}
-                            >
-                              <CheckCircle className="w-4 h-4 mr-2" /> Approve &amp; Advance to RND Testing
-                            </Button>
-                          )}
                         </div>
                       ) : (
                         <div className="space-y-3">
@@ -1068,7 +1069,7 @@ export default function NpdDetailView() {
                               className="bg-blue-900 hover:bg-blue-800 text-white"
                               onClick={submitDelivery}
                             >
-                              <CheckCircle className="w-4 h-4 mr-2" /> Confirm Receipt — Send for RND Head Approval
+                              <CheckCircle className="w-4 h-4 mr-2" /> Confirm Receipt
                             </Button>
                           )}
                         </div>
@@ -1079,23 +1080,23 @@ export default function NpdDetailView() {
                 </div>
               )}
 
-              {/* Stage 6 — RND Testing & TQR */}
-              {activeStage >= 6 && (
+              {/* Stage 5 — RND Testing & TQR */}
+              {activeStage >= 5 && (
                 <div className={`rounded-xl border p-4 ${
-                  activeStage > 6  ? "bg-slate-50 border-slate-200 opacity-80" :
-                  activeStage === 6 ? "border-emerald-400 bg-white shadow-sm" :
+                  activeStage > 5  ? "bg-slate-50 border-slate-200 opacity-80" :
+                  activeStage === 5 ? "border-emerald-400 bg-white shadow-sm" :
                   "border-slate-200 bg-slate-50 opacity-50"
                 }`}>
                   <div className="flex items-center gap-2 mb-3">
-                    {activeStage > 6
+                    {activeStage > 5
                       ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                       : <div className="w-4 h-4 rounded-full border-2 border-emerald-600 flex items-center justify-center shrink-0">
-                          <span className="text-[9px] font-bold text-emerald-600">6</span>
+                          <span className="text-[9px] font-bold text-emerald-600">5</span>
                         </div>}
-                    <h4 className="font-bold text-slate-800 text-sm">Stage 6 — RND Testing &amp; TQR</h4>
-                    {activeStage > 6 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 5 — RND Testing &amp; TQR</h4>
+                    {activeStage > 5 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
                   </div>
-                  {activeStage === 6 && (
+                  {activeStage === 5 && (
                     <div className="space-y-4">
                       {tqrStatus === "rejecting" ? (
                         <div className="space-y-4 animate-in fade-in zoom-in-95">
@@ -1144,27 +1145,20 @@ export default function NpdDetailView() {
                           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-5 rounded-lg text-center">
                             <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
                             <h3 className="text-base font-bold">TQR Fully Approved</h3>
-                            <p className="text-sm mt-1">Both R&amp;D User and R&amp;D Head have approved.</p>
+                            <p className="text-sm mt-1">Notifications sent to supplier and sourcing team.</p>
                           </div>
-                          <Button
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                            onClick={() => {
-                              setActiveStage(7)
-                              updateNPD(npdId, { stage: 7, stageName: NPD_STAGES[6] })
-                            }}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-2" /> Advance to RND Approval
-                          </Button>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-1">Notifications sent</p>
-                          {["R&D User", npd.spoc].map(recipient => (
-                            <EmailCard
-                              key={recipient}
-                              to={recipient}
-                              subject={`✓ TQR Approved — ${npdId}: ${npd.itemName}`}
-                              body={`<p>Dear <strong>${recipient}</strong>,</p><p>The TQR evaluation for the following NPD has been fully approved by the R&amp;D Head. A new part number will be issued shortly.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Category</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ TQR Approved — Advancing to Final R&amp;D Approval</td></tr></table><p>The part number will be assigned upon final R&amp;D Head sign-off at Stage 7 and shared with you separately.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
-                            />
-                          ))}
-                          <PushSentBadge to="R&D User" />
+                          <EmailCard
+                            to={npd.supplier}
+                            subject={`✓ Testing Complete — ${npdId}: ${npd.itemName}`}
+                            body={`<p>Dear <strong>${npd.supplier}</strong>,</p><p>We are pleased to inform you that the R&amp;D testing for the following part has been completed and approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Category</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ R&amp;D Testing Approved</td></tr></table><p>Our sourcing team will be in touch shortly with delivery location and sample quantity details. Please be ready to confirm your delivery date.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                          />
+                          <EmailCard
+                            to={npd.spoc}
+                            subject={`TQR Approved — Action Required: Set Delivery Details for ${npdId}`}
+                            body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The TQR evaluation for the following NPD has been fully approved by the R&amp;D Head.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table><p><strong>Next Step:</strong> Please log in to the NPD system and fill in the delivery location and required sample quantity (Stage 7 — Sample Delivery Coordination). The supplier delivery date request will be sent automatically once you submit.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                          />
+                          <PushSentBadge to={npd.supplier} />
                           <PushSentBadge to={npd.spoc} />
                         </div>
                       ) : (() => {
@@ -1184,10 +1178,15 @@ export default function NpdDetailView() {
                           const color   = overdue ? "bg-red-50 border-red-200 text-red-800" : urgent ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-blue-50 border-blue-100 text-blue-800"
                           const label   = overdue ? `Evaluation overdue by ${Math.abs(daysLeft)}d` : daysLeft === 0 ? "Evaluation due today" : `${daysLeft}d remaining to complete evaluation`
                           return (
-                            <div className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold ${color}`}>
-                              <Clock className="w-4 h-4 shrink-0" />
-                              {label}
-                              <span className="ml-auto text-xs font-normal opacity-70">Est. total: {totalDays}d · Deadline: {deadline.toLocaleDateString("en-IN")}</span>
+                            <div className={`rounded-lg border ${color}`}>
+                              <div className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold">
+                                <Clock className="w-4 h-4 shrink-0" />
+                                {label}
+                              </div>
+                              <div className="border-t border-current/10 px-4 py-2 flex items-center justify-between text-xs font-medium opacity-80">
+                                <span>Est. total: <strong>{totalDays}d</strong></span>
+                                <span>Deadline: <strong>{deadline.toLocaleDateString("en-IN")}</strong></span>
+                              </div>
                             </div>
                           )
                         })()
@@ -1204,22 +1203,31 @@ export default function NpdDetailView() {
                             {/* Deadline reminder */}
                             {deadlineEl}
 
+                            {/* Total TAT banner */}
+                            {tests.length > 0 && (
+                              <div className="flex items-center justify-between bg-slate-100 border border-slate-200 rounded-lg px-4 py-2.5">
+                                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Total Evaluation TAT</span>
+                                <span className="text-sm font-bold text-blue-900">{totalDays} day{totalDays !== 1 ? "s" : ""}</span>
+                              </div>
+                            )}
+
                             {/* Test entry form — R&D user only, before submission */}
                             {isRnd && !evalSubmitted && tests.length > 0 && (
                               <div className="border border-slate-200 rounded-xl overflow-hidden">
                                 <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between">
                                   <span className="text-sm font-bold text-white">R&amp;D Test Evaluation — {npd.itemCategory}</span>
-                                  <span className="text-xs text-slate-400">{tests.length} tests · {totalDays}d est.</span>
+                                  <span className="text-xs text-slate-400">{tests.length} tests · {totalDays}d total TAT</span>
                                 </div>
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-sm">
                                     <thead>
                                       <tr className="bg-slate-50 border-b border-slate-200">
-                                        <th className="text-left px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[30%]">Test</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[28%]">Test</th>
                                         <th className="text-left px-3 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Type</th>
                                         <th className="text-center px-3 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unit</th>
                                         <th className="text-center px-3 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Expected</th>
-                                        <th className="text-center px-3 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[20%]">Result</th>
+                                        <th className="text-center px-3 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">TAT (d)</th>
+                                        <th className="text-center px-3 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[18%]">Result / Findings</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -1229,10 +1237,13 @@ export default function NpdDetailView() {
                                           <td className="px-3 py-2.5 text-slate-500 text-xs">{t.testType}</td>
                                           <td className="px-3 py-2.5 text-center text-slate-500 text-xs">{t.unit}</td>
                                           <td className="px-3 py-2.5 text-center text-xs text-slate-500">{t.expectedRange ?? "—"}</td>
+                                          <td className="px-3 py-2.5 text-center">
+                                            <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">{t.durationDays}d</span>
+                                          </td>
                                           <td className="px-3 py-2.5">
                                             <input
                                               type="text"
-                                              placeholder="Enter value"
+                                              placeholder="Enter findings"
                                               value={testResults[t.testName] ?? ""}
                                               onChange={e => setTestResults(prev => ({ ...prev, [t.testName]: e.target.value }))}
                                               className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -1271,7 +1282,7 @@ export default function NpdDetailView() {
                               <div className="border border-emerald-200 rounded-xl overflow-hidden">
                                 <div className="bg-emerald-700 px-4 py-2.5 flex items-center justify-between">
                                   <span className="text-sm font-bold text-white">Evaluation Results — {npd.itemCategory}</span>
-                                  <span className="text-xs text-emerald-200">Submitted · {tests.length} tests</span>
+                                  <span className="text-xs text-emerald-200">Submitted · {tests.length} tests · {totalDays}d TAT</span>
                                 </div>
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-sm">
@@ -1281,7 +1292,8 @@ export default function NpdDetailView() {
                                         <th className="text-left px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Type</th>
                                         <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unit</th>
                                         <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Expected</th>
-                                        <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Result</th>
+                                        <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">TAT (d)</th>
+                                        <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Result / Findings</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -1291,7 +1303,10 @@ export default function NpdDetailView() {
                                           <td className="px-3 py-2.5 text-slate-500 text-xs">{t.testType}</td>
                                           <td className="px-3 py-2.5 text-center text-xs text-slate-500">{t.unit}</td>
                                           <td className="px-3 py-2.5 text-center text-xs text-slate-500">{t.expectedRange ?? "—"}</td>
-                                          <td className="px-3 py-2.5 text-center font-semibold text-slate-800">{testResults[t.testName] ?? "—"}</td>
+                                          <td className="px-3 py-2.5 text-center">
+                                            <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">{t.durationDays}d</span>
+                                          </td>
+                                          <td className="px-3 py-2.5 text-center font-semibold text-slate-800">{testResults[t.testName] || "—"}</td>
                                         </tr>
                                       ))}
                                     </tbody>
@@ -1331,8 +1346,9 @@ export default function NpdDetailView() {
                                       <XCircle className="w-4 h-4 mr-2" /> Override &amp; Reject
                                     </Button>
                                     <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
+                                      if (!partAssigned) autoAssignPartNumber(npdId)
                                       setTqrStatus("fully_approved")
-                                      savePush(`TQR Approved — ${npdId}`, `R&D Head approved TQR for ${npd.itemName}. Part number will be assigned at Stage 7.`, npdId, "check")
+                                      savePush(`TQR Approved — ${npdId}`, `R&D Head approved TQR for ${npd.itemName}. Advancing to Sample Delivery Coordination.`, npdId, "check")
                                     }}>
                                       <CheckCircle2 className="w-4 h-4 mr-2" /> Final R&amp;D Head Approval
                                     </Button>
@@ -1344,11 +1360,11 @@ export default function NpdDetailView() {
                                     <Clock className="w-4 h-4 mr-1" /> Pending R&amp;D Head Approval
                                   </Badge>
                                   <EmailCard
-                                    to="R&D Head"
+                                    to={DEFAULT_RND_HEAD.name}
                                     subject={`TQR Sign-off Required — ${npdId}: ${npd.itemName}`}
-                                    body={`<p>Dear <strong>R&amp;D Head</strong>,</p><p>The R&amp;D User has completed the TQR evaluation for the following NPD and it is awaiting your final sign-off.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Category</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table>${tests.length > 0 ? `<p><strong>Test Evaluation Results:</strong></p><table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px"><thead><tr style="background:#1e3a5f;color:#fff"><th style="padding:7px 10px;text-align:left">Test</th><th style="padding:7px 10px;text-align:left">Type</th><th style="padding:7px 10px;text-align:center">Unit</th><th style="padding:7px 10px;text-align:center">Expected</th><th style="padding:7px 10px;text-align:center">Result</th></tr></thead><tbody>${evalTableRows}</tbody></table>` : ""}<p>Please log in to review and provide your final approval or rejection.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                                    body={`<p>Dear <strong>${DEFAULT_RND_HEAD.name}</strong>,</p><p>The R&amp;D User has completed the TQR evaluation for the following NPD and it is awaiting your final sign-off.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Category</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table>${tests.length > 0 ? `<p><strong>Test Evaluation Results:</strong></p><table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px"><thead><tr style="background:#1e3a5f;color:#fff"><th style="padding:7px 10px;text-align:left">Test</th><th style="padding:7px 10px;text-align:left">Type</th><th style="padding:7px 10px;text-align:center">Unit</th><th style="padding:7px 10px;text-align:center">Expected</th><th style="padding:7px 10px;text-align:center">Result</th></tr></thead><tbody>${evalTableRows}</tbody></table>` : ""}<p>Please log in to review and provide your final approval or rejection.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
                                   />
-                                  <PushSentBadge to="R&D Head" />
+                                  <PushSentBadge to={DEFAULT_RND_HEAD.name} />
                                 </div>
                               ) : (
                                 <div className="text-slate-500 italic text-sm">Action locked for your current role.</div>
@@ -1362,85 +1378,96 @@ export default function NpdDetailView() {
                 </div>
               )}
 
-              {/* Stage 7 — RND Approval (rnd_head only) */}
-              {activeStage >= 7 && (currentRole === "rnd_head" || currentRole === "super_admin") && (
+              {/* Stage 6 — RND Approval (rnd_head only) */}
+              {activeStage >= 6 && (currentRole === "rnd_head" || currentRole === "super_admin") && (
                 <div className={`rounded-xl border p-4 ${
-                  activeStage > 7  ? "bg-slate-50 border-slate-200 opacity-80" :
-                  activeStage === 7 ? "border-purple-400 bg-purple-50/30 shadow-sm" :
+                  activeStage > 6  ? "bg-slate-50 border-slate-200 opacity-80" :
+                  activeStage === 6 ? "border-purple-400 bg-purple-50/30 shadow-sm" :
                   "border-slate-200 bg-slate-50 opacity-50"
                 }`}>
                   <div className="flex items-center gap-2 mb-3">
-                    {activeStage > 7
+                    {activeStage > 6
                       ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                       : <div className="w-4 h-4 rounded-full border-2 border-purple-700 flex items-center justify-center shrink-0">
-                          <span className="text-[9px] font-bold text-purple-700">7</span>
+                          <span className="text-[9px] font-bold text-purple-700">6</span>
                         </div>}
-                    <h4 className="font-bold text-slate-800 text-sm">Stage 7 — RND Approval</h4>
-                    {activeStage > 7 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 6 — Part Number Assigned</h4>
+                    {activeStage > 6 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
                   </div>
-                  {activeStage === 7 && (
+                  {activeStage === 6 && (
                     <div className="space-y-3">
-                      <p className="text-sm text-slate-600">All testing complete and TQR approved. Final R&amp;D Head sign-off required before PP lot.</p>
-                      <Button
-                        className="bg-purple-700 hover:bg-purple-800 text-white"
-                        onClick={() => {
-                          if (!partAssigned) autoAssignPartNumber(npdId)
-                          setActiveStage(8)
-                          updateNPD(npdId, { stage: 8, stageName: NPD_STAGES[7] })
-                        }}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" /> Final Approval — Advance to Plant Delivery
-                      </Button>
-                    </div>
-                  )}
-                  {activeStage > 7 && (
-                    <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Notifications sent</p>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center gap-3">
+                        <Package className="w-5 h-5 text-blue-700 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned Part Number</p>
+                          <p className="text-xl font-mono font-bold text-blue-900">{assignedPartNumber || "—"}</p>
+                        </div>
+                      </div>
+                      <p className="text-sm text-slate-600">TQR approved. Coordinate sample delivery with sourcing team (Stage 7).</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-1">Notifications sent</p>
                       <EmailCard
                         to={npd.spoc}
-                        subject={`Part No. Assigned — ${npdId}: Initiate Plant Delivery`}
-                        body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>R&amp;D Head has given final approval for <strong>${npdId}</strong>.</p><p><strong>Part Number:</strong> ${assignedPartNumber || "Pending"}<br/><strong>Item:</strong> ${npd.itemName}<br/><strong>Supplier:</strong> ${npd.supplier}</p><p>Please send the plant delivery portal link to the supplier to confirm their delivery date and sample quantity.</p><p>Amber Enterprises NPD System</p>`}
+                        subject={`Part No. ${assignedPartNumber} Assigned — Action Required: ${npdId}`}
+                        body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>R&amp;D testing for the following NPD has been completed and approved. A part number has been assigned.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ TQR Approved</td></tr></table><p><strong>Action Required:</strong> Please log in to the NPD portal and upload the <strong>sample quantity</strong> and <strong>delivery plant</strong> details for Stage 7 — Sample Delivery Coordination.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
                       />
-                      <PushSentBadge to={npd.spoc} />
                       <EmailCard
                         to={npd.supplier}
-                        subject={`Sample Delivery Request — ${npdId}`}
-                        body={(() => {
-                          const portalUrl = `${baseUrl}/supplier/plant-delivery/${npdId}?vendor=${encodeURIComponent(npd.supplier)}`
-                          return `<p>Dear <strong>${npd.supplier}</strong>,</p><p>Part No. <strong>${assignedPartNumber || "N/A"}</strong> has been assigned for <strong>${npd.itemName}</strong> (${npdId}).</p><p>Please confirm your expected delivery date and sample quantity using the button below.</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Confirm Delivery Date &amp; Quantity →</a></div><p style="color:#64748b;font-size:12px">Amber Enterprises Sourcing Team</p>`
-                        })()}
+                        subject={`✓ Testing Approved — Part No. ${assignedPartNumber} Assigned | ${npdId}`}
+                        body={`<p>Dear <strong>${npd.supplier}</strong>,</p><p>We are pleased to inform you that R&amp;D testing for your submitted sample has been completed and approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Testing Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p>Our sourcing team will be in touch shortly with the sample delivery location and required quantity. Please be ready to confirm your delivery date once you receive the portal link.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System · ${npd.spoc}</p>`}
+                      />
+                      <PushSentBadge to={npd.spoc} />
+                      <PushSentBadge to={npd.supplier} />
+                    </div>
+                  )}
+                  {activeStage > 6 && (
+                    <div className="mt-3 border-t border-slate-100 pt-3 space-y-3">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 inline-flex items-center gap-2">
+                        <Package className="w-4 h-4 text-blue-700 shrink-0" />
+                        <span className="text-sm font-mono font-bold text-blue-900">{assignedPartNumber}</span>
+                        <span className="text-xs text-blue-600 ml-1">assigned</span>
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notifications sent</p>
+                      <EmailCard
+                        to={npd.spoc}
+                        subject={`Part No. ${assignedPartNumber} Assigned — Action Required: ${npdId}`}
+                        body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>R&amp;D testing for the following NPD has been completed and approved. A part number has been assigned.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ TQR Approved</td></tr></table><p><strong>Action Required:</strong> Please log in to the NPD portal and upload the <strong>sample quantity</strong> and <strong>delivery plant</strong> details for Stage 7 — Sample Delivery Coordination.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                      />
+                      <EmailCard
+                        to={npd.supplier}
+                        subject={`✓ Testing Approved — Part No. ${assignedPartNumber} Assigned | ${npdId}`}
+                        body={`<p>Dear <strong>${npd.supplier}</strong>,</p><p>We are pleased to inform you that R&amp;D testing for your submitted sample has been completed and approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Testing Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p>Our sourcing team will be in touch shortly with the sample delivery location and required quantity. Please be ready to confirm your delivery date once you receive the portal link.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System · ${npd.spoc}</p>`}
                       />
                     </div>
                   )}
                 </div>
               )}
 
-              {/* ── Stage 8: Plant Delivery Acceptance ── */}
-              {activeStage >= 8 && (
+              {/* ── Stage 7: Plant Delivery Acceptance ── */}
+              {activeStage >= 7 && (
                 <div className={`rounded-xl border p-4 ${
-                  activeStage === 8 ? "border-orange-300 bg-orange-50/30 shadow-sm" : "border-slate-200 bg-slate-50 opacity-50"
+                  activeStage === 7 ? "border-orange-300 bg-orange-50/30 shadow-sm" : "border-slate-200 bg-slate-50 opacity-50"
                 }`}>
                   <div className="flex items-center gap-2 mb-3">
-                    {activeStage > 8
+                    {activeStage > 7
                       ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                       : <div className="w-4 h-4 rounded-full border-2 border-orange-600 flex items-center justify-center shrink-0">
-                          <span className="text-[9px] font-bold text-orange-600">8</span>
+                          <span className="text-[9px] font-bold text-orange-600">7</span>
                         </div>}
-                    <h4 className="font-bold text-slate-800 text-sm">Stage 8 — Plant Delivery Acceptance</h4>
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 7 — Sample Delivery &amp; Plant Acceptance</h4>
                     {plantVerdict === "accepted" && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Part Accepted</Badge>}
                     {plantVerdict === "not_good" && <Badge className="bg-red-100 text-red-700 border-none text-xs ml-auto">Not Good</Badge>}
                   </div>
-                  {activeStage === 8 && (
+                  {activeStage === 7 && (
                     <div className="space-y-4">
 
-                      {/* RND work is complete — show approved status */}
+                      {/* Part + sourcing coordination status */}
                       <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-2">
                           <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <p className="text-sm font-bold text-emerald-800">RND Approval Complete</p>
+                          <p className="text-sm font-bold text-emerald-800">TQR Approved — Part No. <span className="font-mono">{assignedPartNumber}</span></p>
                         </div>
                         <p className="text-xs text-emerald-700">
-                          Part No: <strong>{assignedPartNumber}</strong> · Sourcing team has been notified to coordinate supplier delivery.
+                          Sourcing team is coordinating delivery details with the supplier.
                         </p>
                         {plantVerdict === "accepted" && (
                           <p className="text-xs text-emerald-700 mt-1.5 font-semibold">✓ Plant user accepted the part — NPD complete.</p>
@@ -1462,16 +1489,16 @@ export default function NpdDetailView() {
                         <div className="space-y-2">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notifications sent</p>
                           <EmailCard
-                            to="R&D User"
+                            to={DEFAULT_RND_CONTACT.name}
                             subject={`✓ Part Accepted — ${npdId}: ${npd.itemName}`}
-                            body={`<p>Dear <strong>R&amp;D User</strong>,</p><p>Great news! The plant testing verdict for the following NPD has been approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Accepted — Approved for Production</td></tr></table><p>The part has been approved for production. This NPD is now complete.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                            body={`<p>Dear <strong>${DEFAULT_RND_CONTACT.name}</strong>,</p><p>Great news! The plant testing verdict for the following NPD has been approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Accepted — Approved for Production</td></tr></table><p>The part has been approved for production. This NPD is now complete.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
                           />
                           <EmailCard
                             to={npd.spoc}
                             subject={`✓ Part Accepted — ${npdId}: ${npd.itemName}`}
                             body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The plant testing verdict for <strong>${npdId}</strong> has been approved. The NPD is now complete.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Accepted — Approved for Production</td></tr></table><p style="color:#64748b;font-size:12px">Amber Enterprises Plant Team</p>`}
                           />
-                          <PushSentBadge to="R&D User" />
+                          <PushSentBadge to={DEFAULT_RND_CONTACT.name} />
                           <PushSentBadge to={npd.spoc} />
                         </div>
                       )}
@@ -1479,16 +1506,16 @@ export default function NpdDetailView() {
                         <div className="space-y-2">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notifications sent</p>
                           <EmailCard
-                            to="R&D User"
+                            to={DEFAULT_RND_CONTACT.name}
                             subject={`✗ Part Not Good — ${npdId}: ${npd.itemName}`}
-                            body={`<p>Dear <strong>R&amp;D User</strong>,</p><p>The plant testing verdict for the following NPD has been returned for revision.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#dc2626">✗ Not Good — Returned for Revision</td></tr>${plantRemarks ? `<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table><p>This part number has been recorded. When raising a new revision request, select <strong>${assignedPartNumber}</strong> from the previous part number dropdown.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                            body={`<p>Dear <strong>${DEFAULT_RND_CONTACT.name}</strong>,</p><p>The plant testing verdict for the following NPD has been returned for revision.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#dc2626">✗ Not Good — Returned for Revision</td></tr>${plantRemarks ? `<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table><p>This part number has been recorded. When raising a new revision request, select <strong>${assignedPartNumber}</strong> from the previous part number dropdown.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
                           />
                           <EmailCard
                             to={npd.spoc}
                             subject={`✗ Part Not Good — ${npdId}: ${npd.itemName}`}
                             body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The plant testing verdict for <strong>${npdId}</strong> has been returned for revision. Please coordinate with the supplier.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#dc2626">✗ Not Good — Returned for Revision</td></tr>${plantRemarks ? `<tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table><p style="color:#64748b;font-size:12px">Amber Enterprises Plant Team</p>`}
                           />
-                          <PushSentBadge to="R&D User" />
+                          <PushSentBadge to={DEFAULT_RND_CONTACT.name} />
                           <PushSentBadge to={npd.spoc} />
                         </div>
                       )}
@@ -1590,7 +1617,7 @@ export default function NpdDetailView() {
           </Card>
 
           {/* ── Section 2: Sourcing Info (read-only) ─────────────── */}
-          {activeStage >= 3 && (
+          {activeStage >= 2 && (
             <Card>
               <CardHeader className="pb-3 border-b bg-slate-50">
                 <CardTitle className="text-base">Sourcing Status</CardTitle>
@@ -1621,10 +1648,10 @@ export default function NpdDetailView() {
                   <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sourcing Stage</p>
                     <p className="text-sm font-semibold text-slate-800 mt-0.5">
-                      {activeStage < 3 ? "Awaiting Release" :
-                       activeStage === 3 ? "Awaiting Quotations" :
-                       activeStage === 4 ? "Awaiting Dispatch" :
-                       activeStage >= 5 ? "Supplier Dispatched" : "—"}
+                      {activeStage < 2 ? "Awaiting Release" :
+                       activeStage === 2 ? "Awaiting Quotations" :
+                       activeStage === 3 ? "Awaiting Dispatch" :
+                       activeStage >= 4 ? "Supplier Dispatched" : "—"}
                     </p>
                   </div>
                 </div>
@@ -1645,7 +1672,7 @@ export default function NpdDetailView() {
                               : <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />}
                             <div className="flex-1 min-w-0">
                               <p className={`text-xs font-bold ${lq.rndReply ? "text-emerald-800" : "text-amber-800"}`}>
-                                {vendorName} — {lq.rndReply ? "Query Resolved" : "Feasibility Denied"}
+                                {vendorName} — {lq.rndReply ? "R&D Replied — Awaiting Supplier Re-Assessment" : "Query Raised"}
                               </p>
                               <p className="text-xs text-slate-600 mt-0.5 italic">Query: &quot;{lq.query}&quot;</p>
                               {lq.rndReply ? (
@@ -1658,10 +1685,10 @@ export default function NpdDetailView() {
                                   )}
                                   <EmailCard
                                     to={vendorName}
-                                    subject={`Query Resolved — ${npdId}: ${npd.itemName}`}
+                                    subject={`R&D Clarification — ${npdId}: ${npd.itemName}`}
                                     body={(() => {
                                       const portalUrl = `${baseUrl}/supplier/quote/${npdId}?vendor=${encodeURIComponent(vendorName)}`
-                                      return `<p>Dear <strong>${vendorName}</strong>,</p><p>Thank you for your query regarding <strong>${npd.itemName}</strong> (${npdId}). Our R&amp;D team has reviewed it and provided the following clarification:</p><blockquote style="border-left:3px solid #1e3a5f;margin:12px 0;padding:8px 14px;background:#f8fafc;color:#1e293b;font-style:italic">${lq.query}</blockquote><p><strong>R&amp;D Response:</strong><br/>${lq.rndReply}</p>${lq.rndReplyDoc ? `<p style="font-size:12px;color:#64748b">Attached document: ${lq.rndReplyDoc}</p>` : ""}<p>Based on this clarification, we invite you to revisit your feasibility assessment and submit your quotation using the link below.</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Submit Quotation →</a></div><p style="color:#64748b;font-size:12px">Amber Enterprises Sourcing Team</p>`
+                                      return `<p>Dear <strong>${vendorName}</strong>,</p><p>Thank you for your query regarding <strong>${npd.itemName}</strong> (${npdId}). Our R&amp;D team has reviewed it and provided the following clarification:</p><blockquote style="border-left:3px solid #1e3a5f;margin:12px 0;padding:8px 14px;background:#f8fafc;color:#1e293b;font-style:italic">${lq.query}</blockquote><p><strong>R&amp;D Response:</strong><br/>${lq.rndReply}</p>${lq.rndReplyDoc ? `<p style="font-size:12px;color:#64748b">Attached document: ${lq.rndReplyDoc}</p>` : ""}<p>Based on this clarification, kindly re-assess your feasibility and submit your updated response using the link below.</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Re-Assess &amp; Submit Response →</a></div><p>Regards,<br/><strong>${npd.spoc}</strong><br/>Amber Enterprises Sourcing Team</p>`
                                     })()}
                                   />
                                 </div>
@@ -1801,12 +1828,12 @@ export default function NpdDetailView() {
       )}
 
       {/* ═══════════════════ PLANT USER SECTION ═══════════════════ */}
-      {isPlantUser && !isRnd && activeStage === 8 && (
+      {isPlantUser && !isRnd && activeStage === 7 && (
         <div className="space-y-6">
 
           <Card>
             <CardHeader className="pb-3 border-b bg-slate-50">
-              <CardTitle className="text-base">Stage 8 — Plant Delivery Acceptance</CardTitle>
+              <CardTitle className="text-base">Stage 7 — Plant Delivery Acceptance</CardTitle>
               <p className="text-xs text-slate-500 mt-0.5">Accept the delivery from the supplier and submit your testing verdict</p>
             </CardHeader>
             <CardContent className="pt-5 space-y-4">
@@ -1917,7 +1944,7 @@ export default function NpdDetailView() {
                     </div>
                   )}
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notifications sent</p>
-                  {["R&D User", "R&D Head", npd.spoc].map(recipient => (
+                  {[DEFAULT_RND_CONTACT.name, npd.spoc].map(recipient => (
                     <EmailCard
                       key={recipient}
                       to={recipient}
@@ -1925,8 +1952,7 @@ export default function NpdDetailView() {
                       body={`<p>Dear <strong>${recipient}</strong>,</p><p>The plant testing verdict for the following NPD has been submitted by the Plant Team.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:${plantVerdict === "accepted" ? "#059669" : "#dc2626"}">${plantVerdict === "accepted" ? "✓ Accepted — Approved for Production" : "✗ Not Good — Returned for Revision"}</td></tr>${plantRemarks ? `<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table><p>${plantVerdict === "accepted" ? "The part has been approved for production. Please proceed with the next steps." : "The part has been returned for revision. Please coordinate with the supplier for corrections."}</p><p style="color:#64748b;font-size:12px">Amber Enterprises Plant Team</p>`}
                     />
                   ))}
-                  <PushSentBadge to="R&D User" />
-                  <PushSentBadge to="R&D Head" />
+                  <PushSentBadge to={DEFAULT_RND_CONTACT.name} />
                   <PushSentBadge to={npd.spoc} />
                 </div>
               )}
@@ -2011,9 +2037,176 @@ export default function NpdDetailView() {
         </div>
       )}
 
+      {/* ═══════════════════ STAGE 8 — NPD SUMMARY & CLOSURE ═══════════════════ */}
+      {activeStage >= 8 && (
+        <Card className="border-blue-300 shadow-sm print:shadow-none">
+          <CardHeader className="bg-blue-50 border-b border-blue-200 pb-3">
+            <CardTitle className="text-blue-900 flex items-center gap-2 text-base">
+              <FileText className="w-5 h-5" /> Stage 8 — NPD Summary &amp; Closure
+            </CardTitle>
+            <p className="text-xs text-blue-700 mt-0.5">Final summary of this NPD. Download or share this report.</p>
+          </CardHeader>
+          <CardContent className="pt-5 space-y-6">
+
+            {/* Summary grid */}
+            <div id="npd-summary-print" className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Part Number</p>
+                  <p className="text-sm font-mono font-bold text-blue-800 mt-0.5">{assignedPartNumber || "—"}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Item</p>
+                  <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{npd.itemName}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supplier</p>
+                  <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : "—"}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Category</p>
+                  <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{npd.itemCategory}</p>
+                </div>
+              </div>
+
+              {/* Plant verdict */}
+              {plantVerdict && (
+                <div className={`rounded-xl border p-4 flex items-center gap-3 ${plantVerdict === "accepted" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                  {plantVerdict === "accepted"
+                    ? <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                    : <XCircle className="w-5 h-5 text-red-500 shrink-0" />}
+                  <div>
+                    <p className={`text-sm font-bold ${plantVerdict === "accepted" ? "text-emerald-800" : "text-red-800"}`}>
+                      Plant Verdict: {plantVerdict === "accepted" ? "Accepted — Approved for Production" : "Not Good — Returned for Revision"}
+                    </p>
+                    {plantRemarks && <p className="text-xs mt-0.5 text-slate-500 italic">{plantRemarks}</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* TAT status */}
+              <div className={`rounded-xl border p-3 flex items-center gap-2 text-sm ${
+                npd.tatHealth === "green" ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : npd.tatHealth === "amber" ? "bg-amber-50 border-amber-200 text-amber-800"
+                : "bg-red-50 border-red-200 text-red-800"
+              }`}>
+                <Clock className="w-4 h-4 shrink-0" />
+                <span className="font-semibold">
+                  TAT: {npd.tatHealth === "black" || npd.tatHealth === "red" ? "Overdue" : `${npd.tatDaysRemaining}d remaining`} of {npd.totalTat}d
+                </span>
+              </div>
+
+              {/* Test results table */}
+              {(() => {
+                const tests = getTestsByCategory(npd.itemCategory)
+                if (tests.length === 0) return null
+                return (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between">
+                      <span className="text-sm font-bold text-white">R&amp;D Test Results — {npd.itemCategory}</span>
+                      <span className="text-xs text-slate-400">{tests.length} tests</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="text-left px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Test</th>
+                            <th className="text-left px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Type</th>
+                            <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unit</th>
+                            <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Expected</th>
+                            <th className="text-center px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Result</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tests.map((t, i) => (
+                            <tr key={t.testName} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                              <td className="px-4 py-2 font-medium text-slate-800">{t.testName}</td>
+                              <td className="px-3 py-2 text-slate-500 text-xs">{t.testType}</td>
+                              <td className="px-3 py-2 text-center text-xs text-slate-500">{t.unit}</td>
+                              <td className="px-3 py-2 text-center text-xs text-slate-500">{t.expectedRange ?? "—"}</td>
+                              <td className="px-3 py-2 text-center font-semibold text-slate-800">{testResults[t.testName] ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Actions row */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-slate-100">
+              {/* Download Report */}
+              <Button
+                className="bg-blue-900 hover:bg-blue-800 text-white"
+                onClick={() => window.print()}
+              >
+                <Download className="w-4 h-4 mr-2" /> Download Report
+              </Button>
+
+              {/* Fetch Part Details from AICM */}
+              <Button
+                variant="outline"
+                className="border-slate-300 text-slate-700 hover:bg-slate-50"
+                disabled={aicmLoading}
+                onClick={() => {
+                  if (aicmFetched) {
+                    setAicmPanelOpen(v => !v)
+                    return
+                  }
+                  setAicmLoading(true)
+                  setTimeout(() => {
+                    setAicmLoading(false)
+                    setAicmFetched(true)
+                    setAicmPanelOpen(true)
+                    const all: Record<string, boolean> = JSON.parse(localStorage.getItem(AICM_FETCH_KEY) ?? "{}")
+                    all[npdId] = true
+                    localStorage.setItem(AICM_FETCH_KEY, JSON.stringify(all))
+                  }, 1000)
+                }}
+              >
+                {aicmLoading ? (
+                  <><span className="w-4 h-4 mr-2 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin inline-block" /> Fetching…</>
+                ) : (
+                  <><Star className="w-4 h-4 mr-2" /> Fetch Part Details from AICM</>
+                )}
+              </Button>
+            </div>
+
+            {/* AICM inline panel */}
+            {aicmPanelOpen && aicmFetched && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                    <Star className="w-4 h-4" /> AICM Part Record
+                  </p>
+                  <button onClick={() => setAicmPanelOpen(false)} className="text-xs text-slate-400 hover:text-slate-600">Close</button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-white rounded-lg border border-blue-100 px-3 py-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Part Number</p>
+                    <p className="text-sm font-mono font-bold text-blue-800 mt-0.5">{assignedPartNumber || "—"}</p>
+                  </div>
+                  <div className="bg-white rounded-lg border border-blue-100 px-3 py-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Part Name</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{npd.itemName}</p>
+                  </div>
+                  <div className="bg-white rounded-lg border border-blue-100 px-3 py-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unit Cost (₹)</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">₹{npd.cost ?? 850}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </CardContent>
+        </Card>
+      )}
+
       {/* ═══════════════════ SOURCING SECTION ═══════════════════ */}
       {isSpocOrSourcing && (
-        <div className="space-y-6">
+        <div className="flex flex-col-reverse gap-6">
           {currentRole === "super_admin" && (
             <div className="flex items-center gap-2">
               <span className="bg-emerald-700 text-white text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full">Sourcing Team</span>
@@ -2021,14 +2214,23 @@ export default function NpdDetailView() {
           )}
 
           {/* ── Section 1: Supplier Sourcing & Quotations ──── */}
-          {activeStage < 3 ? (
+          {activeStage < 2 ? (
             <Card>
               <CardContent className="py-8 text-center text-slate-400">
                 <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-medium">Waiting for R&amp;D to release to Sourcing</p>
-                <p className="text-xs mt-1">R&amp;D Head must approve Stage 2 to unlock this section.</p>
+                <p className="text-sm font-medium">Waiting for NPD request to be initiated</p>
+                <p className="text-xs mt-1">This section unlocks once the NPD reaches Stage 2.</p>
               </CardContent>
             </Card>
+          ) : activeStage >= 7 ? (
+            <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-emerald-800">Sourcing Complete — {npd.supplier}</p>
+                <p className="text-xs text-emerald-700 mt-0.5">Enquiry dispatched · Quotation approved · Supplier locked in</p>
+              </div>
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-full shrink-0">Stage 2 ✓</span>
+            </div>
           ) : (
             <div className="space-y-6">
               {/* === SOURCING WORKFLOW === */}
@@ -2210,6 +2412,14 @@ export default function NpdDetailView() {
                       <Send className="w-4 h-4 mr-2" /> Send Bulk Enquiry ({selectedVendors.size})
                     </Button>
                   </div>
+                ) : activeStage >= 3 ? (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-5 py-4 flex items-center gap-3">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="font-bold text-emerald-900">Enquiry Dispatched — {sentVendors.length} Vendor{sentVendors.length !== 1 ? "s" : ""}</p>
+                      <p className="text-xs text-emerald-700 mt-0.5">Supplier locked. Links and email drafts are hidden to avoid confusion.</p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5 space-y-4">
                     <div className="flex items-center gap-2">
@@ -2367,8 +2577,8 @@ export default function NpdDetailView() {
                         </div>
                         {/* Status badge */}
                         {isNotFeasible ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full">
-                            <XCircle className="w-3.5 h-3.5" /> Not Feasible
+                          <span className="inline-flex items-center gap-1 text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
+                            <MessageSquare className="w-3.5 h-3.5" /> {live?.rndReply ? "RND Replied — Awaiting Re-Assessment" : "Query Raised"}
                           </span>
                         ) : approval === "approved" ? (
                           <span className="inline-flex items-center gap-1 text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
@@ -2396,7 +2606,7 @@ export default function NpdDetailView() {
 
                     {isNotFeasible ? (
                       <CardContent className="pt-4 pb-4 space-y-3">
-                        <p className="text-sm text-slate-500 italic">Vendor marked this requirement as not feasible.</p>
+                        <p className="text-sm text-slate-500 italic">Vendor has raised a clarification query regarding this requirement.</p>
                         {live?.query && (
                           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                             <p className="text-xs font-bold text-amber-800 mb-1 flex items-center gap-1.5">
@@ -2404,6 +2614,25 @@ export default function NpdDetailView() {
                             </p>
                             <p className="text-sm text-amber-900 italic">&ldquo;{live.query}&rdquo;</p>
                             <p className="text-[10px] text-amber-600 mt-1.5">Sent to R&amp;D Owner for review · {live.submittedAt}</p>
+                          </div>
+                        )}
+                        {live?.rndReply && (
+                          <div className="space-y-2">
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                              <p className="text-xs font-bold text-emerald-800 mb-1 flex items-center gap-1.5">
+                                <CheckCircle className="w-3.5 h-3.5" /> R&amp;D Replied — Awaiting Supplier Re-Assessment
+                              </p>
+                              <p className="text-sm text-emerald-900">{live.rndReply}</p>
+                              {live.rndReplyDoc && <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1"><FileText className="w-3 h-3" />{live.rndReplyDoc}</p>}
+                            </div>
+                            <EmailCard
+                              to={v.vendorName}
+                              subject={`R&D Clarification — ${npdId}: ${npd.itemName}`}
+                              body={(() => {
+                                const portalUrl = `${baseUrl}/supplier/quote/${npdId}?vendor=${encodeURIComponent(v.vendorName)}`
+                                return `<p>Dear <strong>${v.vendorName}</strong>,</p><p>Thank you for your query regarding <strong>${npd.itemName}</strong> (${npdId}). Our R&amp;D team has reviewed it and provided the following clarification:</p><blockquote style="border-left:3px solid #1e3a5f;margin:12px 0;padding:8px 14px;background:#f8fafc;color:#1e293b;font-style:italic">${live.query}</blockquote><p><strong>R&amp;D Response:</strong><br/>${live.rndReply}</p>${live.rndReplyDoc ? `<p style="font-size:12px;color:#64748b">Attached document: ${live.rndReplyDoc}</p>` : ""}<p>Based on this clarification, kindly re-assess your feasibility and submit your updated response using the link below.</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Re-Assess &amp; Submit Response →</a></div><p>Regards,<br/><strong>${npd.spoc}</strong><br/>Amber Enterprises Sourcing Team</p>`
+                              })()}
+                            />
                           </div>
                         )}
                       </CardContent>
@@ -2588,7 +2817,17 @@ export default function NpdDetailView() {
           )}
 
           {/* ── Section 2: Supplier Dispatch ──────────────────────────────────── */}
-          {activeStage >= 4 && (
+          {activeStage >= 3 && activeStage >= 7 && dispatchInfo && (
+            <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-emerald-800">Dispatch Confirmed — {dispatchInfo.vendorName}</p>
+                <p className="text-xs text-emerald-700 mt-0.5">Dispatched on {dispatchInfo.dispatchDate} · Proof of dispatch submitted</p>
+              </div>
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-full shrink-0">Stage 3 ✓</span>
+            </div>
+          )}
+          {activeStage >= 3 && activeStage < 7 && (
             <Card className="border-orange-300 shadow-sm">
               <CardHeader className="bg-orange-50 border-b border-orange-200 pb-3">
                 <CardTitle className="text-orange-900 flex items-center gap-2 text-base">
@@ -2607,11 +2846,11 @@ export default function NpdDetailView() {
                         <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Supplier Submitted Dispatch Details
                       </p>
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                        deliveryHeadApproved
+                        deliverySubmitted
                           ? "bg-emerald-100 text-emerald-700"
                           : "bg-amber-100 text-amber-700"
                       }`}>
-                        {deliveryHeadApproved ? "Delivery Accepted" : "Pending RND Acceptance"}
+                        {deliverySubmitted ? "Delivery Accepted" : "Pending RND Acceptance"}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-xs">
@@ -2628,7 +2867,7 @@ export default function NpdDetailView() {
                         <p className="text-slate-800 font-semibold mt-0.5">{dispatchInfo.submittedAt}</p>
                       </div>
                       <div>
-                        <p className="text-slate-400 uppercase tracking-wider font-bold">Compliance Docs</p>
+                        <p className="text-slate-400 uppercase tracking-wider font-bold">Proof of Dispatch</p>
                         <p className="text-slate-800 font-semibold mt-0.5">{dispatchInfo.docs.length} document{dispatchInfo.docs.length !== 1 ? "s" : ""}</p>
                       </div>
                     </div>
@@ -2647,7 +2886,7 @@ export default function NpdDetailView() {
                     <p className="text-xs text-slate-400 italic flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5" /> Awaiting dispatch submission from {npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? "supplier"}
                     </p>
-                    {(() => {
+                    {activeStage <= 3 && (() => {
                       const vendor = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
                       const dispatchUrl = `${baseUrl}/supplier/dispatch/${npdId}${vendor ? `?vendor=${encodeURIComponent(vendor)}` : ""}`
                       return (
@@ -2674,7 +2913,7 @@ export default function NpdDetailView() {
                             <EmailCard
                               to={vendor}
                               subject={`Dispatch Confirmation Required — ${npdId}`}
-                              body={`<p>Dear <strong>${vendor}</strong>,</p><p>Today is your dispatch date for <strong>${npd.itemName}</strong> (${npdId}). Please upload the required compliance documents and confirm your dispatch details using the button below.</p><div style="margin:16px 0;"><a href="${dispatchUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Open Dispatch Portal →</a></div><p>Amber Enterprises Sourcing Team</p>`}
+                              body={`<p>Dear <strong>${vendor}</strong>,</p><p>Today is your dispatch date for <strong>${npd.itemName}</strong> (${npdId}). Please upload your proof of dispatch and confirm your dispatch details using the button below.</p><div style="margin:16px 0;"><a href="${dispatchUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Open Dispatch Portal →</a></div><p>Amber Enterprises Sourcing Team</p>`}
                             />
                           )}
                         </>
@@ -2683,31 +2922,33 @@ export default function NpdDetailView() {
                   </div>
                 )}
 
-                <div className="pt-1 border-t border-orange-100">
-                  <p className="text-[10px] text-slate-400 mb-2">Manual override (if supplier did not use portal):</p>
-                  {!defenceAdvanced ? (
-                    <Button
-                      className="bg-orange-600 hover:bg-orange-700 text-white text-xs"
-                      onClick={() => {
-                        setDefenceAdvanced(true)
-                        setActiveStage(5)
-                        updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
-                      }}
-                    >
-                      <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched &amp; Advance to RND Evaluation
-                    </Button>
-                  ) : (
-                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4" /> Dispatched — Advanced to RND Evaluation
-                    </span>
-                  )}
-                </div>
+                {!dispatchInfo && (
+                  <div className="pt-1 border-t border-orange-100">
+                    <p className="text-[10px] text-slate-400 mb-2">Manual override (if supplier did not use portal):</p>
+                    {!defenceAdvanced ? (
+                      <Button
+                        className="bg-orange-600 hover:bg-orange-700 text-white text-xs"
+                        onClick={() => {
+                          setDefenceAdvanced(true)
+                          setActiveStage(4)
+                          updateNPD(npdId, { stage: 4, stageName: NPD_STAGES[3] })
+                        }}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched &amp; Advance to RND Evaluation
+                      </Button>
+                    ) : (
+                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4" /> Dispatched — Advanced to RND Evaluation
+                      </span>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
-          {/* ── Section 2b: Plant Delivery (stage 8) ──────────────────────────── */}
-          {activeStage >= 8 && (() => {
+          {/* ── Section 2b: Plant Delivery (stage 7) ──────────────────────────── */}
+          {activeStage >= 7 && activeStage < 8 && (() => {
             const supplier = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
             const portalUrl = supplier ? `${baseUrl}/supplier/plant-delivery/${npdId}?vendor=${encodeURIComponent(supplier)}` : ""
             return (
@@ -2719,146 +2960,121 @@ export default function NpdDetailView() {
                   <p className="text-xs text-orange-700 mt-0.5">Part No: <strong>{assignedPartNumber || "—"}</strong> · Send the portal link to the supplier for delivery confirmation</p>
                 </CardHeader>
                 <CardContent className="pt-5 space-y-3">
-                  {!plantSupplierSubmitted ? (
-                    <>
-                      <p className="text-sm text-slate-600">
-                        Share the link below with <strong>{supplier || "the locked supplier"}</strong>. They will confirm their delivery date and sample quantity.
-                      </p>
-                      {portalUrl ? (
-                        <>
-                          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2.5">
-                            <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span className="text-xs text-blue-700 font-mono truncate flex-1">{portalUrl}</span>
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(portalUrl); setCopiedVendor("plant_sourcing_link"); setTimeout(() => setCopiedVendor(null), 2000) }}
-                              className="shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
-                            >
-                              {copiedVendor === "plant_sourcing_link" ? "Copied!" : <><Copy className="w-3 h-3" /> Copy</>}
-                            </button>
-                            <a href={portalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                          <EmailCard
-                            to={supplier}
-                            subject={`Plant Delivery Request — ${npdId}`}
-                            body={`<p>Dear <strong>${supplier}</strong>,</p><p>Part No. <strong>${assignedPartNumber}</strong> has been assigned for <strong>${npd.itemName}</strong>.</p><p>Please confirm your delivery date and number of samples using the button below.</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Open Delivery Portal →</a></div><p>Amber Enterprises Sourcing Team</p>`}
-                          />
-                        </>
-                      ) : (
-                        <p className="text-xs text-amber-600 italic">Lock a supplier first to generate the portal link.</p>
-                      )}
-                      <p className="text-[10px] text-slate-400">⏳ Awaiting supplier response</p>
-                    </>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 space-y-1.5">
-                        <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-                          <CheckCircle className="w-3.5 h-3.5" /> Supplier Confirmed Delivery
-                        </p>
-                        <div className="flex gap-6 text-sm text-emerald-700">
-                          <span>Date: <strong>{plantDeliveryDate}</strong></span>
-                          <span>Qty: <strong>{plantDeliveryQty} pcs</strong></span>
-                        </div>
-                        {plantVerdict && (
-                          <p className={`text-xs font-semibold mt-1 ${plantVerdict === "accepted" ? "text-emerald-700" : "text-red-700"}`}>
-                            {plantVerdict === "accepted" ? "✓ Plant user accepted the part" : "✗ Plant user rejected — revision required"}
+                  {/* Step 1: Sourcing fills delivery details */}
+                  {!deliveryDetailsSubmitted ? (
+                        <div className="space-y-4">
+                          <p className="text-sm text-slate-600">
+                            Fill in the delivery location and required sample quantity. The supplier will then receive a form to confirm their delivery date.
                           </p>
-                        )}
-                      </div>
-                      {!plantVerdict && <PushSentBadge to="Plant User" />}
-                      {plantVerdict && (
-                        <>
-                          {["R&D User", "R&D Head", npd.spoc].map(recipient => (
-                            <EmailCard
-                              key={recipient}
-                              to={recipient}
-                              subject={`[${plantVerdict === "accepted" ? "✓ Accepted" : "✗ Not Good"}] Plant Testing Verdict — ${npdId}`}
-                              body={`<p>Dear <strong>${recipient}</strong>,</p><p>The plant testing verdict for the following NPD has been submitted by the Plant Team.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:${plantVerdict === "accepted" ? "#059669" : "#dc2626"}">${plantVerdict === "accepted" ? "✓ Accepted — Approved for Production" : "✗ Not Good — Returned for Revision"}</td></tr>${plantRemarks ? `<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table><p>${plantVerdict === "accepted" ? "The part has been approved for production. Please proceed with the next steps." : "The part has been returned for revision. Please coordinate with the supplier for corrections."}</p><p style="color:#64748b;font-size:12px">Amber Enterprises Plant Team</p>`}
-                            />
-                          ))}
-                          <PushSentBadge to="R&D User" />
-                          <PushSentBadge to="R&D Head" />
-                          <PushSentBadge to={npd.spoc} />
-                        </>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-semibold text-slate-700">Delivery Location <span className="text-red-500">*</span></label>
+                              <select
+                                value={deliveryLocation}
+                                onChange={e => setDeliveryLocation(e.target.value)}
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                              >
+                                <option value="">Select plant…</option>
+                                {AMBER_PLANTS.map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-semibold text-slate-700">Required Sample Qty (pcs) <span className="text-red-500">*</span></label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={deliveryReqQty}
+                                onChange={e => setDeliveryReqQty(e.target.value)}
+                                placeholder="e.g. 5"
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            className="bg-orange-600 hover:bg-orange-700 text-white"
+                            disabled={!deliveryLocation || !deliveryReqQty}
+                            onClick={() => {
+                              const details = { location: deliveryLocation, requiredQty: deliveryReqQty, setAt: new Date().toLocaleString("en-IN") }
+                              const raw = localStorage.getItem(DELIVERY_DETAILS_KEY)
+                              const all: Record<string, typeof details> = raw ? JSON.parse(raw) : {}
+                              all[npdId] = details
+                              localStorage.setItem(DELIVERY_DETAILS_KEY, JSON.stringify(all))
+                              setDeliveryDetails(details)
+                              setDeliveryDetailsSubmitted(true)
+                            }}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-2" /> Save &amp; Send to Supplier
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                            <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Delivery Details Set</p>
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-blue-700">
+                              <span><span className="text-slate-400">Location:</span> <strong>{deliveryDetails?.location}</strong></span>
+                              <span><span className="text-slate-400">Required Qty:</span> <strong>{deliveryDetails?.requiredQty} pcs</strong></span>
+                              <span><span className="text-slate-400">Part No.:</span> <strong className="font-mono">{assignedPartNumber}</strong></span>
+                            </div>
+                          </div>
+                          {!plantSupplierSubmitted ? (
+                            <>
+                              {portalUrl && (
+                                <>
+                                  <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2.5">
+                                    <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                    <span className="text-xs text-blue-700 font-mono truncate flex-1">{portalUrl}</span>
+                                    <button
+                                      onClick={() => { navigator.clipboard.writeText(portalUrl); setCopiedVendor("plant_sourcing_link"); setTimeout(() => setCopiedVendor(null), 2000) }}
+                                      className="shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+                                    >
+                                      {copiedVendor === "plant_sourcing_link" ? "Copied!" : <><Copy className="w-3 h-3" /> Copy</>}
+                                    </button>
+                                    <a href={portalUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-slate-400 hover:text-blue-700">
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+                                  </div>
+                                  <EmailCard
+                                    to={supplier}
+                                    subject={`Delivery Date Request — ${npdId}: ${npd.itemName}`}
+                                    body={`<p>Dear <strong>${supplier}</strong>,</p><p>R&amp;D testing for <strong>${npd.itemName}</strong> has been approved. We require sample delivery at our plant at the details below.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#1e3a5f"><td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px;color:#fff;letter-spacing:0.04em">Part No. ${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Delivery Location</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${deliveryLocation}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Required Qty</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${deliveryReqQty} pcs</td></tr></table><p>Please confirm your delivery date using the button below:</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Confirm Delivery Date →</a></div><p style="color:#64748b;font-size:12px">Amber Enterprises Sourcing Team · ${npd.spoc}</p>`}
+                                  />
+                                </>
+                              )}
+                              <p className="text-[10px] text-slate-400">⏳ Awaiting supplier delivery date confirmation</p>
+                            </>
+                          ) : (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 space-y-1.5">
+                              <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                                <CheckCircle className="w-3.5 h-3.5" /> Supplier Confirmed Delivery Date
+                              </p>
+                              <div className="flex gap-6 text-sm text-emerald-700">
+                                <span>Date: <strong>{plantDeliveryDate}</strong></span>
+                                <span>Location: <strong>{deliveryDetails?.location}</strong></span>
+                              </div>
+                              {plantVerdict && (
+                                <p className={`text-xs font-semibold mt-1 ${plantVerdict === "accepted" ? "text-emerald-700" : "text-red-700"}`}>
+                                  {plantVerdict === "accepted" ? "✓ Plant user accepted the part" : "✗ Plant user rejected — revision required"}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {!plantVerdict && plantSupplierSubmitted && <PushSentBadge to="Plant User" />}
+                          {plantVerdict && (
+                            <>
+                              <EmailCard
+                                to={npd.spoc}
+                                subject={`[${plantVerdict === "accepted" ? "✓ Accepted" : "✗ Not Good"}] Plant Testing Verdict — ${npdId}`}
+                                body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The plant testing verdict for the following NPD has been submitted.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#1e3a5f"><td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px;color:#fff;letter-spacing:0.04em">Part No. ${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:${plantVerdict === "accepted" ? "#059669" : "#dc2626"}">${plantVerdict === "accepted" ? "✓ Accepted — Approved for Production" : "✗ Not Good — Returned for Revision"}</td></tr>${plantRemarks ? `<tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table><p style="color:#64748b;font-size:12px">Amber Enterprises Plant Team</p>`}
+                              />
+                              <PushSentBadge to={npd.spoc} />
+                            </>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             )
           })()}
-
-          {/* ── Section 3: Parts & Supplier Tracking ──────────────────────────── */}
-          <Card className="shadow-sm">
-            <CardHeader className="bg-slate-50 border-b border-slate-100 pb-3">
-              <CardTitle className="text-base">Parts &amp; Supplier Tracking</CardTitle>
-              <CardDescription>Consolidated timeline view for parts under this NPD project, clubbed by supplier allocation.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <table className="w-full text-sm text-left align-middle border-collapse">
-                <thead className="bg-white text-slate-500 text-xs uppercase border-b border-slate-200">
-                  <tr>
-                    <th className="px-6 py-4 font-semibold">Part Number</th>
-                    <th className="px-6 py-4 font-semibold">Vendors</th>
-                    <th className="px-6 py-4 font-semibold">Tentative ETA</th>
-                    <th className="px-6 py-4 font-semibold text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  <tr className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-5 font-bold text-slate-900 w-1/4 align-top">PRT-9921-A</td>
-                    <td className="px-6 py-5 align-top">
-                      <ul className="space-y-1 list-disc pl-4 text-slate-700">
-                        <li>{npd.supplier}</li>
-                        <li>National Metalfabs</li>
-                      </ul>
-                    </td>
-                    <td className="px-6 py-5 align-top"><span className="font-semibold text-slate-700">10 June 2026</span></td>
-                    <td className="px-6 py-5 align-top text-right">
-                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm">
-                        <CheckCircle2 className="w-3 h-3 mr-1" /> On Time
-                      </Badge>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-5 font-bold text-slate-900 w-1/4 align-top">PRT-9922-B</td>
-                    <td className="px-6 py-5 align-top">
-                      <ul className="space-y-1 list-disc pl-4 text-slate-700"><li>Supreme Plastics</li></ul>
-                    </td>
-                    <td className="px-6 py-5 align-top">
-                      <span className="line-through text-slate-400 text-xs mr-2">10 June 2026</span><br />
-                      <span className="text-amber-700 font-bold mt-1 inline-block">16 June 2026</span>
-                    </td>
-                    <td className="px-6 py-5 align-top text-right">
-                      <Badge className="bg-amber-100 text-amber-800 border-amber-200 shadow-sm mt-3">
-                        <AlertCircle className="w-3 h-3 mr-1" /> Approval Pending
-                      </Badge>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-5 font-bold text-slate-900 w-1/4 align-top">PRT-9923-C</td>
-                    <td className="px-6 py-5 align-top">
-                      <ul className="space-y-1 list-disc pl-4 text-slate-700">
-                        <li>{npd.supplier}</li>
-                        <li>Alpha Component Systems</li>
-                      </ul>
-                    </td>
-                    <td className="px-6 py-5 align-top">
-                      <span className="line-through text-slate-400 text-xs mr-2">12 June 2026</span><br />
-                      <span className="text-red-700 font-bold mt-1 inline-block">22 June 2026</span>
-                    </td>
-                    <td className="px-6 py-5 align-top text-right">
-                      <Badge className="bg-red-100 text-red-800 border-red-200 shadow-sm mt-3">
-                        <XCircle className="w-3 h-3 mr-1" /> Delayed (Rejected)
-                      </Badge>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-
 
         </div>
       )}

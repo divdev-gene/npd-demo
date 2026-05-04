@@ -4,15 +4,8 @@ import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { mockNPDs, type NPDRecord } from "@/lib/mockData"
 import {
-  CheckCircle, CheckCircle2, UploadCloud, Truck, UserCircle, AlertTriangle,
+  CheckCircle, CheckCircle2, UploadCloud, Truck, UserCircle,
 } from "lucide-react"
-
-const DISPATCH_DOCS = [
-  { id: "doc_rohs",    label: "Declaration for RoHS Compliance",     hint: "Format V1 · Excel (.xlsx)" },
-  { id: "doc_packing", label: "Packing Standard Declaration",        hint: "PowerPoint (.pptx)" },
-  { id: "doc_raw",     label: "Declaration for Raw Material & Part", hint: "Excel (.xlsx)" },
-  { id: "doc_fpa",     label: "FPA Format",                          hint: "Excel (.xlsx)" },
-]
 
 const DISPATCH_SUBMITTED_KEY = "supplier_dispatch_submitted_v1"
 
@@ -20,10 +13,10 @@ export default function SupplierDispatchPage() {
   const params  = useParams()
   const npdId   = params.id as string
 
-  const [npd,         setNpd]        = useState<NPDRecord | null>(null)
-  const [vendorName,  setVendorName] = useState("")
-  const [uploadedDocs, setUploadedDocs] = useState<Record<string, string>>({})
-  const [submitted,   setSubmitted]  = useState(false)
+  const [npd,          setNpd]          = useState<NPDRecord | null>(null)
+  const [vendorName,   setVendorName]   = useState("")
+  const [proofDoc,     setProofDoc]     = useState("")
+  const [submitted,    setSubmitted]    = useState(false)
   const [dispatchDate, setDispatchDate] = useState("")
 
   useEffect(() => {
@@ -40,20 +33,10 @@ export default function SupplierDispatchPage() {
     tomorrow.setDate(tomorrow.getDate() + 1)
     setDispatchDate(tomorrow.toISOString().split("T")[0])
 
-    // Check if already submitted
     const raw = localStorage.getItem(DISPATCH_SUBMITTED_KEY)
     const all: Record<string, boolean> = raw ? JSON.parse(raw) : {}
     if (all[npdId]) setSubmitted(true)
   }, [npdId])
-
-  const toggleDoc = (docId: string) =>
-    setUploadedDocs(prev =>
-      prev[docId]
-        ? (() => { const n = { ...prev }; delete n[docId]; return n })()
-        : { ...prev, [docId]: `${docId}_${npdId}.xlsx` }
-    )
-
-  const allUploaded = DISPATCH_DOCS.every(d => uploadedDocs[d.id])
 
   const handleDispatch = () => {
     const raw = localStorage.getItem(DISPATCH_SUBMITTED_KEY)
@@ -62,7 +45,7 @@ export default function SupplierDispatchPage() {
     all[npdId] = {
       vendorName,
       dispatchDate,
-      docs: DISPATCH_DOCS.map(d => uploadedDocs[d.id]),
+      docs: [proofDoc],
       submittedAt: new Date().toLocaleString("en-IN"),
     }
     localStorage.setItem(DISPATCH_SUBMITTED_KEY, JSON.stringify(all))
@@ -87,8 +70,8 @@ export default function SupplierDispatchPage() {
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Dispatch Confirmed</h2>
           <p className="text-slate-500 text-sm">
             {vendorName && <><strong>{vendorName}</strong>'s </>}
-            dispatch documents for <strong>{npdId}</strong> have been submitted.
-            The Sourcing SPOC will be notified to advance the request.
+            dispatch details for <strong>{npdId}</strong> have been submitted.
+            The Sourcing SPOC will be notified.
           </p>
           <p className="text-xs text-slate-400 mt-4">You may close this window.</p>
         </div>
@@ -141,49 +124,37 @@ export default function SupplierDispatchPage() {
           </div>
         </div>
 
-        {/* Instructions */}
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-orange-900">Action Required — Upload Dispatch Documents</p>
-            <p className="text-sm text-orange-700 mt-1">
-              Please upload all four compliance documents listed below and confirm your dispatch date before submitting.
-              Your shipment cannot be processed until all documents are received.
-            </p>
-          </div>
-        </div>
-
-        {/* Document upload */}
+        {/* Proof of Dispatch upload */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
           <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
-            <UploadCloud className="w-4 h-4 text-orange-500" /> Compliance Documents
+            <UploadCloud className="w-4 h-4 text-orange-500" /> Proof of Dispatch
           </h2>
-          <div className="space-y-3">
-            {DISPATCH_DOCS.map((doc, i) => (
-              <div key={doc.id} className="flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                <span className="text-xs font-bold text-slate-400 w-5 shrink-0">{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800">{doc.label}</p>
-                  <p className="text-xs text-slate-400">{doc.hint}</p>
+          <p className="text-sm text-slate-500">
+            Upload one document confirming dispatch — a challan, receipt, or shipping confirmation.
+          </p>
+          <div
+            onClick={() => setProofDoc(prev => prev ? "" : `dispatch_proof_${npdId}.pdf`)}
+            className={`rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
+              proofDoc
+                ? "border-emerald-400 bg-emerald-50"
+                : "border-slate-300 hover:border-orange-400 hover:bg-orange-50/40"
+            }`}
+          >
+            {proofDoc ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-emerald-600" />
                 </div>
-                <div
-                  onClick={() => toggleDoc(doc.id)}
-                  className={`shrink-0 cursor-pointer rounded-lg border-2 border-dashed px-4 py-2 text-center transition-colors select-none w-40 ${
-                    uploadedDocs[doc.id]
-                      ? "border-emerald-400 bg-emerald-50"
-                      : "border-slate-300 hover:border-orange-400 hover:bg-orange-50/40"
-                  }`}
-                >
-                  {uploadedDocs[doc.id] ? (
-                    <span className="flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-700">
-                      <CheckCircle className="w-3.5 h-3.5" /> Uploaded
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-500 font-medium">Click to upload</span>
-                  )}
-                </div>
+                <p className="text-sm font-semibold text-emerald-700">{proofDoc}</p>
+                <p className="text-xs text-emerald-500">Click to remove</p>
               </div>
-            ))}
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <UploadCloud className="w-10 h-10 text-slate-300 mb-1" />
+                <p className="text-sm font-semibold text-slate-600">Click to upload</p>
+                <p className="text-xs text-slate-400">Challan / Receipt / Shipping confirmation · PDF, JPG, PNG</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -204,7 +175,7 @@ export default function SupplierDispatchPage() {
             />
           </div>
 
-          {allUploaded ? (
+          {proofDoc ? (
             <button
               onClick={handleDispatch}
               className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl px-6 py-3 transition-colors flex items-center justify-center gap-2"
@@ -213,18 +184,13 @@ export default function SupplierDispatchPage() {
             </button>
           ) : (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-              <p className="text-sm text-slate-400">
-                Upload all {DISPATCH_DOCS.length} documents to enable dispatch.&nbsp;
-                <span className="font-semibold text-slate-600">
-                  {Object.keys(uploadedDocs).length}/{DISPATCH_DOCS.length} uploaded
-                </span>
-              </p>
+              <p className="text-sm text-slate-400">Upload proof of dispatch to confirm.</p>
             </div>
           )}
 
-          {allUploaded && (
+          {proofDoc && (
             <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5 text-xs font-semibold text-emerald-800">
-              <CheckCircle2 className="w-4 h-4" /> All documents ready — confirm dispatch above.
+              <CheckCircle2 className="w-4 h-4" /> Document ready — confirm dispatch above.
             </div>
           )}
         </div>

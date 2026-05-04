@@ -14,7 +14,7 @@ import {
   Link2, User
 } from "lucide-react"
 import { useNPDs } from "@/lib/npdContext"
-import { getStageName, REJECTED_PARTS_KEY } from "@/lib/mockData"
+import { getStageName, REJECTED_PARTS_KEY, DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD } from "@/lib/mockData"
 
 const WORK_TYPES = [
   { id: "NCD",         title: "New Component Development", short: "NCD",   desc: "Brand new component. Full end-to-end lifecycle.", icon: Wrench,     tat: 45, stages: 11 },
@@ -108,8 +108,8 @@ export default function NewRequestWizard() {
       productLine: productLine || "Unspecified",
       typeOfWork: workTypeLabel,
       rAndDDivision: "Rajpura RAC",
-      stage: 3,
-      stageName: getStageName(3, workTypeLabel),
+      stage: (workTypeLabel === "Engineering Change Notice (ECN)" || workTypeLabel === "Compliance / Regulatory") ? 3 : 2,
+      stageName: getStageName((workTypeLabel === "Engineering Change Notice (ECN)" || workTypeLabel === "Compliance / Regulatory") ? 3 : 2, workTypeLabel),
       tatHealth: "green",
       tatDaysRemaining: tat,
       totalTat: tat,
@@ -476,7 +476,7 @@ export default function NewRequestWizard() {
             <span className="text-slate-400">Subject:</span> <span className="font-semibold">ACTION REQUIRED — New {displayWorkTypeLabel} for {commodity || "Component"}</span>
           </div>
 
-          <p className="text-slate-600">Dear Sourcing Team,</p>
+          <p className="text-slate-600">Dear {SPOC_NAME_MAP[commodity] || "Sourcing Team"},</p>
           <p className="text-slate-600">A new <strong className="text-slate-800">{displayWorkTypeLabel}</strong> project has been initiated by R&D requiring immediate sourcing allocation.</p>
 
           <div className="rounded-md bg-slate-50 border border-slate-100 p-4 space-y-1 text-xs">
@@ -488,6 +488,8 @@ export default function NewRequestWizard() {
           </div>
 
           <p className="text-slate-600 text-xs">Please log in to the Amber NPD portal to initiate Supplier ASR Sync and Bulk RFQ dispatch.</p>
+
+          <p className="text-slate-600 text-xs">Regards,<br /><strong>{pocRole === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name}</strong></p>
         </div>
       </div>
 

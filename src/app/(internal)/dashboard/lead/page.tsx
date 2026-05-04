@@ -19,26 +19,36 @@ import {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const STAGE_LABELS = [
-  "Request Initiation", "R&D Internal Review", "NPD Sourcing Allocation",
-  "Supplier Defense", "Sample Submission", "Sample Receipt / MRN",
-  "R&D Evaluation", "FPA (First Part Approval)", "Sample Cost Finalization", "PP Lot Pricing",
+  "Request Initialisation",
+  "Supplier Sourcing & Quotation",
+  "Supplier Dispatch",
+  "RND Evaluation",
+  "RND Testing & TQR",
+  "RND Approval",
+  "Plant Delivery Acceptance",
+  "NPD Summary & Closure",
 ]
 
 const STAGE_SHORT = [
-  "Request Init.", "R&D Review", "Sourcing Alloc.", "Supplier Defense",
-  "Sample Submit", "MRN Receipt", "R&D Evaluation", "FPA", "Sample Cost", "PP Lot Pricing",
+  "Request Init.",
+  "Sourcing & Quote",
+  "Dispatch",
+  "RND Evaluation",
+  "Testing & TQR",
+  "RND Approval",
+  "Plant Delivery",
+  "Summary & Closure",
 ]
 
 const STAGE_PHASES = [
-  { name: "Initiation",     color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe", stages: [1, 2] },
-  { name: "Sourcing",       color: "#2563eb", bg: "#dbeafe", border: "#bfdbfe", stages: [3, 4, 5] },
-  { name: "Quality & FPA",  color: "#7c3aed", bg: "#ede9fe", border: "#ddd6fe", stages: [6, 7, 8] },
-  { name: "Finalization",   color: "#059669", bg: "#d1fae5", border: "#a7f3d0", stages: [9, 10] },
+  { name: "Initiation", color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe", stages: [1] },
+  { name: "Sourcing",   color: "#2563eb", bg: "#dbeafe", border: "#bfdbfe", stages: [2, 3] },
+  { name: "R&D",        color: "#7c3aed", bg: "#ede9fe", border: "#ddd6fe", stages: [4, 5, 6] },
+  { name: "Closure",    color: "#059669", bg: "#d1fae5", border: "#a7f3d0", stages: [7, 8] },
 ]
 
 const STAGE_COLORS = [
-  "#6366f1","#818cf8","#2563eb","#3b82f6","#60a5fa",
-  "#7c3aed","#8b5cf6","#a78bfa","#059669","#34d399",
+  "#6366f1", "#2563eb", "#3b82f6", "#7c3aed", "#8b5cf6", "#a78bfa", "#059669", "#34d399",
 ]
 
 const TAT_COLORS: Record<string, string> = {
@@ -414,11 +424,11 @@ export default function LeadDashboard() {
   const atRisk         = npds.filter(n => n.tatHealth === "amber" || n.tatHealth === "red").length
   const onTrack        = npds.filter(n => n.tatHealth === "green").length
   const tatCompliance  = totalActive > 0 ? Math.round((onTrack / totalActive) * 100) : 0
-  const completed      = npds.filter(n => n.stage >= 10).length
+  const completed      = npds.filter(n => n.stage >= 8).length
   const gradeA         = npds.filter(n => n.gradeA).length
   const critical       = npds.filter(n => n.priority === "Critical").length
-  const inSourcing     = npds.filter(n => n.stage >= 3 && n.stage <= 5).length
-  const inTesting      = npds.filter(n => n.stage === 7).length
+  const inSourcing     = npds.filter(n => n.stage >= 2 && n.stage <= 3).length
+  const inTesting      = npds.filter(n => n.stage === 4 || n.stage === 5).length
   const completionRate = totalActive > 0 ? Math.round((completed / totalActive) * 100) : 0
   const enquiryConv    = enquiriesSent  > 0 ? Math.round((quotesReceived / enquiriesSent)  * 100) : 0
   const approvalConv   = quotesReceived > 0 ? Math.round((vendorsApproved / quotesReceived) * 100) : 0
@@ -437,7 +447,7 @@ export default function LeadDashboard() {
   const tatPendencyData = STAGE_LABELS.map((_, i) => ({
     stage: `S${i + 1}`,
     pending: npds.filter(n => n.stage === i + 1).length,
-    tatAvg: [2, 5, 3, 8, 12, 4, 6, 5, 3, 2][i] ?? 3,
+    tatAvg: [3, 7, 5, 10, 14, 2, 6, 4][i] ?? 3,
   }))
 
   return (
@@ -557,7 +567,7 @@ export default function LeadDashboard() {
           <KPICard icon={Star}         label="Grade A NPDs"   value={gradeA}                accent="#7c3aed" sub="priority tracked" />
           <KPICard icon={AlertTriangle}label="Critical"       value={critical}              accent="#dc2626" sub="high-urgency requests" alert={critical > 0} />
           <KPICard icon={Clock}        label="TAT Compliance" value={`${tatCompliance}%`}   accent="#10b981" sub={`${onTrack} of ${totalActive} on track`} rate={tatCompliance} />
-          <KPICard icon={FlaskConical} label="In R&D Eval"    value={inTesting}             accent="#8b5cf6" sub="Stage 7 active" />
+          <KPICard icon={FlaskConical} label="In R&D / TQR"   value={inTesting}             accent="#8b5cf6" sub="Stages 4–5 active" />
         </KPIGroup>
 
         {/* Row 2: Sourcing funnel + actions */}

@@ -10,6 +10,7 @@ import {
 import {
   CheckCircle2, FileText, ExternalLink, UserCircle,
   Clock, AlertTriangle, XCircle, Phone, Mail, CheckCircle,
+  MessageSquare, ChevronDown, ChevronUp,
 } from "lucide-react"
 
 function getValidUntil(daysFromNow = 10) {
@@ -22,14 +23,22 @@ export default function SupplierQuotePage() {
   const params = useParams()
   const npdId  = params.id as string
 
-  const [npd,           setNpd]          = useState<NPDRecord | null>(null)
-  const [vendorName,    setVendorName]   = useState<string>("")
-  const [feasibleChoice, setFeasibleChoice] = useState<"yes" | "no" | null>(null)
-  const [feasible,      setFeasible]     = useState<"yes" | "no" | null>(null)
-  const [supplierQuery,  setSupplierQuery] = useState("")
-  const [sampleQty,     setSampleQty]    = useState("")
-  const [supplyDate,    setSupplyDate]   = useState("")
-  const [submitted,     setSubmitted]    = useState(false)
+  const [npd,             setNpd]            = useState<NPDRecord | null>(null)
+  const [vendorName,      setVendorName]     = useState<string>("")
+  const [feasibleChoice,  setFeasibleChoice] = useState<"yes" | "no" | null>(null)
+  const [feasible,        setFeasible]       = useState<"yes" | "no" | null>(null)
+  const [supplierQuery,   setSupplierQuery]  = useState("")
+  const [sampleQty,       setSampleQty]      = useState("")
+  const [supplyDate,      setSupplyDate]     = useState("")
+  const [submitted,       setSubmitted]      = useState(false)
+
+  // RND reply state (set when RND has replied to a previous query)
+  const [pendingRndReply,     setPendingRndReply]     = useState<string>("")
+  const [pendingRndReplyDoc,  setPendingRndReplyDoc]  = useState<string>("")
+  const [pendingQuery,        setPendingQuery]        = useState<string>("")
+  const [queryHistory,        setQueryHistory]        = useState<Array<{ query: string; rndReply: string; rndReplyDoc?: string; repliedAt?: string }>>([])
+  const [historyOpen,         setHistoryOpen]         = useState(false)
+
   const validUntil = getValidUntil(10)
 
   useEffect(() => {
@@ -46,6 +55,21 @@ export default function SupplierQuotePage() {
 
     const d = new Date(); d.setDate(d.getDate() + 7)
     setSupplyDate(d.toISOString().split("T")[0])
+
+    // Check if RND has replied to a previous query
+    if (vendor) {
+      const rawLive = localStorage.getItem(LIVE_QUOTATIONS_KEY)
+      const allLive: Record<string, Record<string, LiveQuotation>> = rawLive ? JSON.parse(rawLive) : {}
+      const existing = allLive[npdId]?.[vendor]
+      if (existing?.feasible === false && existing?.rndReply) {
+        setPendingRndReply(existing.rndReply)
+        setPendingRndReplyDoc(existing.rndReplyDoc ?? "")
+        setPendingQuery(existing.query ?? "")
+        setQueryHistory(existing.queryHistory ?? [])
+      } else if (existing?.queryHistory && existing.queryHistory.length > 0) {
+        setQueryHistory(existing.queryHistory)
+      }
+    }
   }, [npdId])
 
   const handleGateSubmit = () => {
@@ -55,14 +79,28 @@ export default function SupplierQuotePage() {
       const raw  = localStorage.getItem(LIVE_QUOTATIONS_KEY)
       const all: Record<string, Record<string, LiveQuotation>> = raw ? JSON.parse(raw) : {}
       if (!all[npdId]) all[npdId] = {}
+      const prev = all[npdId][vendorName]
+
+      // Preserve query history: if there was a previous query+reply, push to history
+      const existingHistory: LiveQuotation["queryHistory"] = prev?.queryHistory ?? []
+      if (prev?.query && prev?.rndReply) {
+        existingHistory.push({
+          query:       prev.query,
+          rndReply:    prev.rndReply,
+          rndReplyDoc: prev.rndReplyDoc,
+          repliedAt:   prev.rndRepliedAt,
+        })
+      }
+
       all[npdId][vendorName] = {
         vendorName,
         status:        "submitted",
         feasible:      false,
-        formValues:    {},
+        formValues:    prev?.formValues ?? {},
         submittedAt:   today,
-        revisionCount: all[npdId][vendorName] ? all[npdId][vendorName].revisionCount + 1 : 1,
+        revisionCount: prev ? prev.revisionCount + 1 : 1,
         ...(supplierQuery.trim() ? { query: supplierQuery.trim() } : {}),
+        queryHistory:  existingHistory.length > 0 ? existingHistory : undefined,
       }
       localStorage.setItem(LIVE_QUOTATIONS_KEY, JSON.stringify(all))
       setFeasible("no")
@@ -79,6 +117,18 @@ export default function SupplierQuotePage() {
     const all: Record<string, Record<string, LiveQuotation>> = raw ? JSON.parse(raw) : {}
     if (!all[npdId]) all[npdId] = {}
     const prev = all[npdId][vendorName]
+
+    // Preserve query history if there was a previous query+reply
+    const existingHistory: LiveQuotation["queryHistory"] = prev?.queryHistory ?? []
+    if (prev?.query && prev?.rndReply) {
+      existingHistory.push({
+        query:       prev.query,
+        rndReply:    prev.rndReply,
+        rndReplyDoc: prev.rndReplyDoc,
+        repliedAt:   prev.rndRepliedAt,
+      })
+    }
+
     all[npdId][vendorName] = {
       vendorName,
       status:        "submitted",
@@ -86,6 +136,7 @@ export default function SupplierQuotePage() {
       formValues:    { sampleQty, supplyDate },
       submittedAt:   today,
       revisionCount: prev ? prev.revisionCount + 1 : 1,
+      queryHistory:  existingHistory.length > 0 ? existingHistory : undefined,
     }
     localStorage.setItem(LIVE_QUOTATIONS_KEY, JSON.stringify(all))
     setSubmitted(true)
@@ -99,18 +150,18 @@ export default function SupplierQuotePage() {
     )
   }
 
-  // Not-feasible screen
+  // Not-feasible screen (new query submitted)
   if (feasible === "no") {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-md w-full text-center py-14 px-8">
-          <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-5">
-            <XCircle className="w-8 h-8 text-slate-400" />
+          <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-5">
+            <MessageSquare className="w-8 h-8 text-amber-500" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Response Recorded</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Query Submitted</h2>
           <p className="text-slate-500 text-sm">
-            Thank you for letting us know. Your response for <strong>{npd.id}</strong> has been
-            logged. The Sourcing SPOC will follow up if needed.
+            Your query for <strong>{npd.id}</strong> has been sent to the R&D team for review.
+            You will receive a portal link once they have responded.
           </p>
           <p className="text-xs text-slate-400 mt-4">You may close this window.</p>
         </div>
@@ -159,10 +210,9 @@ export default function SupplierQuotePage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
 
-        {/* NPD Hero — part info left, contacts right */}
+        {/* NPD Hero */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <div className="flex flex-col md:flex-row gap-6">
-            {/* Part info */}
             <div className="flex-1 min-w-0">
               <span className="inline-block text-[10px] font-bold tracking-widest bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full mb-3">
                 {npd.id}
@@ -181,10 +231,8 @@ export default function SupplierQuotePage() {
               )}
             </div>
 
-            {/* Points of contact */}
             <div className="shrink-0 md:w-72 space-y-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Key Contacts</p>
-              {/* R&D */}
               <div className="flex items-start gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
                 <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mt-0.5">
                   <UserCircle className="w-5 h-5 text-violet-700" />
@@ -200,7 +248,6 @@ export default function SupplierQuotePage() {
                   </p>
                 </div>
               </div>
-              {/* SPOC */}
               <div className="flex items-start gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
                 <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center shrink-0 mt-0.5">
                   <UserCircle className="w-5 h-5 text-teal-700" />
@@ -220,7 +267,7 @@ export default function SupplierQuotePage() {
           </div>
         </div>
 
-        {/* Technical Documents — always visible */}
+        {/* Technical Documents */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-3">
           <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Reference Documents</h2>
           {npd.driveLink ? (
@@ -251,11 +298,87 @@ export default function SupplierQuotePage() {
           )}
         </div>
 
-        {/* Feasibility gate — radio-style selection + Submit */}
+        {/* Query history (shown when there are previous rounds) */}
+        {queryHistory.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-3">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(v => !v)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-slate-400" />
+                Previous Query / Reply History ({queryHistory.length} round{queryHistory.length !== 1 ? "s" : ""})
+              </h2>
+              {historyOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </button>
+            {historyOpen && (
+              <div className="space-y-4 pt-2 border-t border-slate-100">
+                {queryHistory.map((h, i) => (
+                  <div key={i} className="rounded-lg border border-slate-200 p-4 space-y-2 bg-slate-50">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Round {i + 1}</p>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-slate-600">Your Query:</p>
+                      <p className="text-sm text-slate-800 italic bg-white border border-slate-200 rounded p-2">&ldquo;{h.query}&rdquo;</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-slate-600">R&amp;D Response:</p>
+                      <p className="text-sm text-slate-800 bg-white border border-slate-200 rounded p-2">{h.rndReply}</p>
+                      {h.rndReplyDoc && (
+                        <p className="text-xs text-slate-400 flex items-center gap-1">
+                          <FileText className="w-3 h-3" /> {h.rndReplyDoc}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* R&D replied to previous query — show before feasibility gate */}
+        {pendingRndReply && feasible === null && (
+          <div className="bg-emerald-50 rounded-xl border border-emerald-200 shadow-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="text-base font-bold text-emerald-900">R&amp;D has responded to your query</h2>
+                <p className="text-sm text-emerald-700 mt-0.5">
+                  Please review the clarification below and re-assess your feasibility.
+                </p>
+              </div>
+            </div>
+            {pendingQuery && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-600">Your query:</p>
+                <p className="text-sm text-slate-700 italic bg-white border border-slate-200 rounded-lg p-3">&ldquo;{pendingQuery}&rdquo;</p>
+              </div>
+            )}
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-600">R&amp;D Clarification:</p>
+              <div className="bg-white border border-emerald-200 rounded-lg p-4">
+                <p className="text-sm text-slate-900">{pendingRndReply}</p>
+                {pendingRndReplyDoc && (
+                  <p className="text-xs text-slate-400 flex items-center gap-1 mt-2">
+                    <FileText className="w-3 h-3" /> {pendingRndReplyDoc}
+                  </p>
+                )}
+              </div>
+            </div>
+            <p className="text-sm text-emerald-700 font-medium">
+              Based on this clarification, please re-confirm your feasibility below.
+            </p>
+          </div>
+        )}
+
+        {/* Feasibility gate */}
         {feasible === null && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
             <div>
-              <h2 className="text-base font-bold text-slate-900">Feasibility Confirmation Required</h2>
+              <h2 className="text-base font-bold text-slate-900">
+                {pendingRndReply ? "Re-Assess Feasibility" : "Feasibility Confirmation Required"}
+              </h2>
               <p className="text-sm text-slate-500 mt-1">
                 Based on the provided specifications and documents, please confirm your capability to fulfill this requirement.
               </p>
@@ -300,7 +423,7 @@ export default function SupplierQuotePage() {
                   <p className={`text-sm font-bold ${feasibleChoice === "no" ? "text-red-800" : "text-slate-700"}`}>
                     Unable to meet this requirement
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">This requirement cannot be supported based on current capabilities.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Raise a clarification query for the R&amp;D team</p>
                 </div>
               </button>
             </div>
@@ -310,7 +433,7 @@ export default function SupplierQuotePage() {
                   Raise a Clarification Query <span className="text-slate-400 font-normal">(optional)</span>
                 </label>
                 <p className="text-xs text-slate-500">
-                  If you need more information from the R&amp;D team before confirming, describe your query below. It will be sent to the R&amp;D owner for review.
+                  If you need more information from the R&amp;D team before confirming, describe your query below.
                 </p>
                 <textarea
                   rows={3}
