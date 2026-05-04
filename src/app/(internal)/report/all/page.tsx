@@ -237,7 +237,7 @@ export default function AllReportsPage() {
               />
             </div>
             <button
-              onClick={() => downloadMISReport(filtered)}
+              onClick={() => { downloadMISReport(filtered).catch(console.error) }}
               className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-[.98] text-white text-[12px] font-semibold px-4 py-2 rounded-xl transition-all shadow-sm shadow-indigo-200 whitespace-nowrap"
             >
               <Download className="w-3.5 h-3.5" />
@@ -410,7 +410,7 @@ export default function AllReportsPage() {
                     {GROUPS.map(g =>
                       expanded[g.id]
                         ? g.cols.map(col => {
-                            const raw     = cells[col.idx] ?? "—"
+                            const raw     = String(cells[col.idx] ?? "—")
                             const isEmpty = raw === "—"
                             const n       = col.name as string
                             const isBadge = n === "Verdict" || n === "Status"

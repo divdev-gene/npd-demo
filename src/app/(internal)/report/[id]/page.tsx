@@ -229,7 +229,7 @@ export default function ReportPage() {
         <span className="text-[12px] font-bold text-slate-700">{npdId}</span>
         <div className="ml-auto flex gap-2">
           <button
-            onClick={() => downloadMISReport([npd])}
+            onClick={() => { downloadMISReport([npd]).catch(console.error) }}
             className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[12px] font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
             <Download className="w-3.5 h-3.5" /> Download .xlsx
