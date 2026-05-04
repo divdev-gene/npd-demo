@@ -69,6 +69,7 @@ const PAGE_LABELS: Record<string, { label: string; sub?: string }> = {
   "/npd/new":        { label: "Create Request",   sub: "Initiate a new NPD" },
   "/approvals":      { label: "Approvals",        sub: "Pending actions" },
   "/settings":       { label: "Settings",         sub: "System configuration" },
+  "/mdm":            { label: "Master Data",      sub: "Users, commodities, plants & suppliers" },
 }
 
 export function TopNav() {

@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from "react"
 import {
   FilePlus, Archive, CheckCircle, BarChart3, Settings, Layers,
-  ChevronLeft, ChevronRight, LogOut,
+  ChevronLeft, ChevronRight, LogOut, Database,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -57,6 +57,12 @@ const NAV: NavLink[] = [
     label: 'Approvals',
     icon: CheckCircle,
     roles: ['rnd_head', ...SPOC_NAMES, 'sourcing_head', 'super_admin'],
+  },
+  {
+    href: '/mdm',
+    label: 'Master Data',
+    icon: Database,
+    roles: ['super_admin'],
   },
   {
     href: '/settings',
