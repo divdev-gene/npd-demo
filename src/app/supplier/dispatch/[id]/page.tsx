@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import { mockNPDs, type NPDRecord } from "@/lib/mockData"
+import { mockNPDs, SPOC_CONTACTS, VENDOR_CATALOG, DEFAULT_RND_CONTACT, type NPDRecord } from "@/lib/mockData"
 import {
-  CheckCircle, CheckCircle2, UploadCloud, Truck, UserCircle,
+  CheckCircle, CheckCircle2, UploadCloud, Truck, UserCircle, Mail,
 } from "lucide-react"
 
 const DISPATCH_SUBMITTED_KEY = "supplier_dispatch_submitted_v1"
@@ -61,19 +61,70 @@ export default function SupplierDispatchPage() {
   }
 
   if (submitted) {
+    const spocContact = npd ? (SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }) : { name: "", email: "", phone: "" }
+    const allCatalogV = Object.values(VENDOR_CATALOG).flat()
+    const vendorRec   = allCatalogV.find(v => v.name === vendorName)
+    const vendorSpoc  = vendorRec?.spocName ?? vendorName
+    const etaFormatted = dispatchDate ? new Date(dispatchDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "Not specified"
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-md w-full text-center py-14 px-8">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
-            <Truck className="w-8 h-8 text-emerald-600" />
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-lg w-full py-10 px-8 space-y-6">
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+              <Truck className="w-7 h-7 text-emerald-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Dispatch Confirmed</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Your dispatch details have been submitted. The Amber team has been notified.
+            </p>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Dispatch Confirmed</h2>
-          <p className="text-slate-500 text-sm">
-            {vendorName && <><strong>{vendorName}</strong>'s </>}
-            dispatch details for <strong>{npdId}</strong> have been submitted.
-            The Sourcing SPOC will be notified.
-          </p>
-          <p className="text-xs text-slate-400 mt-4">You may close this window.</p>
+
+          {/* Email to Sourcing */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+            <div className="bg-slate-800 px-4 py-2.5 flex items-center gap-2">
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Email 1 — Sourcing SPOC</span>
+            </div>
+            <div className="p-4 space-y-2.5 text-[13px] text-slate-700 leading-relaxed">
+              <p><strong>To:</strong> {spocContact.name}{spocContact.email ? ` (${spocContact.email})` : ""}</p>
+              <p><strong>Subject:</strong> Dispatch Confirmed — {npd?.itemName} ({npdId})</p>
+              <hr className="border-slate-200" />
+              <p>Dear {spocContact.name},</p>
+              <p><strong>{vendorName}</strong> has confirmed dispatch of samples for <em>{npd?.itemName}</em> ({npdId}).</p>
+              <p><strong>NPD ID:</strong> {npdId}</p>
+              <p><strong>Item:</strong> {npd?.itemName}</p>
+              <p><strong>Commodity:</strong> {npd?.itemCategory}</p>
+              <p><strong>Expected Arrival (ETA):</strong> {etaFormatted}</p>
+              {proofDoc && <p><strong>Proof of Dispatch:</strong> {proofDoc}</p>}
+              <p>Kindly coordinate receipt and initiate R&amp;D evaluation upon arrival.</p>
+              <p className="pt-1">Regards,<br /><strong>{vendorSpoc}</strong><br /><span className="text-slate-500">{vendorName}</span></p>
+            </div>
+          </div>
+
+          {/* Email to R&D */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+            <div className="bg-slate-800 px-4 py-2.5 flex items-center gap-2">
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Email 2 — R&amp;D Team</span>
+            </div>
+            <div className="p-4 space-y-2.5 text-[13px] text-slate-700 leading-relaxed">
+              <p><strong>To:</strong> {DEFAULT_RND_CONTACT.name} ({DEFAULT_RND_CONTACT.email})</p>
+              <p><strong>Subject:</strong> Samples Dispatched — {npd?.itemName} ({npdId})</p>
+              <hr className="border-slate-200" />
+              <p>Dear {DEFAULT_RND_CONTACT.name},</p>
+              <p><strong>{vendorName}</strong> has dispatched samples for <em>{npd?.itemName}</em> ({npdId}) and they are expected to arrive by <strong>{etaFormatted}</strong>.</p>
+              <p><strong>NPD ID:</strong> {npdId}</p>
+              <p><strong>Item:</strong> {npd?.itemName}</p>
+              <p><strong>Commodity:</strong> {npd?.itemCategory}</p>
+              <p><strong>Supplier:</strong> {vendorName}</p>
+              <p><strong>Expected Arrival (ETA):</strong> {etaFormatted}</p>
+              {proofDoc && <p><strong>Proof of Dispatch:</strong> {proofDoc}</p>}
+              <p>Please prepare for sample receipt and initiate evaluation on arrival.</p>
+              <p className="pt-1">Regards,<br /><strong>{vendorSpoc}</strong><br /><span className="text-slate-500">{vendorName}</span></p>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400 text-center">You may close this window.</p>
         </div>
       </div>
     )
@@ -158,15 +209,16 @@ export default function SupplierDispatchPage() {
           </div>
         </div>
 
-        {/* Dispatch date + submit */}
+        {/* ETA + submit */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
           <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
             <Truck className="w-4 h-4 text-slate-500" /> Dispatch Details
           </h2>
           <div>
-            <label className="text-sm font-semibold text-slate-700 block mb-1.5">
-              Confirmed Dispatch Date <span className="text-red-500">*</span>
+            <label className="text-sm font-semibold text-slate-700 block mb-1">
+              Expected Arrival Date at Amber (ETA) <span className="text-red-500">*</span>
             </label>
+            <p className="text-xs text-slate-400 mb-2">When do you expect the samples to arrive at the Amber R&amp;D facility?</p>
             <input
               type="date"
               value={dispatchDate}

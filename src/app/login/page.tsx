@@ -38,10 +38,10 @@ export default function LoginPage() {
       {/* Left — hero branding */}
       <div className="relative z-10 flex flex-col justify-between flex-1 px-16 py-14 select-none">
 
-        <div className="flex items-center gap-3">
-          <img src="/amber-logo.png" alt="Amber" className="h-8 w-auto object-contain brightness-0 invert opacity-90" />
-          <div className="h-5 w-px bg-white/20" />
-          <span className="text-sm font-semibold text-white/55 tracking-wide">NPD Command</span>
+        <div className="flex items-center gap-2.5">
+          <img src="/amber-logo.png" alt="Amber" className="h-6 w-auto object-contain brightness-0 invert opacity-80" />
+          <div className="h-4 w-px bg-white/20" />
+          <span className="text-[11px] font-semibold text-white/45 tracking-[0.15em] uppercase">NPD Command</span>
         </div>
 
         <div className="space-y-6 max-w-lg">
@@ -62,15 +62,15 @@ export default function LoginPage() {
           </p>
 
           <div className="flex flex-wrap gap-y-2 gap-x-1 pt-1 items-center">
-            {["Request", "Sourcing", "Dispatch", "R&D Eval", "TQR", "Plant Delivery", "Closure"].map((s, i, arr) => (
+            {["R&D Request", "Supplier Allocation", "Sample Dispatch", "R&D Evaluation", "Report"].map((s, i, arr) => (
               <div key={s} className="flex items-center">
-                <div className="flex items-center gap-1.5 bg-white/10 border border-white/10 rounded-full px-2.5 py-1">
+                <div className="flex items-center gap-1.5 bg-white/8 border border-white/10 rounded-full px-2.5 py-1">
                   <span className="w-3.5 h-3.5 rounded-full bg-amber-400/80 flex items-center justify-center text-[7px] font-black text-slate-900 shrink-0">
                     {i + 1}
                   </span>
-                  <span className="text-[10px] font-semibold text-white/65 whitespace-nowrap">{s}</span>
+                  <span className="text-[10px] font-semibold text-white/55 whitespace-nowrap">{s}</span>
                 </div>
-                {i < arr.length - 1 && <div className="w-2.5 h-px bg-white/15 mx-0.5" />}
+                {i < arr.length - 1 && <div className="w-2 h-px bg-white/12 mx-0.5" />}
               </div>
             ))}
           </div>

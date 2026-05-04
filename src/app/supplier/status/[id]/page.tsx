@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import { mockNPDs, VENDOR_STATUS_KEY, LIVE_QUOTATIONS_KEY, type NPDRecord, type VendorStatusResponse, type LiveQuotation } from "@/lib/mockData"
-import { CheckCircle2, Clock, AlertCircle, UserCircle } from "lucide-react"
+import { mockNPDs, VENDOR_STATUS_KEY, LIVE_QUOTATIONS_KEY, SPOC_CONTACTS, VENDOR_CATALOG, DEFAULT_RND_CONTACT, type NPDRecord, type VendorStatusResponse, type LiveQuotation } from "@/lib/mockData"
+import { CheckCircle2, Clock, AlertCircle, UserCircle, Mail } from "lucide-react"
 
 export default function VendorStatusPage() {
   const params   = useParams()
@@ -75,28 +75,102 @@ export default function VendorStatusPage() {
     const resp = submitted
       ? { onTime, newDate: onTime ? undefined : newDate, notes }
       : prevResponse!
+    const spocContact = npd ? (SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }) : { name: "", email: "", phone: "" }
+    const allCatalogV = Object.values(VENDOR_CATALOG).flat()
+    const vendorRec   = allCatalogV.find(v => v.name === vendorName)
+    const vendorSpoc  = vendorRec?.spocName ?? vendorName
+    const revisedDate = resp.newDate ? new Date(resp.newDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : ""
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-md w-full text-center py-14 px-8">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 ${resp.onTime ? "bg-emerald-100" : "bg-amber-100"}`}>
-            {resp.onTime
-              ? <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-              : <AlertCircle className="w-8 h-8 text-amber-600" />}
-          </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">
-            {resp.onTime ? "Confirmed — On Track" : "Date Change Submitted"}
-          </h2>
-          <p className="text-slate-500 text-sm">
-            {resp.onTime
-              ? `Thank you. Your dispatch status for ${npdId} has been confirmed. The Amber team has been notified.`
-              : `Your revised date has been submitted to the Amber sourcing team for review.`}
-          </p>
-          {!resp.onTime && resp.newDate && (
-            <p className="mt-3 text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 inline-block">
-              Proposed new date: {new Date(resp.newDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-lg w-full py-10 px-8 space-y-6">
+          <div className="text-center">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 ${resp.onTime ? "bg-emerald-100" : "bg-amber-100"}`}>
+              {resp.onTime
+                ? <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+                : <AlertCircle className="w-7 h-7 text-amber-600" />}
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">
+              {resp.onTime ? "Confirmed — On Track" : "Date Change Submitted"}
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {resp.onTime
+                ? "Your dispatch status has been confirmed. The Amber team has been notified."
+                : "Your revised date has been submitted to the Amber sourcing team for review."}
             </p>
-          )}
-          <p className="text-xs text-slate-400 mt-5">You may close this window.</p>
+            {!resp.onTime && revisedDate && (
+              <p className="mt-3 text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 inline-block">
+                Proposed new date: {revisedDate}
+              </p>
+            )}
+          </div>
+
+          {/* Email to Sourcing SPOC */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+            <div className="bg-slate-800 px-4 py-2.5 flex items-center gap-2">
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Email — Sourcing SPOC</span>
+            </div>
+            <div className="p-4 space-y-2.5 text-[13px] text-slate-700 leading-relaxed">
+              <p><strong>To:</strong> {spocContact.name}{spocContact.email ? ` (${spocContact.email})` : ""}</p>
+              <p><strong>Subject:</strong> {resp.onTime ? `Dispatch Confirmed On Track — ${npd?.itemName} (${npdId})` : `Dispatch Date Revision Request — ${npd?.itemName} (${npdId})`}</p>
+              <hr className="border-slate-200" />
+              <p>Dear {spocContact.name},</p>
+              {resp.onTime ? (
+                <>
+                  <p><strong>{vendorName}</strong> has confirmed that the sample dispatch for <em>{npd?.itemName}</em> ({npdId}) is <strong className="text-emerald-700">on track</strong> as per the committed schedule.</p>
+                  {resp.notes && (
+                    <div className="bg-slate-100 border border-slate-200 rounded-lg px-3 py-2.5 italic text-slate-700">
+                      &ldquo;{resp.notes}&rdquo;
+                    </div>
+                  )}
+                  <p>No further action is required at this stage.</p>
+                </>
+              ) : (
+                <>
+                  <p><strong>{vendorName}</strong> has indicated that they will <strong className="text-amber-700">not be able to dispatch</strong> the samples for <em>{npd?.itemName}</em> ({npdId}) by the originally committed date.</p>
+                  {revisedDate && <p><strong>Proposed New Dispatch Date:</strong> {revisedDate}</p>}
+                  {resp.notes && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 italic text-slate-700">
+                      &ldquo;{resp.notes}&rdquo;
+                    </div>
+                  )}
+                  <p>Please review and confirm the revised timeline with the R&amp;D team.</p>
+                </>
+              )}
+              <p className="pt-1">Regards,<br /><strong>{vendorSpoc}</strong><br /><span className="text-slate-500">{vendorName}</span></p>
+            </div>
+          </div>
+
+          {/* Email to R&D */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+            <div className="bg-slate-800 px-4 py-2.5 flex items-center gap-2">
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Email — R&amp;D Team</span>
+            </div>
+            <div className="p-4 space-y-2.5 text-[13px] text-slate-700 leading-relaxed">
+              <p><strong>To:</strong> {DEFAULT_RND_CONTACT.name} ({DEFAULT_RND_CONTACT.email})</p>
+              <p><strong>Subject:</strong> {resp.onTime ? `Dispatch Confirmed On Track — ${npd?.itemName} (${npdId})` : `Dispatch Date Revision — ${npd?.itemName} (${npdId})`}</p>
+              <hr className="border-slate-200" />
+              <p>Dear {DEFAULT_RND_CONTACT.name},</p>
+              {resp.onTime ? (
+                <p><strong>{vendorName}</strong> has confirmed their sample dispatch for <em>{npd?.itemName}</em> ({npdId}) is <strong className="text-emerald-700">on track</strong>. No changes to the timeline.</p>
+              ) : (
+                <>
+                  <p><strong>{vendorName}</strong> has requested a dispatch date revision for <em>{npd?.itemName}</em> ({npdId}).</p>
+                  {revisedDate && <p><strong>Proposed New Date:</strong> {revisedDate}</p>}
+                  {resp.notes && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 italic text-slate-700">
+                      &ldquo;{resp.notes}&rdquo;
+                    </div>
+                  )}
+                  <p>The sourcing SPOC will coordinate the revised schedule.</p>
+                </>
+              )}
+              <p className="pt-1">Regards,<br /><strong>{vendorSpoc}</strong><br /><span className="text-slate-500">{vendorName}</span></p>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400 text-center">You may close this window.</p>
         </div>
       </div>
     )

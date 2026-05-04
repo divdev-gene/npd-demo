@@ -22,7 +22,7 @@ const WORK_TYPES = [
   { id: "NTD",         title: "New Tool Development",       short: "NTD",   desc: "New tooling / die / fixture development request.", icon: Hammer,     tat: 45, stages: 10 },
   { id: "Localisation",title: "Localisation",               short: "LOCAL", desc: "Import replacement. Cost & compliance check.",    icon: Globe,      tat: 45, stages: 11 },
   { id: "Compliance",  title: "Compliance / Regulatory",    short: "COMP",  desc: "BIS, QCO, etc. Document-centric flow.",           icon: ShieldCheck, tat: 30, stages: 6  },
-  { id: "PP",          title: "PP Pre-Production Repeat",   short: "PP",    desc: "First production quantity of validated part.",    icon: Repeat,     tat: 5,  stages: 4  },
+  { id: "PP",          title: "Cost Innovation",             short: "CI",    desc: "First production quantity of a cost-validated part.", icon: Repeat,  tat: 5,  stages: 4  },
 ]
 
 const SPOC_NAME_MAP: Record<string, string> = {
@@ -44,7 +44,7 @@ const SPOC_DISPLAY_MAP: Record<string, string> = {
 }
 
 const TAT_MAP: Record<string, number> = {
-  "NCD": 45, "ECN": 30, "NTD": 45, "Localisation": 45, "Compliance": 30, "PP": 5,
+  "NCD": 45, "ECN": 30, "NTD": 45, "Localisation": 45, "Compliance": 30, "PP": 5, "CI": 5,
 }
 
 const WORK_TYPE_LABEL: Record<string, string> = {
@@ -53,7 +53,7 @@ const WORK_TYPE_LABEL: Record<string, string> = {
   "NTD":          "New Tool Development (NTD)",
   "Localisation": "Localisation",
   "Compliance":   "Compliance / Regulatory",
-  "PP":           "PP (Pre-Production) Repeat",
+  "PP":           "Cost Innovation (CI)",
 }
 
 const STEPS = [
@@ -76,6 +76,7 @@ export default function NewRequestWizard() {
   const [revisionNo, setRevisionNo]   = useState("")
   const [prevPartNo, setPrevPartNo]   = useState("")
   const [cplAttached, setCplAttached] = useState(false)
+  const [sampleQty,   setSampleQty]   = useState("")
   const [pocRole, setPocRole]         = useState("")
   const [rejectedParts, setRejectedParts] = useState<Array<{ npdId: string; partNumber: string; itemName: string; rejectedAt: string }>>([])
 
@@ -121,12 +122,13 @@ export default function NewRequestWizard() {
       cost: null,
       raisedBy,
       driveLink: driveLink || undefined,
+      sampleQty: sampleQty ? Number(sampleQty) : undefined,
     })
     router.push('/archive')
   }
 
   const step2Valid = typeOfWork === "NCD"
-    ? (!!itemName && !!commodity && !!productLine && !!driveLink && (!hasRevision || (hasRevision && cplAttached)))
+    ? (!!itemName && !!commodity && !!productLine && !!driveLink && !!sampleQty && (!hasRevision || (hasRevision && cplAttached)))
     : (!!itemName && !!commodity && !!productLine)
 
   // ── Step 1 ────────────────────────────────────────────────────────────────
@@ -155,9 +157,9 @@ export default function NewRequestWizard() {
                 <Icon className="w-5 h-5" />
               </div>
               <div className="flex items-center gap-2 mb-1">
-                <h3 className={`font-semibold text-sm leading-tight ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{type.id === "PP" && isRndUser ? "Cost Innovation" : type.title}</h3>
+                <h3 className={`font-semibold text-sm leading-tight ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{type.title}</h3>
               </div>
-              <p className="text-xs text-slate-500 leading-relaxed mb-3">{type.id === "PP" && isRndUser ? "Production quantity for a cost-validated part." : type.desc}</p>
+              <p className="text-xs text-slate-500 leading-relaxed mb-3">{type.desc}</p>
               <div className="flex items-center gap-3">
                 <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded-full ${isSelected ? "bg-blue-900 text-white" : "bg-slate-100 text-slate-500"}`}>{type.short}</span>
               </div>
@@ -181,7 +183,7 @@ export default function NewRequestWizard() {
       {/* Selected type banner */}
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm">
         {selectedType && <selectedType.icon className="w-4 h-4 text-blue-900 shrink-0" />}
-        <span className="font-semibold text-slate-800">{selectedType?.id === "PP" && isRndUser ? "Cost Innovation" : selectedType?.title} — Rajpura RAC</span>
+        <span className="font-semibold text-slate-800">{selectedType?.title} — Rajpura RAC</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -264,6 +266,23 @@ export default function NewRequestWizard() {
                     className="pl-9 bg-white"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                  Sample Quantity Required <span className="text-red-500">*</span>
+                </Label>
+                <p className="text-[11px] text-slate-400">
+                  Specify the number of samples to be sourced for R&amp;D evaluation and testing
+                </p>
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 5"
+                  value={sampleQty}
+                  onChange={e => setSampleQty(e.target.value)}
+                  className="bg-white max-w-[160px]"
+                />
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-4 space-y-3">
@@ -483,6 +502,7 @@ export default function NewRequestWizard() {
             <p><strong>Item Name:</strong> {itemName || "N/A"}</p>
             <p><strong>Commodity:</strong> {commodity || "N/A"}</p>
             <p><strong>Product Line:</strong> {productLine || "N/A"}</p>
+            {sampleQty && <p><strong>Sample Quantity Required:</strong> {sampleQty} pcs</p>}
             {driveLink && <p><strong>Drawing Link:</strong> <span className="text-blue-600 underline">{driveLink}</span></p>}
             {hasRevision && prevPartNo && <p><strong>Previous Part No:</strong> {prevPartNo}</p>}
           </div>
