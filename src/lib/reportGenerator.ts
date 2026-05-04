@@ -1,5 +1,6 @@
-// ExcelJS is imported dynamically inside downloadMISReport to avoid
-// Next.js server-side Performance API conflicts at module load time.
+// Types-only import is erased at runtime — no Performance API conflict.
+// The implementation is loaded dynamically inside downloadMISReport.
+import type ExcelJS from "exceljs"
 import {
   type NPDRecord,
   SUPPLIER_DISPATCH_KEY, DELIVERY_DETAILS_KEY,
@@ -172,7 +173,7 @@ export async function downloadMISReport(
   wb.modified = new Date()
 
   // ── helpers local to this function ─────────────────────────────────────────
-  type WS   = InstanceType<typeof ExcelJS.Worksheet>
+  type WS   = ExcelJS.Worksheet
   type Cell = ExcelJS.Cell
 
   const solid = (argb: string): ExcelJS.Fill =>
