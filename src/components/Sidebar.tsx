@@ -122,9 +122,13 @@ export function Sidebar() {
           {/* amber left glow accent */}
           <div className="absolute left-0 top-0 bottom-0 w-0.5" style={{ background: "linear-gradient(180deg,#F59E0B,#D97706)" }} />
           <div className="absolute left-0 top-0 bottom-0 w-8 opacity-[0.04]" style={{ background: "linear-gradient(90deg,#F59E0B,transparent)" }} />
-          <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain mb-1.5" />
-          <p className="text-[13px] font-bold text-slate-900 leading-tight tracking-tight">NPD Command</p>
-          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] mt-0.5" style={{ color: "#D97706" }}>Sourcing Tracker</p>
+          <div className="flex items-center gap-2.5">
+            <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain shrink-0" />
+            <div>
+              <p className="text-[13px] font-bold text-slate-900 leading-tight tracking-tight">NPD Command</p>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.18em] mt-0.5" style={{ color: "#D97706" }}>Sourcing Tracker</p>
+            </div>
+          </div>
         </div>
       )}
 

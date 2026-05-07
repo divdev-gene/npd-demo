@@ -204,10 +204,10 @@ export const RND_EVAL_KEY               = "rnd_eval_results_v1";
 export const DELIVERY_DETAILS_KEY       = "sourcing_delivery_details_v1";
 
 export const AMBER_PLANTS = [
-  "Rajpura Plant (Phase 2)",
-  "Jhajjar Plant",
-  "Chennai Plant",
-  "Pune Plant (Ranjangaon)",
+  "Rajpura R&D Center (RAC)",
+  "Jhajjar R&D Center",
+  "Chennai R&D Center",
+  "Pune R&D Center (Ranjangaon)",
 ] as const;
 
 export type TestTemplate = {
@@ -335,7 +335,7 @@ export const NPD_STAGES = [
   "RND Evaluation",                // 4
   "RND Testing & TQR",             // 5
   "RND Approval",                  // 6
-  "Plant Delivery Acceptance",     // 7
+  "Sample Dispatch & R&D Acceptance", // 7
   "NPD Summary & Closure",         // 8
 ] as const
 export const TOTAL_NPD_STAGES = 8

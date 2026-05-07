@@ -4,12 +4,13 @@ import { useState, useEffect } from "react"
 import { Joyride } from "react-joyride"
 import { BarChart3, CheckCircle2, Mail, Package, ShieldCheck, Layers } from "lucide-react"
 
-function StepContent({ icon: Icon, tag, title, body, features }: {
+function StepContent({ icon: Icon, tag, title, body, features, featuresRow }: {
   icon?: React.ElementType
   tag?: string
   title: string
   body: string
   features?: { label: string; desc: string }[]
+  featuresRow?: boolean
 }) {
   return (
     <div className="text-left" style={{ fontFamily: "inherit" }}>
@@ -35,12 +36,13 @@ function StepContent({ icon: Icon, tag, title, body, features }: {
       </div>
       <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, margin: "0 0 12px 0" }}>{body}</p>
       {features && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: featuresRow ? "row" : "column", gap: 6, flexWrap: featuresRow ? "wrap" : undefined }}>
           {features.map((f, i) => (
             <div key={i} style={{
               display: "flex", alignItems: "flex-start", gap: 8,
               background: "#f8fafc", border: "1px solid #e2e8f0",
-              borderRadius: 8, padding: "7px 10px"
+              borderRadius: 8, padding: "7px 10px",
+              flex: featuresRow ? "1 1 auto" : undefined,
             }}>
               <div style={{
                 width: 6, height: 6, borderRadius: "50%", background: "#1e3a8a",
@@ -48,7 +50,7 @@ function StepContent({ icon: Icon, tag, title, body, features }: {
               }} />
               <div>
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{f.label}</span>
-                <span style={{ fontSize: 11, color: "#64748b" }}> — {f.desc}</span>
+                <p style={{ fontSize: 11, color: "#64748b", margin: "2px 0 0" }}>{f.desc}</p>
               </div>
             </div>
           ))}
@@ -78,12 +80,12 @@ function WelcomeStep() {
         NPD Command Centre
       </h2>
       <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.65, margin: "0 0 16px" }}>
-        End-to-end sourcing intelligence for New Product Development —
+        End-to-end sourcing intelligence for New Product Development,
         from request initiation to PP Lot Pricing, all in one workspace.
       </p>
       <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
         {[
-          { label: "10-Stage Pipeline",   color: "#eff6ff", text: "#1d4ed8" },
+          { label: "8-Stage Pipeline",    color: "#eff6ff", text: "#1d4ed8" },
           { label: "Live KPI Dashboard",  color: "#f0fdf4", text: "#15803d" },
           { label: "Vendor Sourcing",     color: "#fefce8", text: "#a16207" },
           { label: "MRN & FPA Approvals", color: "#fdf4ff", text: "#7e22ce" },
@@ -102,16 +104,14 @@ function WelcomeStep() {
 
 function PipelineStep() {
   const stages = [
-    { n: 1, label: "Request\nInitiation",    color: "#e0e7ff", text: "#3730a3" },
-    { n: 2, label: "R&D\nReview",            color: "#e0e7ff", text: "#3730a3" },
-    { n: 3, label: "Sourcing\nAllocation",   color: "#dbeafe", text: "#1d4ed8" },
-    { n: 4, label: "Supplier\nDefense",      color: "#dbeafe", text: "#1d4ed8" },
-    { n: 5, label: "Sample\nSubmission",     color: "#ede9fe", text: "#6d28d9" },
-    { n: 6, label: "MRN\nReceipt",           color: "#ede9fe", text: "#6d28d9" },
-    { n: 7, label: "R&D\nEvaluation",        color: "#fef3c7", text: "#b45309" },
-    { n: 8, label: "FPA",                    color: "#fef3c7", text: "#b45309" },
-    { n: 9, label: "Sample\nCost",           color: "#d1fae5", text: "#065f46" },
-    { n: 10, label: "PP Lot\nPricing",       color: "#d1fae5", text: "#065f46" },
+    { n: 1, label: "Request\nInitialisation", color: "#e0e7ff", text: "#3730a3" },
+    { n: 2, label: "Supplier Sourcing\n& Quotation",  color: "#dbeafe", text: "#1d4ed8" },
+    { n: 3, label: "Supplier\nDispatch",      color: "#ede9fe", text: "#6d28d9" },
+    { n: 4, label: "RND\nEvaluation",         color: "#fef3c7", text: "#b45309" },
+    { n: 5, label: "RND Testing\n& TQR",      color: "#fef3c7", text: "#b45309" },
+    { n: 6, label: "RND\nApproval",           color: "#fde68a", text: "#92400e" },
+    { n: 7, label: "Sample Dispatch\n& R&D Acceptance", color: "#d1fae5", text: "#065f46" },
+    { n: 8, label: "NPD Summary\n& Closure",  color: "#dcfce7", text: "#166534" },
   ]
   return (
     <div>
@@ -121,16 +121,16 @@ function PipelineStep() {
           color: "#64748b", background: "#f1f5f9", border: "1px solid #e2e8f0",
           borderRadius: 4, padding: "2px 8px"
         }}>
-          Workflow
+          Pipeline
         </span>
       </div>
       <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 6px" }}>
-        The 10-Stage NPD Pipeline
+        The 8-Stage NPD Pipeline
       </h3>
       <p style={{ fontSize: 12, color: "#475569", margin: "0 0 14px", lineHeight: 1.5 }}>
         Every NPD request flows through a structured lifecycle. The stage tracker on each NPD record shows exactly where it stands.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
         {stages.map(s => (
           <div key={s.n} style={{
             background: s.color, borderRadius: 8, padding: "6px 4px", textAlign: "center"
@@ -187,23 +187,6 @@ export function Tour() {
       placement: "right",
     },
     {
-      target: ".tour-role-selector",
-      content: (
-        <StepContent
-          icon={ShieldCheck}
-          tag="Persona Switching"
-          title="Switch Roles Instantly"
-          body="The role selector in the top bar changes your permissions and view in real time. Switch between R&D, SPOCs, Sourcing Head, and Admin to demo every workflow."
-          features={[
-            { label: "R&D User / Head", desc: "Create requests, accept delivery, add FPA" },
-            { label: "Sourcing SPOC",   desc: "Vendor selection, bulk RFQ, quotation approvals" },
-            { label: "Sourcing Head",   desc: "Full pipeline visibility, escalations" },
-          ]}
-        />
-      ),
-      placement: "bottom",
-    },
-    {
       target: ".tour-notifications",
       content: (
         <StepContent
@@ -216,6 +199,7 @@ export function Tour() {
             { label: "TQR verdicts",      desc: "R&D approval and rejection outcomes" },
             { label: "Supplier activity", desc: "Quotation uploads and status updates" },
           ]}
+          featuresRow
         />
       ),
       placement: "bottom-end",

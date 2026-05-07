@@ -203,7 +203,7 @@ export default function NpdDetailView() {
 
   // ── Delivery Details (sourcing fills location + qty for stage 7) ─────────
   const [deliveryDetails, setDeliveryDetails] = useState<{ location: string; requiredQty: string; setAt: string } | null>(null)
-  const [deliveryLocation, setDeliveryLocation] = useState("")
+  const [deliveryLocation, setDeliveryLocation] = useState(AMBER_PLANTS[0])
   const [deliveryReqQty,   setDeliveryReqQty]   = useState("")
   const [deliveryDetailsSubmitted, setDeliveryDetailsSubmitted] = useState(false)
 
@@ -223,7 +223,7 @@ export default function NpdDetailView() {
   const [deliveryHeadApproved, setDeliveryHeadApproved] = useState(false)
   const [samplesNotReceived,   setSamplesNotReceived]   = useState(false)
 
-  // ── Stage 8: Plant Delivery Acceptance ───────────────────────────────────
+  // ── Stage 8: Sample Dispatch & R&D Acceptance ────────────────────────────
   const [partAssigned,           setPartAssigned]           = useState(false)
   const [assignedPartNumber,     setAssignedPartNumber]     = useState("")
   const [plantDeliveryDate,      setPlantDeliveryDate]      = useState("")
@@ -713,7 +713,7 @@ export default function NpdDetailView() {
     localStorage.setItem(PART_ASSIGNMENT_KEY, JSON.stringify(all))
     setPartAssigned(true)
     setAssignedPartNumber(pn)
-    savePush(`Part No. Assigned — ${id}`, `Part No. ${pn} assigned for ${npd.itemName}. Sourcing: coordinate plant delivery with supplier.`, id, "package")
+    savePush(`Part No. Assigned — ${id}`, `Part No. ${pn} assigned for ${npd.itemName}. Sourcing: coordinate sample dispatch with supplier.`, id, "package")
     return pn
   }
 
@@ -1421,7 +1421,7 @@ export default function NpdDetailView() {
                           <EmailCard
                             to={npd.spoc}
                             subject={`TQR Approved — Action Required: Set Delivery Details for ${npdId}`}
-                            body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The TQR evaluation for the following NPD has been fully approved by the R&amp;D Head.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table><p><strong>Next Step:</strong> Please log in to the NPD system and fill in the delivery location and required sample quantity (Stage 7 — Sample Delivery Coordination). The supplier delivery date request will be sent automatically once you submit.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                            body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The TQR evaluation for the following NPD has been fully approved by the R&amp;D Head.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table><p><strong>Next Step:</strong> Please log in to the NPD system and fill in the delivery location and required sample quantity (Stage 7 — Sample Dispatch &amp; R&D Acceptance). The supplier delivery date request will be sent automatically once you submit.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
                           />
                           <PushSentBadge to={npd.supplier} />
                           <PushSentBadge to={npd.spoc} />
@@ -1654,7 +1654,7 @@ export default function NpdDetailView() {
                                       onClick={() => {
                                         if (!partAssigned) autoAssignPartNumber(npdId)
                                         setTqrStatus("fully_approved")
-                                        savePush(`TQR Approved — ${npdId}`, `R&D Head approved TQR for ${npd.itemName}. Advancing to Sample Delivery Coordination.`, npdId, "check")
+                                        savePush(`TQR Approved — ${npdId}`, `R&D Head approved TQR for ${npd.itemName}. Advancing to Sample Dispatch &amp; R&D Acceptance.`, npdId, "check")
                                       }}
                                       className="flex flex-col items-center gap-2 rounded-xl border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-4 py-4 text-center transition-all"
                                     >
@@ -1723,7 +1723,7 @@ export default function NpdDetailView() {
                   {(activeStage === 6 || activeStage > 6) && (() => {
                     const s6supplierSpoc = Object.values(VENDOR_CATALOG).flat().find(v => v.name === npd.supplier)?.spocName ?? npd.supplier
                     const s6spocContact = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
-                    const toSourcingBody = `<p>Dear <strong>${s6spocContact.name}</strong>,</p><p>This is to inform you that R&amp;D testing for the following NPD has been successfully completed and approved by the R&amp;D Head. A part number has been assigned.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">TQR Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p><strong>Action Required:</strong> Kindly log in to the NPD portal and provide the <strong>delivery location</strong> and <strong>required sample quantity</strong> under Stage 7 — Sample Delivery Coordination so we can proceed with the supplier delivery request.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`
+                    const toSourcingBody = `<p>Dear <strong>${s6spocContact.name}</strong>,</p><p>This is to inform you that R&amp;D testing for the following NPD has been successfully completed and approved by the R&amp;D Head. A part number has been assigned.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">TQR Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p><strong>Action Required:</strong> Kindly log in to the NPD portal and provide the <strong>delivery location</strong> and <strong>required sample quantity</strong> under Stage 7 — Sample Dispatch &amp; R&D Acceptance so we can proceed with the supplier delivery request.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`
                     const toSupplierBody = `<p>Dear <strong>${s6supplierSpoc}</strong>,</p><p>We are pleased to inform you that the R&amp;D evaluation for your submitted samples has been successfully completed and approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Testing Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p>Our sourcing team will be in touch shortly with the delivery location and required sample quantity. Please be prepared to confirm your delivery date upon receiving the portal link.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`
                     return (
                       <>
@@ -1762,7 +1762,7 @@ export default function NpdDetailView() {
                 </div>
               )}
 
-              {/* ── Stage 7: Plant Delivery Acceptance ── */}
+              {/* ── Stage 7: Sample Dispatch & R&D Acceptance ── */}
               {activeStage >= 7 && (
                 <div className={`rounded-xl border p-4 ${
                   activeStage === 7 ? "border-orange-300 bg-orange-50/30 shadow-sm" : "border-slate-200 bg-slate-50 opacity-50"
@@ -1773,7 +1773,7 @@ export default function NpdDetailView() {
                       : <div className="w-4 h-4 rounded-full border-2 border-orange-600 flex items-center justify-center shrink-0">
                           <span className="text-[9px] font-bold text-orange-600">7</span>
                         </div>}
-                    <h4 className="font-bold text-slate-800 text-sm">Stage 7 — Sample Delivery &amp; Plant Acceptance</h4>
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 7 — Sample Dispatch &amp; R&D Acceptance</h4>
                     {plantVerdict === "accepted" && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Part Accepted</Badge>}
                     {plantVerdict === "not_good" && <Badge className="bg-red-100 text-red-700 border-none text-xs ml-auto">Not Good</Badge>}
                   </div>
@@ -1919,6 +1919,26 @@ export default function NpdDetailView() {
 
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ── Stage 8: NPD Summary & Closure ── */}
+              {activeStage >= 8 && (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50/40 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 8 — NPD Summary &amp; Closure</h4>
+                    <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">
+                      {plantVerdict === "accepted" ? "Part Accepted" : plantVerdict === "not_good" ? "Not Good" : "Complete"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-emerald-700">
+                    {plantVerdict === "accepted"
+                      ? `Part No. ${assignedPartNumber} accepted and approved for production. Full lifecycle record is available below.`
+                      : plantVerdict === "not_good"
+                      ? `Part No. ${assignedPartNumber} marked not good. NPD closed — refer to summary below.`
+                      : "NPD lifecycle complete. View the full summary and MIS report below."}
+                  </p>
                 </div>
               )}
 
@@ -3198,7 +3218,7 @@ export default function NpdDetailView() {
             </Card>
           )}
 
-          {/* ── Section 2b: Plant Delivery (stage 7) ──────────────────────────── */}
+          {/* ── Section 2b: Sample Dispatch (stage 7) ─────────────────────────── */}
           {activeStage >= 7 && activeStage < 8 && (() => {
             const supplier = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
             const supplierSpoc7 = Object.values(VENDOR_CATALOG).flat().find(v => v.name === supplier)?.spocName ?? supplier
@@ -3208,7 +3228,7 @@ export default function NpdDetailView() {
               <Card className="border-orange-300 shadow-sm">
                 <CardHeader className="bg-orange-50 border-b border-orange-200 pb-3">
                   <CardTitle className="text-orange-900 flex items-center gap-2 text-base">
-                    <Package className="w-5 h-5" /> Plant Delivery Coordination
+                    <Package className="w-5 h-5" /> Sample Dispatch Coordination
                   </CardTitle>
                   <p className="text-xs text-orange-700 mt-0.5">Part No: <strong>{assignedPartNumber || "—"}</strong> · Send the portal link to the supplier for delivery confirmation</p>
                 </CardHeader>
@@ -3221,13 +3241,12 @@ export default function NpdDetailView() {
                           </p>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                              <label className="text-sm font-semibold text-slate-700">Delivery Location <span className="text-red-500">*</span></label>
+                              <label className="text-sm font-semibold text-slate-700">R&D Center <span className="text-red-500">*</span></label>
                               <select
                                 value={deliveryLocation}
                                 onChange={e => setDeliveryLocation(e.target.value)}
                                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
                               >
-                                <option value="">Select plant…</option>
                                 {AMBER_PLANTS.map(p => <option key={p} value={p}>{p}</option>)}
                               </select>
                             </div>
