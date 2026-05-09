@@ -25,7 +25,7 @@ const STAGE_LABELS = [
   "RND Evaluation",
   "RND Testing & TQR",
   "RND Approval",
-  "Plant Delivery Acceptance",
+  "Sample Dispatch & R&D Acceptance",
   "NPD Summary & Closure",
 ]
 
@@ -36,7 +36,7 @@ const STAGE_SHORT = [
   "RND Evaluation",
   "Testing & TQR",
   "RND Approval",
-  "Plant Delivery",
+  "Sample Dispatch",
   "Summary & Closure",
 ]
 

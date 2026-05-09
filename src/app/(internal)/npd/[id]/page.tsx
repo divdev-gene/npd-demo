@@ -203,7 +203,7 @@ export default function NpdDetailView() {
 
   // ── Delivery Details (sourcing fills location + qty for stage 7) ─────────
   const [deliveryDetails, setDeliveryDetails] = useState<{ location: string; requiredQty: string; setAt: string } | null>(null)
-  const [deliveryLocation, setDeliveryLocation] = useState(AMBER_PLANTS[0])
+  const [deliveryLocation, setDeliveryLocation] = useState<string>(AMBER_PLANTS[0])
   const [deliveryReqQty,   setDeliveryReqQty]   = useState("")
   const [deliveryDetailsSubmitted, setDeliveryDetailsSubmitted] = useState(false)
 
