@@ -80,10 +80,10 @@ function FilterSelect({ label, options, value, onChange }: {
     <div className="flex items-center gap-1.5">
       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.16em] shrink-0">{label}</span>
       <Select value={value} onValueChange={(v: string | null) => { if (v) onChange(v) }}>
-        <SelectTrigger className="h-7 text-[11px] min-w-[110px] bg-white border-slate-200">
+        <SelectTrigger className="h-7 text-[11px] w-auto min-w-[120px] max-w-[200px] bg-white border-slate-200">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent side="bottom" alignItemWithTrigger={false}>
           {options.map(o => <SelectItem key={o} value={o} className="text-[11px]">{o}</SelectItem>)}
         </SelectContent>
       </Select>
