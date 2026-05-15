@@ -20,6 +20,7 @@ export type NPDRecord = {
   raisedBy?: string;
   driveLink?: string;
   sampleQty?: number;
+  createdAt?: string;
 };
 
 export const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"];
@@ -149,13 +150,22 @@ export type VendorStatusResponse = {
   newDate?:    string;
   notes?:      string;
   respondedAt: string;
+  submissionCount?: number;   // tracks how many times supplier has submitted (max 2)
+  // Deadline negotiation loop (max 2 rounds between sourcing and supplier)
+  negotiationStatus?:  "sourcing_countered" | "supplier_final";
+  sourcingCounterDate?: string;
+  sourcingCounterMsg?:  string;
+  sourcingCounteredAt?: string;
+  supplierFinalDate?:   string;
+  supplierFinalNotes?:  string;
+  supplierFinalAt?:     string;
 };
 
 export const DEFAULT_STATUS_TEMPLATE = `Subject: Dispatch Status Check — {npd_id} | {item_name}
 
 Dear {vendor_name},
 
-This is a reminder regarding your quotation for {npd_id} — {item_name}.
+This is a reminder regarding your submission for {npd_id} — {item_name}.
 
 Your committed dispatch date: {dispatch_date}
 
@@ -202,6 +212,7 @@ export const REJECTED_PARTS_KEY         = "rejected_parts_v1";
 export const PUSH_NOTIFICATIONS_KEY     = "push_notifications_v1";
 export const RND_EVAL_KEY               = "rnd_eval_results_v1";
 export const DELIVERY_DETAILS_KEY       = "sourcing_delivery_details_v1";
+export const NDA_STATUS_KEY             = "nda_status_v1";
 
 export const AMBER_PLANTS = [
   "Rajpura R&D Center (RAC)",
@@ -330,12 +341,12 @@ export const DEFAULT_RND_HEAD: ContactInfo = {
 
 export const NPD_STAGES = [
   "Request Initialisation",        // 1
-  "Supplier Sourcing & Quotation", // 2
+  "Supplier Sourcing and Confirm", // 2
   "Supplier Dispatch",             // 3
-  "RND Evaluation",                // 4
+  "Design and Feasibility",        // 4
   "RND Testing & TQR",             // 5
   "RND Approval",                  // 6
-  "Sample Dispatch & R&D Acceptance", // 7
+  "PP Pricing",                    // 7
   "NPD Summary & Closure",         // 8
 ] as const
 export const TOTAL_NPD_STAGES = 8
@@ -394,7 +405,8 @@ export const MOCK_SUPPLIER_DOCS: Record<string, SupplierDoc[]> = {
   ],
 };
 
-export const mockNPDs: NPDRecord[] = [
+export const mockNPDs: NPDRecord[] = [/* no pre-loaded records — user adds NPDs via the New Request form */
+  /* ---------- REMOVED MOCK DATA ----------
   {
     id: "NPD-FY-2026-0012",
     itemName: "Copper Header Tube",
@@ -508,7 +520,7 @@ export const mockNPDs: NPDRecord[] = [
     typeOfWork: "PP (Pre-Production) Repeat",
     rAndDDivision: "Rajpura Commercial",
     stage: 2,
-    stageName: "Supplier Sourcing & Quotation",
+    stageName: "Supplier Sourcing and Confirm",
     tatHealth: "green",
     tatDaysRemaining: 2,
     totalTat: 5,
@@ -550,7 +562,7 @@ export const mockNPDs: NPDRecord[] = [
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Commercial",
     stage: 2,
-    stageName: "Supplier Sourcing & Quotation",
+    stageName: "Supplier Sourcing and Confirm",
     tatHealth: "green",
     tatDaysRemaining: 10,
     totalTat: 45,
@@ -571,7 +583,7 @@ export const mockNPDs: NPDRecord[] = [
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Rajpura Grade A",
     stage: 4,
-    stageName: "RND Evaluation",
+    stageName: "Design and Feasibility",
     tatHealth: "amber",
     tatDaysRemaining: 4,
     totalTat: 45,
@@ -584,6 +596,7 @@ export const mockNPDs: NPDRecord[] = [
     raisedBy: "rnd_user",
     driveLink: "https://drive.google.com/drive/folders/mock-sheet-metal-bracket"
   }
+  ---------- END REMOVED MOCK DATA ---------- */
 ];
 
 export const getStageName = (stage: number, type: string) => {

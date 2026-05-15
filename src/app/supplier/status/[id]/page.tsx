@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { mockNPDs, VENDOR_STATUS_KEY, LIVE_QUOTATIONS_KEY, SPOC_CONTACTS, VENDOR_CATALOG, DEFAULT_RND_CONTACT, type NPDRecord, type VendorStatusResponse, type LiveQuotation } from "@/lib/mockData"
-import { CheckCircle2, Clock, AlertCircle, UserCircle, Mail } from "lucide-react"
+import { CheckCircle2, Clock, AlertCircle, UserCircle, Mail, MessageSquare } from "lucide-react"
 
 export default function VendorStatusPage() {
   const params   = useParams()
@@ -12,11 +12,16 @@ export default function VendorStatusPage() {
   const [npd,         setNpd]        = useState<NPDRecord | null>(null)
   const [vendorName,  setVendorName] = useState("")
   const [dispatchDate, setDispatchDate] = useState("")
-  const [onTime,      setOnTime]     = useState<boolean | null>(null)
-  const [newDate,     setNewDate]    = useState("")
-  const [notes,       setNotes]      = useState("")
-  const [submitted,   setSubmitted]  = useState(false)
-  const [prevResponse, setPrevResponse] = useState<VendorStatusResponse | null>(null)
+  const [onTime,          setOnTime]          = useState<boolean | null>(null)
+  const [newDate,         setNewDate]         = useState("")
+  const [notes,           setNotes]           = useState("")
+  const [submitted,       setSubmitted]       = useState(false)
+  const [prevResponse,    setPrevResponse]    = useState<VendorStatusResponse | null>(null)
+  const [allowResubmit,   setAllowResubmit]   = useState(false)
+  // Round 2 — responding to sourcing counter-proposal
+  const [counterAccepted, setCounterAccepted] = useState<boolean | null>(null)
+  const [finalDate,       setFinalDate]       = useState("")
+  const [finalNotes,      setFinalNotes]      = useState("")
 
   useEffect(() => {
     const qs     = new URLSearchParams(window.location.search)
@@ -49,20 +54,44 @@ export default function VendorStatusPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (onTime === null) return
-    const today = new Date().toLocaleString("en-IN")
+    const raw  = localStorage.getItem(VENDOR_STATUS_KEY)
+    const all: Record<string, Record<string, VendorStatusResponse>> = raw ? JSON.parse(raw) : {}
+    const prevCount = all[npdId]?.[vendorName]?.submissionCount ?? 0
     const response: VendorStatusResponse = {
       vendorName,
       onTime,
-      newDate:     onTime ? undefined : newDate || undefined,
-      notes:       notes.trim() || undefined,
-      respondedAt: today,
+      newDate:         onTime ? undefined : newDate || undefined,
+      notes:           notes.trim() || undefined,
+      respondedAt:     new Date().toLocaleString("en-IN"),
+      submissionCount: prevCount + 1,
     }
-    const raw  = localStorage.getItem(VENDOR_STATUS_KEY)
-    const all: Record<string, Record<string, VendorStatusResponse>> = raw ? JSON.parse(raw) : {}
     if (!all[npdId]) all[npdId] = {}
     all[npdId][vendorName] = response
     localStorage.setItem(VENDOR_STATUS_KEY, JSON.stringify(all))
+    setPrevResponse(response)
+    setAllowResubmit(false)
     setSubmitted(true)
+  }
+
+  const handleCounterResponse = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (counterAccepted === null) return
+    const raw = localStorage.getItem(VENDOR_STATUS_KEY)
+    const all: Record<string, Record<string, VendorStatusResponse>> = raw ? JSON.parse(raw) : {}
+    const existing = all[npdId]?.[vendorName]
+    if (!existing) return
+    const resolvedDate = counterAccepted ? existing.sourcingCounterDate! : finalDate
+    const updated: VendorStatusResponse = {
+      ...existing,
+      negotiationStatus: "supplier_final",
+      supplierFinalDate:  resolvedDate,
+      supplierFinalNotes: finalNotes.trim() || undefined,
+      supplierFinalAt:    new Date().toLocaleString("en-IN"),
+    }
+    all[npdId][vendorName] = updated
+    localStorage.setItem(VENDOR_STATUS_KEY, JSON.stringify(all))
+    setSubmitted(true)
+    setPrevResponse(updated)
   }
 
   if (!npd) return (
@@ -71,10 +100,124 @@ export default function VendorStatusPage() {
     </div>
   )
 
-  if (submitted || prevResponse) {
+  // Counter-proposal response screen (round 2) — must be checked BEFORE the confirmation block
+  // so TypeScript doesn't narrow prevResponse to null via the early return below.
+  const pendingCounter: VendorStatusResponse | null =
+    prevResponse !== null &&
+    prevResponse.negotiationStatus === "sourcing_countered" &&
+    !prevResponse.supplierFinalDate
+      ? prevResponse : null
+
+  if (pendingCounter && !submitted) {
+    const counterFmt = pendingCounter.sourcingCounterDate
+      ? new Date(pendingCounter.sourcingCounterDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+      : ""
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3">
+          <div className="max-w-2xl mx-auto flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain" />
+              <div className="h-5 w-px bg-slate-200" />
+              <span className="text-sm font-bold text-slate-700">Dispatch Date Negotiation</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
+              <Clock className="w-3.5 h-3.5" /> {npdId}
+            </div>
+          </div>
+        </header>
+        <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+
+          {/* Context card */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-bold text-blue-900">
+              <MessageSquare className="w-4 h-4" /> Counter-proposal from Amber Sourcing
+            </div>
+            <p className="text-sm text-slate-600">
+              The Amber sourcing team has reviewed your request and proposed an alternative dispatch date.
+              This is round 2 of 2 — your response will be final.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1">
+              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Proposed by Amber Sourcing</p>
+              <p className="text-lg font-bold text-blue-900">{counterFmt}</p>
+              {pendingCounter.sourcingCounterMsg && (
+                <p className="text-sm text-slate-600 italic">"{pendingCounter.sourcingCounterMsg}"</p>
+              )}
+            </div>
+            {/* Original request for reference */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-0.5 text-xs">
+              <p className="font-bold text-slate-400 uppercase tracking-wider">Your Original Request</p>
+              <p className="font-semibold text-slate-700">
+                {pendingCounter.newDate ? new Date(pendingCounter.newDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "—"}
+              </p>
+              {pendingCounter.notes && <p className="text-slate-500 italic">"{pendingCounter.notes}"</p>}
+            </div>
+          </div>
+
+          {/* Response form */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-5">Your Response (Final)</h2>
+            <form onSubmit={handleCounterResponse} className="space-y-5">
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setCounterAccepted(true)}
+                  className={`flex-1 rounded-xl border-2 py-3 font-semibold text-sm transition-colors ${
+                    counterAccepted === true ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-200 text-slate-600 hover:border-emerald-300"
+                  }`}>
+                  ✓ Accept Amber's date ({counterFmt})
+                </button>
+                <button type="button" onClick={() => setCounterAccepted(false)}
+                  className={`flex-1 rounded-xl border-2 py-3 font-semibold text-sm transition-colors ${
+                    counterAccepted === false ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 text-slate-600 hover:border-amber-300"
+                  }`}>
+                  ✗ Propose a different date
+                </button>
+              </div>
+
+              {counterAccepted === false && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Your Final Proposed Date <span className="text-red-500">*</span></label>
+                    <input type="date" required value={finalDate} onChange={e => setFinalDate(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reason / Notes</label>
+                    <textarea rows={3} value={finalNotes} onChange={e => setFinalNotes(e.target.value)}
+                      placeholder="e.g. Earliest feasible date given current constraints…"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 resize-none" />
+                  </div>
+                </div>
+              )}
+
+              {counterAccepted === true && (
+                <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Additional Notes (optional)</label>
+                  <textarea rows={2} value={finalNotes} onChange={e => setFinalNotes(e.target.value)}
+                    placeholder="Any updates for the Amber team…"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm resize-none" />
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-100">
+                <button type="submit" disabled={counterAccepted === null || (counterAccepted === false && !finalDate)}
+                  className="w-full bg-blue-900 hover:bg-blue-800 disabled:opacity-40 text-white text-sm font-semibold rounded-xl px-6 py-3 transition-colors">
+                  Submit Final Response
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 text-center">This is your final response — no further negotiation rounds are available.</p>
+            </form>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (!allowResubmit && (submitted || prevResponse)) {
     const resp = submitted
       ? { onTime, newDate: onTime ? undefined : newDate, notes }
       : prevResponse!
+    const submissionCount = prevResponse?.submissionCount ?? (submitted ? 1 : 0)
+    const canUpdate = submissionCount < 2 && !prevResponse?.negotiationStatus
     const spocContact = npd ? (SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }) : { name: "", email: "", phone: "" }
     const allCatalogV = Object.values(VENDOR_CATALOG).flat()
     const vendorRec   = allCatalogV.find(v => v.name === vendorName)
@@ -90,11 +233,15 @@ export default function VendorStatusPage() {
                 : <AlertCircle className="w-7 h-7 text-amber-600" />}
             </div>
             <h2 className="text-xl font-bold text-slate-900">
-              {resp.onTime ? "Confirmed — On Track" : "Date Change Submitted"}
+              {resp.onTime ? "Confirmed — On Track" :
+               prevResponse?.negotiationStatus === "supplier_final" ? "Final Response Submitted" :
+               "Date Change Submitted"}
             </h2>
             <p className="text-sm text-slate-500 mt-1">
               {resp.onTime
                 ? "Your dispatch status has been confirmed. The Amber team has been notified."
+                : prevResponse?.negotiationStatus === "supplier_final"
+                ? "Your final response has been sent to the Amber sourcing team. No further rounds available."
                 : "Your revised date has been submitted to the Amber sourcing team for review."}
             </p>
             {!resp.onTime && revisedDate && (
@@ -170,7 +317,25 @@ export default function VendorStatusPage() {
             </div>
           </div>
 
-          <p className="text-xs text-slate-400 text-center">You may close this window.</p>
+          {canUpdate ? (
+            <div className="text-center space-y-2">
+              <button
+                onClick={() => {
+                  setOnTime(null)
+                  setNewDate("")
+                  setNotes("")
+                  setSubmitted(false)
+                  setAllowResubmit(true)
+                }}
+                className="text-sm font-semibold text-blue-700 hover:text-blue-900 underline underline-offset-2 transition-colors"
+              >
+                Update my response
+              </button>
+              <p className="text-xs text-slate-400">You can update your response once more (1 update remaining).</p>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 text-center">You may close this window.</p>
+          )}
         </div>
       </div>
     )

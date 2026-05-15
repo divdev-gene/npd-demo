@@ -78,6 +78,9 @@ export default function NewRequestWizard() {
   const [cplAttached, setCplAttached] = useState(false)
   const [sampleQty,   setSampleQty]   = useState("")
   const [pocRole, setPocRole]         = useState("")
+  const [priority, setPriority]       = useState("")
+  const [customTat, setCustomTat]     = useState("")
+  const [drawingFile, setDrawingFile] = useState(false)
   const [rejectedParts, setRejectedParts] = useState<Array<{ npdId: string; partNumber: string; itemName: string; rejectedAt: string }>>([])
 
   useEffect(() => {
@@ -102,6 +105,8 @@ export default function NewRequestWizard() {
     const tat = TAT_MAP[typeOfWork] || 45
     const raisedBy = localStorage.getItem("poc_role") || "rnd_user"
 
+    const effectiveTat = Number(customTat)
+    const priorityLabel = priority === "P1" ? "Critical" : priority === "P2" ? "High" : "Normal"
     addNPD({
       id: newId,
       itemName: itemName || "New Component",
@@ -112,24 +117,25 @@ export default function NewRequestWizard() {
       stage: (workTypeLabel === "Engineering Change Notice (ECN)" || workTypeLabel === "Compliance / Regulatory") ? 3 : 2,
       stageName: getStageName((workTypeLabel === "Engineering Change Notice (ECN)" || workTypeLabel === "Compliance / Regulatory") ? 3 : 2, workTypeLabel),
       tatHealth: "green",
-      tatDaysRemaining: tat,
-      totalTat: tat,
+      tatDaysRemaining: effectiveTat,
+      totalTat: effectiveTat,
       spoc: SPOC_NAME_MAP[commodity] || "General Sourcing",
       supplier: "Pending Assignment",
-      priority: "Normal",
+      priority: priorityLabel,
       gradeA: false,
       tqrScore: null,
       cost: null,
       raisedBy,
       driveLink: driveLink || undefined,
       sampleQty: sampleQty ? Number(sampleQty) : undefined,
+      createdAt: new Date().toISOString(),
     })
     router.push('/archive')
   }
 
   const step2Valid = typeOfWork === "NCD"
-    ? (!!itemName && !!commodity && !!productLine && !!driveLink && !!sampleQty && (!hasRevision || (hasRevision && cplAttached)))
-    : (!!itemName && !!commodity && !!productLine)
+    ? (!!itemName && !!commodity && !!productLine && !!driveLink && !!drawingFile && !!sampleQty && !!priority && !!customTat && (!hasRevision || (hasRevision && cplAttached)))
+    : (!!itemName && !!commodity && !!productLine && !!driveLink && !!drawingFile && !!priority && !!customTat)
 
   // ── Step 1 ────────────────────────────────────────────────────────────────
   const renderStep1 = () => (
@@ -169,7 +175,7 @@ export default function NewRequestWizard() {
       </div>
 
       <div className="flex justify-end pt-4 border-t border-slate-100">
-        <Button disabled={!typeOfWork} onClick={() => setStep(2)} className="bg-blue-900 hover:bg-blue-800 text-white px-6">
+        <Button disabled={!typeOfWork} onClick={() => setStep(2)} className="bg-blue-900 hover:bg-blue-800 active:scale-[0.98] transition-transform text-white px-6">
           Continue <ChevronRight className="w-4 h-4 ml-1.5" />
         </Button>
       </div>
@@ -240,6 +246,34 @@ export default function NewRequestWizard() {
               </div>
             )}
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Priority <span className="text-red-500">*</span></Label>
+              <p className="text-[11px] text-slate-400">P1 = Critical · P2 = High · P3 = Normal</p>
+              <Select value={priority} onValueChange={(v: string | null) => { if (v) setPriority(v) }}>
+                <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Select priority" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="P1">P1 — Critical</SelectItem>
+                  <SelectItem value="P2">P2 — High</SelectItem>
+                  <SelectItem value="P3">P3 — Normal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Project TAT (days) <span className="text-red-500">*</span></Label>
+              <p className="text-[11px] text-slate-400">Target completion timeline</p>
+              <Input
+                type="number"
+                min={1}
+                placeholder="e.g. 45"
+                value={customTat}
+                onChange={e => setCustomTat(e.target.value)}
+                className="bg-white"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Right: Technical Documents */}
@@ -249,31 +283,61 @@ export default function NewRequestWizard() {
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Technical Documents</h3>
           </div>
 
+          {/* Drawing link — mandatory for all work types */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Drawing / Spec Sheet Link <span className="text-red-500">*</span>
+            </Label>
+            <p className="text-[11px] text-slate-400">Paste your Google Drive or shared drawing link</p>
+            <div className="relative">
+              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="https://drive.google.com/..."
+                type="url"
+                value={driveLink}
+                onChange={e => setDriveLink(e.target.value)}
+                className="pl-9 bg-white"
+              />
+            </div>
+          </div>
+
+          {/* Drawing upload — mandatory for all work types */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Drawing / Spec Sheet Upload <span className="text-red-500">*</span>
+            </Label>
+            <div
+              onClick={() => setDrawingFile(v => !v)}
+              className={`rounded-lg border-2 border-dashed p-4 text-center cursor-pointer transition-colors ${
+                drawingFile
+                  ? "border-emerald-400 bg-emerald-50"
+                  : "border-slate-300 hover:border-blue-400 hover:bg-slate-50"
+              }`}
+            >
+              {drawingFile ? (
+                <div className="flex items-center justify-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-sm font-semibold text-emerald-700">drawing_spec.pdf</span>
+                  <span className="text-xs text-red-400 hover:text-red-600 ml-1">Remove</span>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-600 font-medium">Click to upload</p>
+                  <p className="text-xs text-slate-400 mt-0.5">PDF, PNG, DWG accepted</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* NCD-specific fields */}
           {typeOfWork === "NCD" && (
             <>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                  Drawing / Spec Sheet Link <span className="text-red-500">*</span>
-                </Label>
-                <p className="text-[11px] text-slate-400">Paste your Google Drive or shared drawing link</p>
-                <div className="relative">
-                  <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    placeholder="https://drive.google.com/..."
-                    type="url"
-                    value={driveLink}
-                    onChange={e => setDriveLink(e.target.value)}
-                    className="pl-9 bg-white"
-                  />
-                </div>
-              </div>
-
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
                   Sample Quantity Required <span className="text-red-500">*</span>
                 </Label>
                 <p className="text-[11px] text-slate-400">
-                  Specify the number of samples to be sourced for R&amp;D evaluation and testing
+                  Number of samples for R&amp;D evaluation and testing
                 </p>
                 <Input
                   type="number"
@@ -366,17 +430,10 @@ export default function NewRequestWizard() {
                   </div>
                 )}
               </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Drawing / Spec Sheet PDF</Label>
-                <div className="rounded-lg border-2 border-dashed border-slate-200 p-4 text-center hover:bg-slate-50 cursor-pointer transition-colors">
-                  <p className="text-sm text-slate-500">Drag & drop or click to upload</p>
-                  <p className="text-xs text-slate-400 mt-0.5">PDF, PNG, DWG accepted</p>
-                </div>
-              </div>
             </>
           )}
 
+          {/* ECN-specific fields */}
           {typeOfWork === "ECN" && (
             <>
               <div className="space-y-1.5">
@@ -403,6 +460,7 @@ export default function NewRequestWizard() {
             </>
           )}
 
+          {/* NTD-specific fields */}
           {typeOfWork === "NTD" && (
             <>
               <div className="space-y-1.5">
@@ -423,20 +481,7 @@ export default function NewRequestWizard() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Tool Spec / Drawing Link</Label>
-                <div className="relative">
-                  <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input placeholder="https://drive.google.com/..." type="url" className="pl-9 bg-white" />
-                </div>
-              </div>
             </>
-          )}
-
-          {(typeOfWork === "Localisation" || typeOfWork === "Compliance" || typeOfWork === "PP") && (
-            <div className="flex items-center gap-3 px-4 py-10 rounded-lg border border-dashed border-slate-200 text-slate-400 text-sm justify-center">
-              No additional documents required for this work type.
-            </div>
           )}
         </div>
       </div>
@@ -448,7 +493,7 @@ export default function NewRequestWizard() {
         <Button
           disabled={!step2Valid}
           onClick={() => setStep(3)}
-          className="bg-blue-900 hover:bg-blue-800 text-white px-6 disabled:bg-slate-200 disabled:text-slate-400"
+          className="bg-blue-900 hover:bg-blue-800 active:scale-[0.98] transition-transform text-white px-6 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Review Request <ChevronRight className="w-4 h-4 ml-1.5" />
         </Button>
@@ -470,6 +515,8 @@ export default function NewRequestWizard() {
           { label: "Item",     value: itemName || "—" },
           { label: "Category", value: commodity || "—" },
           { label: "SPOC",     value: SPOC_NAME_MAP[commodity] || "—" },
+          { label: "Priority", value: `${priority} — ${priority === "P1" ? "Critical" : priority === "P2" ? "High" : "Normal"}` },
+          { label: "TAT",      value: customTat ? `${customTat} days` : "—" },
         ].map(({ label, value }) => (
           <div key={label} className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
@@ -507,7 +554,7 @@ export default function NewRequestWizard() {
             {hasRevision && prevPartNo && <p><strong>Previous Part No:</strong> {prevPartNo}</p>}
           </div>
 
-          <p className="text-slate-600 text-xs">Please log in to the Amber NPD portal to initiate Supplier ASR Sync and Bulk RFQ dispatch.</p>
+          <p className="text-slate-600 text-xs">Please log in to the Amber NPD portal to initiate Supplier ASR Sync and Bulk Enquiry dispatch.</p>
 
           <p className="text-slate-600 text-xs">Regards,<br /><strong>{pocRole === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name}</strong></p>
         </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import {
@@ -12,10 +12,10 @@ import {
   SUPPLIER_DISPATCH_KEY, DELIVERY_ACCEPTANCE_KEY,
   PART_ASSIGNMENT_KEY, PLANT_SUPPLIER_RESP_KEY, PLANT_ACCEPTANCE_KEY, REJECTED_PARTS_KEY,
   PUSH_NOTIFICATIONS_KEY, RND_EVAL_KEY, AICM_FETCH_KEY,
-  DELIVERY_DETAILS_KEY, AMBER_PLANTS,
+  DELIVERY_DETAILS_KEY, AMBER_PLANTS, NDA_STATUS_KEY,
   DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD,
   getTestsByCategory, getTotalTestDays,
-  type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse, type PushNotification, type TestResult,
+  type NPDRecord, type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse, type PushNotification, type TestResult,
 } from "@/lib/mockData"
 import { useNPDs } from "@/lib/npdContext"
 import { Badge } from "@/components/ui/badge"
@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button"
 import {
   CheckCircle2, Circle, CheckCircle, Clock, AlertCircle, FileText,
   Send, MessageSquare, Mail, ShieldCheck, XCircle, Star, Copy, ExternalLink, Link2,
-  FolderOpen, UploadCloud, Download, Package, Bell,
+  FolderOpen, UploadCloud, Download, Package, Bell, TimerReset,
 } from "lucide-react"
 
 
@@ -72,11 +72,11 @@ function ReSamplingForm({ npdId, baseUrl, npd, sentVendors }: {
       </div>
       {!generated ? (
         <Button
-          className="bg-blue-900 hover:bg-blue-800 text-white"
+          className="bg-blue-900 hover:bg-blue-800 active:scale-[0.98] transition-transform text-white"
           disabled={!reSampleQty || !reSampleDate || !vendor}
           onClick={() => setGenerated(true)}
         >
-          <Send className="w-4 h-4 mr-2" /> Generate Re-Sample Quote URL
+          <Send className="w-4 h-4 mr-2" /> Generate Re-Sample Link
         </Button>
       ) : (
         <div className="space-y-3">
@@ -195,8 +195,23 @@ export default function NpdDetailView() {
   const [composedEmails, setComposedEmails] = useState<{ vendorName: string; subject: string; body: string; portalLink: string }[]>([])
   const [copiedEmail,    setCopiedEmail]    = useState<string | null>(null)
   const [vendorStatuses,  setVendorStatuses]  = useState<Record<string, VendorStatusResponse>>({})
-  const [dateApprovals,   setDateApprovals]   = useState<Record<string, "approved" | "rejected">>({})
+  const [dateApprovals,   setDateApprovals]   = useState<Record<string, { decision: "approved" | "rejected"; decidedAt: string }>>({})
   const [copiedReminder,  setCopiedReminder]  = useState<string | null>(null)
+  const [counterOpen,     setCounterOpen]     = useState<Record<string, boolean>>({})
+  const [counterDate,     setCounterDate]     = useState<Record<string, string>>({})
+  const [counterMsg,      setCounterMsg]      = useState<Record<string, string>>({})
+
+  // ── TAT Extension ───────────────────────────────────────────────────────
+  const tatExtendRef = useRef<HTMLDivElement>(null)
+  const [tatExtendOpen,     setTatExtendOpen]     = useState(false)
+  const [tatExtendDays,     setTatExtendDays]     = useState("")
+  const [tatExtendReason,   setTatExtendReason]   = useState("")
+  const [tatExtended,       setTatExtended]       = useState(false)
+  const [tatExtendedByDays, setTatExtendedByDays] = useState(0)
+
+  // ── NDA (before RFQ dispatch) ────────────────────────────────────────────
+  const [ndaSent, setNdaSent] = useState(false)
+  const [ndaStatuses, setNdaStatuses] = useState<Record<string, { signed: boolean; signedBy?: string; signedAt?: string }>>({})
 
   // ── Supplier Dispatch ───────────────────────────────────────────────────
   const [defenceAdvanced, setDefenceAdvanced] = useState(false)
@@ -243,11 +258,27 @@ export default function NpdDetailView() {
   const [aicmLoading,            setAicmLoading]            = useState(false)
   const [aicmPanelOpen,          setAicmPanelOpen]          = useState(false)
 
+  // Derived from state — declared early so useEffect closures below can reference it safely
+  const allNdasSigned = ndaSent && Array.from(selectedVendors).every(v => ndaStatuses[v]?.signed)
+
   const enquiryValidUntil = (() => {
     const d = new Date()
     d.setDate(d.getDate() + 10)
     return d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
   })()
+
+  useEffect(() => {
+    if (!tatExtendOpen) return
+    const handler = (e: MouseEvent) => {
+      if (tatExtendRef.current && !tatExtendRef.current.contains(e.target as Node)) {
+        setTatExtendOpen(false)
+        setTatExtendDays("")
+        setTatExtendReason("")
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [tatExtendOpen])
 
   const refreshLiveData = () => {
     const rawLive = localStorage.getItem(LIVE_QUOTATIONS_KEY)
@@ -264,7 +295,7 @@ export default function NpdDetailView() {
     setVendorStatuses(allStatus[npdId] ?? {})
 
     const rawDateAppr = localStorage.getItem(VENDOR_DATE_APPROVAL_KEY)
-    const allDateAppr: Record<string, Record<string, "approved" | "rejected">> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
+    const allDateAppr: Record<string, Record<string, { decision: "approved" | "rejected"; decidedAt: string }>> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
     setDateApprovals(allDateAppr[npdId] ?? {})
 
     const rawDispatch = localStorage.getItem(SUPPLIER_DISPATCH_KEY)
@@ -387,7 +418,7 @@ export default function NpdDetailView() {
     setVendorStatuses(allStatus[npdId] ?? {})
 
     const rawDateAppr = localStorage.getItem(VENDOR_DATE_APPROVAL_KEY)
-    const allDateAppr: Record<string, Record<string, "approved" | "rejected">> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
+    const allDateAppr: Record<string, Record<string, { decision: "approved" | "rejected"; decidedAt: string }>> = rawDateAppr ? JSON.parse(rawDateAppr) : {}
     setDateApprovals(allDateAppr[npdId] ?? {})
 
     // Dispatch info from supplier portal
@@ -428,9 +459,24 @@ export default function NpdDetailView() {
     const allAicm: Record<string, boolean> = rawAicm ? JSON.parse(rawAicm) : {}
     if (allAicm[npdId]) setAicmFetched(true)
 
+    // NDA status
+    const rawNda = localStorage.getItem(NDA_STATUS_KEY)
+    const allNda: Record<string, Record<string, { signed: boolean; signedBy?: string; signedAt?: string }>> = rawNda ? JSON.parse(rawNda) : {}
+    if (allNda[npdId]) {
+      setNdaStatuses(allNda[npdId])
+      const anyNda = Object.keys(allNda[npdId]).length > 0
+      if (anyNda) setNdaSent(true)
+    }
+
     // Refresh live data when supplier submits in another tab
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY || e.key === SUPPLIER_DISPATCH_KEY || e.key === DELIVERY_ACCEPTANCE_KEY || e.key === PLANT_SUPPLIER_RESP_KEY || e.key === PLANT_ACCEPTANCE_KEY) refreshLiveData()
+      if (e.key === LIVE_QUOTATIONS_KEY || e.key === SUPPLIER_DOCS_KEY || e.key === VENDOR_STATUS_KEY || e.key === SUPPLIER_DISPATCH_KEY || e.key === DELIVERY_ACCEPTANCE_KEY || e.key === PLANT_SUPPLIER_RESP_KEY || e.key === PLANT_ACCEPTANCE_KEY || e.key === NDA_STATUS_KEY) {
+        refreshLiveData()
+        // Reload NDA statuses
+        const rawN = localStorage.getItem(NDA_STATUS_KEY)
+        const allN: Record<string, Record<string, { signed: boolean; signedBy?: string; signedAt?: string }>> = rawN ? JSON.parse(rawN) : {}
+        if (allN[npdId]) setNdaStatuses(allN[npdId])
+      }
     }
     const onFocus = () => refreshLiveData()
 
@@ -479,6 +525,13 @@ export default function NpdDetailView() {
     }
   }, [tqrStatus])
 
+  // Auto-dispatch enquiry the moment all selected vendors have signed the NDA
+  useEffect(() => {
+    if (allNdasSigned && !enquiryDispatched && selectedVendors.size > 0) {
+      dispatchEnquiry()
+    }
+  }, [allNdasSigned])
+
   // Auto-advance to stage 4 when supplier submits dispatch via portal
   useEffect(() => {
     if (dispatchInfo && activeStage < 4) {
@@ -519,6 +572,19 @@ export default function NpdDetailView() {
     currentRole === "sourcing_head" || currentRole === "super_admin"
   const isRnd = currentRole.startsWith("rnd") || currentRole === "super_admin"
   const isPlantUser = isRnd
+
+  const sendNdas = () => {
+    const vendorList = Array.from(selectedVendors)
+    const rawNda = localStorage.getItem(NDA_STATUS_KEY)
+    const allNda: Record<string, Record<string, { signed: boolean; signedBy?: string; signedAt?: string }>> = rawNda ? JSON.parse(rawNda) : {}
+    if (!allNda[npdId]) allNda[npdId] = {}
+    vendorList.forEach(v => {
+      if (!allNda[npdId][v]) allNda[npdId][v] = { signed: false }
+    })
+    localStorage.setItem(NDA_STATUS_KEY, JSON.stringify(allNda))
+    setNdaStatuses(allNda[npdId])
+    setNdaSent(true)
+  }
 
   const dispatchEnquiry = () => {
     const vendorList = Array.from(selectedVendors)
@@ -607,12 +673,33 @@ export default function NpdDetailView() {
   }
 
   const setDateApproval = (vendorName: string, decision: "approved" | "rejected") => {
-    const next = { ...dateApprovals, [vendorName]: decision }
+    const entry = { decision, decidedAt: new Date().toLocaleString("en-IN") }
+    const next = { ...dateApprovals, [vendorName]: entry }
     setDateApprovals(next)
     const raw = localStorage.getItem(VENDOR_DATE_APPROVAL_KEY)
-    const all: Record<string, Record<string, "approved" | "rejected">> = raw ? JSON.parse(raw) : {}
+    const all: Record<string, Record<string, { decision: "approved" | "rejected"; decidedAt: string }>> = raw ? JSON.parse(raw) : {}
     all[npdId] = next
     localStorage.setItem(VENDOR_DATE_APPROVAL_KEY, JSON.stringify(all))
+  }
+
+  const submitCounterProposal = (vendorName: string) => {
+    const date = counterDate[vendorName]
+    if (!date) return
+    const raw = localStorage.getItem(VENDOR_STATUS_KEY)
+    const all: Record<string, Record<string, VendorStatusResponse>> = raw ? JSON.parse(raw) : {}
+    if (!all[npdId]?.[vendorName]) return
+    const updated: VendorStatusResponse = {
+      ...all[npdId][vendorName],
+      negotiationStatus:  "sourcing_countered",
+      sourcingCounterDate: date,
+      sourcingCounterMsg:  counterMsg[vendorName] || undefined,
+      sourcingCounteredAt: new Date().toLocaleString("en-IN"),
+    }
+    all[npdId][vendorName] = updated
+    localStorage.setItem(VENDOR_STATUS_KEY, JSON.stringify(all))
+    setVendorStatuses(prev => ({ ...prev, [vendorName]: updated }))
+    setCounterOpen(prev => ({ ...prev, [vendorName]: false }))
+    savePush(`Counter-Proposal Sent — ${npdId}`, `Sourcing sent a counter date to ${vendorName} for ${npd.itemName}. Awaiting supplier response.`, npdId, "mail")
   }
 
   const buildReminderEmail = (vendorName: string, dispatchDate: string) => {
@@ -813,6 +900,14 @@ export default function NpdDetailView() {
     if (activeStage === 2) {
       setEnquiryDispatched(false)
       setSelectedVendors(new Set())
+      setNdaSent(false)
+      setNdaStatuses({})
+      const rawN = localStorage.getItem(NDA_STATUS_KEY)
+      if (rawN) {
+        const allN = JSON.parse(rawN)
+        delete allN[npdId]
+        localStorage.setItem(NDA_STATUS_KEY, JSON.stringify(allN))
+      }
     }
     if (activeStage === 3) {
       // Clear quote approvals so stage 3 is fully open
@@ -863,6 +958,29 @@ export default function NpdDetailView() {
 
   const vendors = getVendors(npd.itemCategory)
 
+  const handleTatExtend = () => {
+    const days = parseInt(tatExtendDays)
+    if (!days || days <= 0) return
+    const newRemaining = (npd.tatDaysRemaining ?? 0) + days
+    const newTotal     = (npd.totalTat ?? 0) + days
+    const newHealth: NPDRecord["tatHealth"] =
+      newRemaining < 0 ? "black" :
+      newRemaining === 0 ? "red" :
+      newRemaining <= 3  ? "amber" : "green"
+    updateNPD(npdId, { tatDaysRemaining: newRemaining, totalTat: newTotal, tatHealth: newHealth })
+    const reasonSuffix = tatExtendReason ? ` Reason: ${tatExtendReason}` : ""
+    const pushMsg = `TAT for ${npd.itemName} (${npdId}) extended by ${days} day${days > 1 ? "s" : ""} by R&D. New deadline: ${newTotal}d total · ${newRemaining}d remaining.${reasonSuffix}`
+    // Notify SPOC, R&D Head, and Sourcing Head
+    savePush(`TAT Extended — ${npdId}`, `[${npd.spoc}] ${pushMsg}`, npdId, "alert")
+    savePush(`TAT Extended — ${npdId}`, `[R&D Head] ${pushMsg}`, npdId, "alert")
+    savePush(`TAT Extended — ${npdId}`, `[Sourcing Head] ${pushMsg}`, npdId, "alert")
+    setTatExtended(true)
+    setTatExtendedByDays(days)
+    setTatExtendOpen(false)
+    setTatExtendDays("")
+    setTatExtendReason("")
+  }
+
   const tatLabel =
     npd.tatHealth === "black" ? "Overdue" :
     npd.tatHealth === "red"   ? "Due Today" :
@@ -895,7 +1013,7 @@ export default function NpdDetailView() {
   ]
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto">
+    <div className="space-y-6 max-w-[1400px] mx-auto animate-in fade-in duration-300">
 
       {/* NPD Header Card */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
@@ -917,32 +1035,96 @@ export default function NpdDetailView() {
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${priorityColor}`}>{npd.priority}</span>
             </div>
           </div>
-          {/* Right column: 2×2 info chips */}
-          <div className="grid grid-cols-2 gap-3 shrink-0">
-            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 min-w-[140px]">
+          {/* Right column: 2×2 info chips — fixed size so grid never shifts */}
+          <div className="grid grid-cols-2 gap-3 shrink-0 overflow-visible">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assigned SPOC</p>
-              <p className="text-sm font-semibold text-slate-800 mt-0.5">{npd.spoc}</p>
+              <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{npd.spoc}</p>
             </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 min-w-[140px]">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Locked Supplier</p>
-              <p className="text-sm font-semibold text-slate-800 mt-0.5">
+              <p className="text-sm font-semibold text-slate-800 mt-0.5 leading-tight line-clamp-2">
                 {npd.supplier && npd.supplier !== "Pending Assignment"
                   ? npd.supplier
                   : <span className="text-slate-400 italic font-normal text-xs">Pending Assignment</span>}
               </p>
             </div>
-            <div className={`border rounded-lg px-4 py-2.5 min-w-[140px] ${
-              npd.tatHealth === "black" ? "bg-red-50 border-red-200" :
-              npd.tatHealth === "red"   ? "bg-red-50 border-red-200" :
-              npd.tatHealth === "amber" ? "bg-amber-50 border-amber-200" :
-              "bg-emerald-50 border-emerald-200"
-            }`}>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TAT Health</p>
-              <p className={`text-sm font-bold mt-0.5 ${tatColor}`}>{tatLabel}</p>
+            {/* TAT chip — outer shell is overflow-visible for the popup; inner layer clips content */}
+            <div ref={tatExtendRef} className="relative w-[160px] h-[90px] overflow-visible">
+              {/* inner: styled chip that clips its own content */}
+              <div className={`absolute inset-0 rounded-lg border px-4 py-2.5 overflow-hidden ${
+                npd.tatHealth === "black" ? "bg-red-50 border-red-200"
+                : npd.tatHealth === "red"   ? "bg-red-50 border-red-200"
+                : npd.tatHealth === "amber" ? "bg-amber-50 border-amber-200"
+                : "bg-emerald-50 border-emerald-200"
+              }`}>
+                <div className="flex items-start justify-between gap-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TAT Health</p>
+                  {tatExtended && (
+                    <span className="inline-flex items-center gap-0.5 bg-blue-100 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                      +{tatExtendedByDays}d
+                    </span>
+                  )}
+                </div>
+                <p className={`text-sm font-bold mt-0.5 ${tatColor}`}>{tatLabel}</p>
+
+                {(currentRole === "rnd_user" || currentRole === "rnd_head") && (
+                  <button
+                    onClick={() => setTatExtendOpen(true)}
+                    className={`mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-slate-500 hover:text-blue-700 bg-white border border-slate-200 px-2 py-0.5 rounded-md transition-colors ${tatExtendOpen ? "invisible" : ""}`}
+                  >
+                    <TimerReset className="w-3 h-3" />
+                    Extend TAT
+                  </button>
+                )}
+              </div>
+
+              {/* popup: escapes the chip via the overflow-visible outer shell */}
+              {tatExtendOpen && (currentRole === "rnd_user" || currentRole === "rnd_head") && (
+                <div className="absolute left-0 top-full mt-1.5 z-50 w-64 bg-white border border-blue-200 rounded-xl shadow-xl p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <TimerReset className="w-3.5 h-3.5 text-blue-600" /> Extend TAT
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={tatExtendDays}
+                      onChange={e => setTatExtendDays(e.target.value)}
+                      placeholder="Days"
+                      className="w-20 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                    />
+                    <span className="text-xs text-slate-400">days added to TAT</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={tatExtendReason}
+                    onChange={e => setTatExtendReason(e.target.value)}
+                    placeholder="Reason (optional)"
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                  />
+                  <div className="flex gap-2 pt-0.5">
+                    <button
+                      onClick={handleTatExtend}
+                      disabled={!tatExtendDays || parseInt(tatExtendDays) <= 0}
+                      className="flex-1 bg-blue-900 hover:bg-blue-800 active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold px-3 py-1.5 rounded-lg"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => { setTatExtendOpen(false); setTatExtendDays(""); setTatExtendReason("") }}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-slate-400 leading-relaxed">Notifies SPOC, R&D Head & Sourcing Head</p>
+                </div>
+              )}
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 min-w-[140px]">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
-              <p className="text-sm font-semibold text-blue-900 mt-0.5 leading-tight">
+              <p className="text-sm font-semibold text-blue-900 mt-0.5 leading-tight line-clamp-2">
                 {activeStage}. {NPD_STAGES[activeStage - 1] ?? getStageName(activeStage, npd.typeOfWork)}
               </p>
             </div>
@@ -979,7 +1161,7 @@ export default function NpdDetailView() {
           {stageProgress.map((stage) => (
             <div
               key={stage.step}
-              className={`flex-1 rounded-md px-2 py-2.5 flex flex-col gap-1 transition-all ${
+              className={`flex-1 rounded-md px-2 py-2.5 flex flex-col gap-1 transition-all duration-300 ${
                 stage.status === "complete" ? "bg-blue-900" :
                 stage.status === "current"  ? "bg-blue-700 ring-2 ring-blue-400 ring-offset-1" :
                 "bg-slate-100"
@@ -1004,7 +1186,7 @@ export default function NpdDetailView() {
 
       {/* ═══════════════════ RND SECTION ═══════════════════ */}
       {isRnd && (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           {currentRole === "super_admin" && (
             <div className="flex items-center gap-2">
               <span className="bg-blue-900 text-white text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full">R&amp;D Team</span>
@@ -1012,7 +1194,7 @@ export default function NpdDetailView() {
           )}
 
           {/* ── Section 1: My Actions ─────────────────────────── */}
-          <Card>
+          <Card className="transition-shadow duration-200 hover:shadow-md">
             <CardHeader className="pb-3 border-b bg-slate-50">
               <CardTitle className="text-base">My Actions</CardTitle>
             </CardHeader>
@@ -1057,7 +1239,7 @@ export default function NpdDetailView() {
                       : <div className="w-4 h-4 rounded-full border-2 border-blue-700 flex items-center justify-center shrink-0">
                           <span className="text-[9px] font-bold text-blue-700">4</span>
                         </div>}
-                    <h4 className="font-bold text-slate-800 text-sm">Stage 4 — RND Evaluation</h4>
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 4 — Design and Feasibility</h4>
                     {activeStage > 4 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Completed</Badge>}
                   </div>
                   {activeStage === 4 && (
@@ -1126,7 +1308,7 @@ export default function NpdDetailView() {
                             )
                           })()}
                           <div className="pt-2 border-t border-slate-100">
-                            <Button className="bg-blue-900 hover:bg-blue-800 text-white" onClick={advanceToTesting}>
+                            <Button className="bg-blue-900 hover:bg-blue-800 active:scale-[0.98] transition-transform text-white" onClick={advanceToTesting}>
                               <CheckCircle className="w-4 h-4 mr-2" /> Proceed to R&amp;D Testing &amp; Evaluation
                             </Button>
                           </div>
@@ -1947,7 +2129,7 @@ export default function NpdDetailView() {
 
           {/* ── Section 2: Sourcing Info (read-only) ─────────────── */}
           {activeStage >= 2 && (
-            <Card>
+            <Card className="transition-shadow duration-200 hover:shadow-md">
               <CardHeader className="pb-3 border-b bg-slate-50">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">Sourcing Status</CardTitle>
@@ -1994,7 +2176,7 @@ export default function NpdDetailView() {
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sourcing Stage</p>
                     <p className="text-sm font-semibold text-slate-800 mt-0.5">
                       {activeStage < 2 ? "Awaiting Release" :
-                       activeStage === 2 ? "Awaiting Quotations" :
+                       activeStage === 2 ? "Awaiting Submissions" :
                        activeStage === 3 ? "Awaiting Dispatch" :
                        activeStage >= 4 ? "Supplier Dispatched" : "—"}
                     </p>
@@ -2110,7 +2292,7 @@ export default function NpdDetailView() {
           )}
 
           {/* ── Section 3: Document Library ──────────────────────── */}
-          <Card>
+          <Card className="transition-shadow duration-200 hover:shadow-md">
             <CardHeader className="pb-3 border-b bg-slate-50">
               <CardTitle className="text-base flex items-center gap-2">
                 <FolderOpen className="w-4 h-4 text-blue-700" /> Document Library
@@ -2239,7 +2421,7 @@ export default function NpdDetailView() {
                   <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : "—"}</p>
                 </div>
                 <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">RFQ Sent To</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Enquiry Sent To</p>
                   <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{sentVendors.length > 0 ? sentVendors.join(", ") : npd.supplier ?? "—"}</p>
                 </div>
                 <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
@@ -2251,7 +2433,7 @@ export default function NpdDetailView() {
                   <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{deliveryReqQty ? `${deliveryReqQty} pcs` : "—"}</p>
                 </div>
                 <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Quotations Received</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Submissions Received</p>
                   <p className="text-[12px] font-semibold text-slate-800 mt-0.5">{Object.keys(liveQuotes).length > 0 ? `${Object.keys(liveQuotes).length} vendor(s)` : "—"}</p>
                 </div>
                 <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
@@ -2455,7 +2637,7 @@ export default function NpdDetailView() {
 
       {/* ═══════════════════ SOURCING SECTION ═══════════════════ */}
       {isSpocOrSourcing && (
-        <div className="flex flex-col-reverse gap-6">
+        <div className="flex flex-col-reverse gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           {currentRole === "super_admin" && (
             <div className="flex items-center gap-2">
               <span className="bg-emerald-700 text-white text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full">Sourcing Team</span>
@@ -2464,7 +2646,7 @@ export default function NpdDetailView() {
 
           {/* ── Section 1: Supplier Sourcing & Quotations ──── */}
           {activeStage < 2 ? (
-            <Card>
+            <Card className="transition-shadow duration-200 hover:shadow-md">
               <CardContent className="py-8 text-center text-slate-400">
                 <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 <p className="text-sm font-medium">Waiting for NPD request to be initiated</p>
@@ -2476,7 +2658,7 @@ export default function NpdDetailView() {
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-emerald-800">Sourcing Complete — {npd.supplier}</p>
-                <p className="text-xs text-emerald-700 mt-0.5">Enquiry dispatched · Quotation approved · Supplier locked in</p>
+                <p className="text-xs text-emerald-700 mt-0.5">Enquiry dispatched · Submission approved · Supplier locked in</p>
               </div>
               <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-full shrink-0">Stage 2 ✓</span>
             </div>
@@ -2652,26 +2834,146 @@ export default function NpdDetailView() {
                   )}
                 </div>
 
-                {/* Dispatch RFQ */}
+                {/* NDA + Dispatch RFQ */}
                 {!enquiryDispatched ? (
-                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                      <h4 className="font-bold text-blue-900">Dispatch Bulk Enquiry</h4>
-                      <p className="text-xs text-blue-700 mt-1 max-w-lg">
-                        Selected vendors will each receive a unique supplier portal link with the spec sheet and drawing.
-                        The form will show a validity of <strong>10 days</strong> from today.
-                        {selectedVendors.size === 0 && (
-                          <span className="ml-1 text-amber-700 font-semibold">Select at least one vendor above.</span>
+                  <div className="space-y-4">
+                    {/* Step A: Send NDA */}
+                    <div className={`rounded-lg border p-5 ${ndaSent ? "bg-slate-50 border-slate-200" : "bg-amber-50 border-amber-200"}`}>
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                          <h4 className={`font-bold flex items-center gap-2 ${ndaSent ? "text-slate-700" : "text-amber-900"}`}>
+                            {ndaSent
+                              ? <><CheckCircle className="w-4 h-4 text-emerald-500" /> Step 1 — NDA Sent</>
+                              : <><ShieldCheck className="w-4 h-4 text-amber-700" /> Step 1 — Send NDA to Vendors</>}
+                          </h4>
+                          <p className="text-xs mt-1 max-w-lg text-slate-600">
+                            {ndaSent
+                              ? "NDA links have been sent. Waiting for all selected vendors to digitally sign before the RFQ is unlocked."
+                              : "Vendors must sign a Non-Disclosure Agreement before receiving any specification or drawing information. Send the NDA links first."}
+                          </p>
+                          {selectedVendors.size === 0 && (
+                            <p className="text-xs mt-1 text-amber-700 font-semibold">Select at least one vendor above first.</p>
+                          )}
+                        </div>
+                        {!ndaSent && (
+                          <Button
+                            onClick={sendNdas}
+                            disabled={selectedVendors.size === 0}
+                            className="bg-amber-600 hover:bg-amber-700 text-white min-w-[160px] shrink-0"
+                          >
+                            <ShieldCheck className="w-4 h-4 mr-2" /> Send NDA ({selectedVendors.size})
+                          </Button>
                         )}
-                      </p>
+                      </div>
+
+                      {/* NDA status per vendor */}
+                      {ndaSent && (
+                        <div className="mt-4 space-y-3">
+                          {Array.from(selectedVendors).map(vName => {
+                            const status = ndaStatuses[vName]
+                            const ndaUrl = `${baseUrl}/supplier/nda/${npdId}?vendor=${encodeURIComponent(vName)}`
+                            const allCatalogVendors = Object.values(VENDOR_CATALOG).flat()
+                            const vendorRecord = allCatalogVendors.find(v => v.name === vName)
+                            const vendorSpocName = vendorRecord?.spocName ?? vName
+                            const vendorSpocEmail = vendorRecord?.spocEmail ?? ""
+
+                            // Email sent TO vendor asking them to sign (pending state)
+                            const ndaInviteBody = `<p>Dear <strong>${vendorSpocName}</strong>,</p><p>Amber Enterprises India Limited is initiating a new development project and would like to engage <strong>${vName}</strong> as a potential partner.</p><p>Before we can share any technical specifications or project details, we require your organisation to sign a <strong>Non-Disclosure Agreement (NDA)</strong> to protect the confidentiality of the information involved.</p><p>Please use the link below to review and digitally sign the NDA at your earliest convenience to proceed with this project.</p><div style="margin:16px 0;"><a href="${ndaUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Review &amp; Sign NDA →</a></div><p>Should you have any questions before signing, please do not hesitate to reach out.</p><p>Regards,<br/><strong>${npd.spoc}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing Team, Amber Enterprises India Limited</span></p>`
+
+                            // Email sent TO sourcing once vendor signs (internal notification)
+                            const ndaSignedToSourcingBody = `<p>Dear <strong>${npd.spoc}</strong>,</p><p>This is to inform you that <strong>${vName}</strong> has successfully signed the Non-Disclosure Agreement for the project referenced below.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">Vendor</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${vName}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Signed By</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${status?.signedBy ?? "—"}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Signed At</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${status?.signedAt ?? "—"}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">NPD Reference</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr></table><p>You may now proceed with sharing the project specifications with this vendor.</p><p>Regards,<br/><strong>Amber NPD Portal</strong><br/><span style="color:#64748b;font-size:12px">Automated notification — Amber Enterprises India Limited</span></p>`
+
+                            // Confirmation email sent TO vendor after signing
+                            const ndaSignedToVendorBody = `<p>Dear <strong>${vendorSpocName}</strong>,</p><p>Thank you for signing the Non-Disclosure Agreement with <strong>Amber Enterprises India Limited</strong>. Your digital signature has been successfully recorded on <strong>${status?.signedAt ?? "—"}</strong>.</p><p>You are now authorised to receive confidential project specifications. Our sourcing team will be in touch with further details shortly.</p><p>We look forward to working with you on this project.</p><p>Regards,<br/><strong>${npd.spoc}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing Team, Amber Enterprises India Limited</span></p>`
+
+                            return (
+                              <div key={vName} className={`rounded-lg border ${status?.signed ? "border-emerald-200" : "border-slate-200"}`}>
+                                <div className={`flex items-center justify-between gap-3 px-3 py-2.5 ${status?.signed ? "bg-emerald-50" : "bg-white"}`}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {status?.signed
+                                      ? <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                                      : <Clock className="w-4 h-4 text-amber-500 shrink-0" />}
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-slate-800 truncate">{vName}</p>
+                                      {status?.signed
+                                        ? <p className="text-[11px] text-emerald-700">Signed by {status.signedBy} · {status.signedAt}</p>
+                                        : <p className="text-[11px] text-amber-700">Pending signature</p>}
+                                    </div>
+                                  </div>
+                                  {!status?.signed && (
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button
+                                        onClick={() => { navigator.clipboard.writeText(ndaUrl); setCopiedVendor(`nda-${vName}`); setTimeout(() => setCopiedVendor(null), 2000) }}
+                                        className="text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                        {copiedVendor === `nda-${vName}` ? "Copied!" : "Copy NDA Link"}
+                                      </button>
+                                      <a href={ndaUrl} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-blue-700">
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Pending: show NDA invitation email that was sent to vendor */}
+                                {!status?.signed && (
+                                  <div className="border-t border-slate-100">
+                                    <div className="px-3 pt-2 pb-1">
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email Sent to Vendor</p>
+                                    </div>
+                                    <EmailCard
+                                      to={vendorSpocEmail || vName}
+                                      subject={`NDA Required — Please Sign to Proceed · ${npdId}`}
+                                      body={ndaInviteBody}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Signed: show sourcing notification + vendor confirmation */}
+                                {status?.signed && (
+                                  <div className="border-t border-emerald-100 space-y-0">
+                                    <div className="px-3 pt-2 pb-1">
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notification to Sourcing</p>
+                                    </div>
+                                    <EmailCard
+                                      to={npd.spoc}
+                                      subject={`NDA Signed — ${vName} · ${npdId}`}
+                                      body={ndaSignedToSourcingBody}
+                                    />
+                                    <div className="px-3 pt-3 pb-1 border-t border-emerald-100">
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Confirmation to Vendor</p>
+                                    </div>
+                                    <EmailCard
+                                      to={vendorSpocEmail || vName}
+                                      subject={`NDA Acknowledged — Amber Enterprises India Limited · ${npdId}`}
+                                      body={ndaSignedToVendorBody}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <Button
-                      onClick={dispatchEnquiry}
-                      disabled={selectedVendors.size === 0}
-                      className="bg-blue-900 text-white min-w-[180px] shrink-0"
-                    >
-                      <Send className="w-4 h-4 mr-2" /> Send Bulk Enquiry ({selectedVendors.size})
-                    </Button>
+
+                    {/* Step B: RFQ — auto-dispatched once all NDAs signed */}
+                    <div className={`rounded-lg border p-4 flex items-center gap-3 ${!ndaSent ? "opacity-50 pointer-events-none bg-slate-50 border-slate-200" : allNdasSigned ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}>
+                      {allNdasSigned
+                        ? <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                        : <Clock className="w-4 h-4 text-slate-400 shrink-0" />}
+                      <div>
+                        <p className={`text-sm font-bold ${allNdasSigned ? "text-blue-900" : "text-slate-500"}`}>
+                          Step 2 — Bulk Enquiry {allNdasSigned ? "Auto-Dispatched" : "(Waiting for NDAs)"}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {allNdasSigned
+                            ? "RFQ emails and portal links have been automatically sent to all vendors upon NDA completion."
+                            : "RFQ will be dispatched automatically once all vendors sign the NDA."}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ) : activeStage >= 3 ? (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-5 py-4 flex items-center gap-3">
@@ -2770,10 +3072,10 @@ export default function NpdDetailView() {
               {/* === VENDOR QUOTATIONS === */}
               <div className="space-y-4">
           {displayQuotations.length === 0 ? (
-            <Card>
+            <Card className="transition-shadow duration-200 hover:shadow-md">
               <CardContent className="py-16 text-center text-slate-400">
                 <ShieldCheck className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-medium">No quotations yet.</p>
+                <p className="text-sm font-medium">No submissions yet.</p>
                 <p className="text-xs mt-1">Send a Bulk Enquiry from the Supplier Sourcing Workflow tab first.</p>
               </CardContent>
             </Card>
@@ -2784,7 +3086,7 @@ export default function NpdDetailView() {
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: "Total Vendors",       value: displayQuotations.length,                                                                                                                                                              color: "text-slate-900" },
-                  { label: "Quotations Received", value: displayQuotations.filter(v => { const l = liveQuotes[v.vendorName]; return l ? l.status !== "re_negotiation" : v.status === "submitted" }).length,  color: "text-blue-700"  },
+                  { label: "Submissions Received", value: displayQuotations.filter(v => { const l = liveQuotes[v.vendorName]; return l ? l.status !== "re_negotiation" : v.status === "submitted" }).length,  color: "text-blue-700"  },
                   { label: "Awaiting Response",   value: displayQuotations.filter(v => { const l = liveQuotes[v.vendorName]; return l ? l.status === "re_negotiation" : v.status === "pending" }).length,     color: "text-amber-600" },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm">
@@ -2855,7 +3157,7 @@ export default function NpdDetailView() {
                           </span>
                         ) : !isSubmitted ? (
                           <span className="inline-flex items-center gap-1.5 text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
-                            <Clock className="w-3.5 h-3.5" /> Awaiting Quotation
+                            <Clock className="w-3.5 h-3.5" /> Awaiting Response
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
@@ -2927,78 +3229,163 @@ export default function NpdDetailView() {
                           ))}
                         </div>
 
-                        {/* Dispatch status response from vendor */}
+                        {/* Dispatch status response from vendor — negotiation loop */}
                         {(() => {
                           const status = vendorStatuses[v.vendorName]
                           if (!status) return null
-                          const dateDecision = dateApprovals[v.vendorName]
-                          const needsDateApproval = !status.onTime && status.newDate && !dateDecision
+                          const dateApprEntry   = dateApprovals[v.vendorName]
+                          const dateDecision    = dateApprEntry?.decision
+                          const decidedAt       = dateApprEntry?.decidedAt
+                          const neg             = status.negotiationStatus
+                          const isResolved      = !!dateDecision
+                          const isCounterOpen   = counterOpen[v.vendorName]
+
+                          const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : ""
+
                           return (
-                            <div className={`mb-3 rounded-lg border p-3 space-y-2 ${
-                              status.onTime          ? "bg-emerald-50 border-emerald-200" :
-                              dateDecision === "approved" ? "bg-emerald-50 border-emerald-200" :
-                              dateDecision === "rejected" ? "bg-red-50 border-red-200" :
-                              "bg-amber-50 border-amber-200"
+                            <div className={`mb-3 rounded-xl border p-3 space-y-2.5 text-xs animate-in fade-in duration-200 ${
+                              status.onTime || dateDecision === "approved" ? "bg-emerald-50 border-emerald-200" :
+                              dateDecision === "rejected"                  ? "bg-red-50 border-red-200" :
+                              neg === "sourcing_countered"                 ? "bg-blue-50 border-blue-200" :
+                                                                             "bg-amber-50 border-amber-200"
                             }`}>
-                              <p className={`text-xs font-bold flex items-center gap-1.5 ${
+
+                              {/* Header */}
+                              <p className={`font-bold flex items-center gap-1.5 ${
                                 status.onTime || dateDecision === "approved" ? "text-emerald-800" :
-                                dateDecision === "rejected" ? "text-red-700" : "text-amber-800"
+                                dateDecision === "rejected"                  ? "text-red-700" :
+                                neg === "sourcing_countered"                 ? "text-blue-800" :
+                                                                               "text-amber-800"
                               }`}>
-                                {status.onTime || dateDecision === "approved"
-                                  ? <CheckCircle className="w-3.5 h-3.5" />
-                                  : dateDecision === "rejected"
-                                  ? <XCircle className="w-3.5 h-3.5" />
-                                  : <AlertCircle className="w-3.5 h-3.5" />}
-                                {status.onTime ? "Vendor Status: On Track" :
-                                 dateDecision === "approved" ? "New Date Approved" :
-                                 dateDecision === "rejected" ? "New Date Rejected" :
-                                 "Date Change Requested — Action Required"}
-                                <span className="font-normal text-slate-400 ml-1">· {status.respondedAt}</span>
+                                {status.onTime || dateDecision === "approved" ? <CheckCircle className="w-3.5 h-3.5" /> :
+                                 dateDecision === "rejected"                  ? <XCircle className="w-3.5 h-3.5" /> :
+                                 neg === "sourcing_countered"                 ? <MessageSquare className="w-3.5 h-3.5" /> :
+                                                                                <AlertCircle className="w-3.5 h-3.5" />}
+                                {status.onTime                             ? "Vendor: On Track" :
+                                 dateDecision === "approved"               ? "Date Accepted" :
+                                 dateDecision === "rejected"               ? "Date Rejected" :
+                                 neg === "sourcing_countered"              ? "Counter-proposal Sent — Awaiting Supplier" :
+                                 neg === "supplier_final"                  ? "Supplier Final Proposal (Round 2)" :
+                                                                             "Date Change Requested — Action Required"}
+                                <span className="font-normal text-slate-400 ml-auto">
+                                  {decidedAt ?? status.respondedAt}
+                                </span>
                               </p>
 
+                              {/* Round 1: supplier's proposed date */}
                               {!status.onTime && status.newDate && (
-                                <p className="text-sm font-semibold text-amber-900">
-                                  Proposed new date:{" "}
-                                  <span className="font-bold">
-                                    {new Date(status.newDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
-                                  </span>
-                                </p>
-                              )}
-                              {status.notes && (
-                                <p className="text-xs text-slate-600 italic">&ldquo;{status.notes}&rdquo;</p>
-                              )}
-
-                              {/* Approve / Reject new date */}
-                              {needsDateApproval && (
-                                <div className="flex gap-2 pt-1 border-t border-amber-200">
-                                  <button
-                                    onClick={() => setDateApproval(v.vendorName, "rejected")}
-                                    className="flex items-center gap-1.5 text-xs font-semibold text-red-600 border border-red-200 bg-white hover:bg-red-50 rounded-lg px-3 py-1.5 transition-colors"
-                                  >
-                                    <XCircle className="w-3.5 h-3.5" /> Reject New Date
-                                  </button>
-                                  <button
-                                    onClick={() => setDateApproval(v.vendorName, "approved")}
-                                    className="flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-3 py-1.5 transition-colors"
-                                  >
-                                    <CheckCircle className="w-3.5 h-3.5" /> Approve New Date
-                                  </button>
+                                <div className="bg-white/70 rounded-lg px-3 py-2 space-y-0.5">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supplier Proposed</p>
+                                  <p className="font-semibold text-slate-800">{fmtDate(status.newDate)}</p>
+                                  {status.notes && <p className="text-slate-500 italic">"{status.notes}"</p>}
                                 </div>
                               )}
-                              {dateDecision && (
-                                <button
-                                  onClick={() => setDateApproval(v.vendorName, dateDecision === "approved" ? "rejected" : "approved")}
-                                  className="text-[10px] text-slate-400 hover:text-slate-600 underline"
-                                >
+
+                              {/* Sourcing counter-proposal (shown after counter sent) */}
+                              {neg === "sourcing_countered" && status.sourcingCounterDate && (
+                                <div className="bg-white/70 rounded-lg px-3 py-2 space-y-0.5 border border-blue-100">
+                                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Your Counter-Proposal</p>
+                                  <p className="font-semibold text-blue-900">{fmtDate(status.sourcingCounterDate)}</p>
+                                  {status.sourcingCounterMsg && <p className="text-slate-500 italic">"{status.sourcingCounterMsg}"</p>}
+                                </div>
+                              )}
+
+                              {/* Round 2: supplier's final date */}
+                              {neg === "supplier_final" && status.supplierFinalDate && (
+                                <div className="bg-white/70 rounded-lg px-3 py-2 space-y-0.5 border border-amber-100">
+                                  <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Supplier Final (Round 2)</p>
+                                  <p className="font-semibold text-amber-900">{fmtDate(status.supplierFinalDate)}</p>
+                                  {status.supplierFinalNotes && <p className="text-slate-500 italic">"{status.supplierFinalNotes}"</p>}
+                                </div>
+                              )}
+
+                              {/* Actions */}
+                              {!isResolved && !status.onTime && (
+                                <>
+                                  {/* Round 1 actions: Accept / Counter / Reject */}
+                                  {!neg && !isCounterOpen && (
+                                    <div className="flex gap-2 pt-1 border-t border-amber-200 flex-wrap">
+                                      <button onClick={() => setDateApproval(v.vendorName, "rejected")}
+                                        className="flex items-center gap-1.5 font-semibold text-red-600 border border-red-200 bg-white hover:bg-red-50 rounded-lg px-3 py-1.5 transition-colors">
+                                        <XCircle className="w-3.5 h-3.5" /> Reject
+                                      </button>
+                                      <button onClick={() => setCounterOpen(prev => ({ ...prev, [v.vendorName]: true }))}
+                                        className="flex items-center gap-1.5 font-semibold text-blue-700 border border-blue-200 bg-white hover:bg-blue-50 rounded-lg px-3 py-1.5 transition-colors">
+                                        <MessageSquare className="w-3.5 h-3.5" /> Counter-propose
+                                      </button>
+                                      <button onClick={() => setDateApproval(v.vendorName, "approved")}
+                                        className="flex items-center gap-1.5 font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-3 py-1.5 transition-colors">
+                                        <CheckCircle className="w-3.5 h-3.5" /> Accept
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* Counter-propose inline form */}
+                                  {!neg && isCounterOpen && (
+                                    <div className="pt-2 border-t border-amber-200 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                                      <p className="font-bold text-blue-800">Propose a Counter Date</p>
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">New Date <span className="text-red-500">*</span></label>
+                                          <input type="date" value={counterDate[v.vendorName] ?? ""} onChange={e => setCounterDate(prev => ({ ...prev, [v.vendorName]: e.target.value }))}
+                                            className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Message to Supplier</label>
+                                          <input type="text" value={counterMsg[v.vendorName] ?? ""} onChange={e => setCounterMsg(prev => ({ ...prev, [v.vendorName]: e.target.value }))}
+                                            placeholder="e.g. R&D needs samples by this date"
+                                            className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button onClick={() => setCounterOpen(prev => ({ ...prev, [v.vendorName]: false }))}
+                                          className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-lg px-3 py-1.5 transition-colors">Cancel</button>
+                                        <button onClick={() => submitCounterProposal(v.vendorName)} disabled={!counterDate[v.vendorName]}
+                                          className="flex-1 bg-blue-900 hover:bg-blue-800 active:scale-[0.98] transition-transform disabled:opacity-40 text-white font-semibold rounded-lg px-3 py-1.5">
+                                          Send Counter-proposal
+                                        </button>
+                                      </div>
+                                      <p className="text-[9px] text-slate-400">Round 1 of 2 — supplier will see this on their portal</p>
+                                    </div>
+                                  )}
+
+                                  {/* Waiting for supplier to respond to counter */}
+                                  {neg === "sourcing_countered" && (
+                                    <p className="text-[10px] text-blue-600 font-semibold pt-1 border-t border-blue-100">
+                                      Awaiting supplier's response to your counter-proposal…
+                                    </p>
+                                  )}
+
+                                  {/* Round 2: only Accept or Reject, no more countering */}
+                                  {neg === "supplier_final" && (
+                                    <div className="flex gap-2 pt-1 border-t border-amber-200">
+                                      <button onClick={() => setDateApproval(v.vendorName, "rejected")}
+                                        className="flex items-center gap-1.5 font-semibold text-red-600 border border-red-200 bg-white hover:bg-red-50 rounded-lg px-3 py-1.5 transition-colors">
+                                        <XCircle className="w-3.5 h-3.5" /> Reject
+                                      </button>
+                                      <button onClick={() => setDateApproval(v.vendorName, "approved")}
+                                        className="flex items-center gap-1.5 font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-3 py-1.5 transition-colors">
+                                        <CheckCircle className="w-3.5 h-3.5" /> Accept Final Date
+                                      </button>
+                                      <span className="ml-auto text-[9px] text-slate-400 self-center">Max rounds reached</span>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+
+                              {isResolved && (
+                                <button onClick={() => setDateApproval(v.vendorName, dateDecision === "approved" ? "rejected" : "approved")}
+                                  className="text-[10px] text-slate-400 hover:text-slate-600 underline">
                                   Change decision
                                 </button>
                               )}
+
                             </div>
                           )
                         })()}
 
-                        {/* Reminder email draft — shown when vendor has submitted and has a supply date */}
-                        {isSpocOrSourcing && isSubmitted && supplyVal && !vendorStatuses[v.vendorName] && (() => {
+                        {/* Reminder email draft — hidden only when vendor confirms on track */}
+                        {isSpocOrSourcing && isSubmitted && supplyVal && vendorStatuses[v.vendorName]?.onTime !== true && (() => {
                           const { subject, body, statusLink } = buildReminderEmail(v.vendorName, supplyVal)
                           return (
                             <div className="mb-3 border border-slate-200 rounded-xl overflow-hidden">
@@ -3069,7 +3456,7 @@ export default function NpdDetailView() {
                       </CardContent>
                     ) : (
                       <CardContent className="pt-4 pb-3">
-                        <p className="text-sm text-slate-400 italic">Supplier has not yet submitted their quotation.</p>
+                        <p className="text-sm text-slate-400 italic">Supplier has not yet submitted their response.</p>
                       </CardContent>
                     )}
                   </Card>
@@ -3205,11 +3592,11 @@ export default function NpdDetailView() {
                           updateNPD(npdId, { stage: 4, stageName: NPD_STAGES[3] })
                         }}
                       >
-                        <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched &amp; Advance to RND Evaluation
+                        <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Dispatched &amp; Advance to Design and Feasibility
                       </Button>
                     ) : (
                       <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4" /> Dispatched — Advanced to RND Evaluation
+                        <CheckCircle2 className="w-4 h-4" /> Dispatched — Advanced to Design and Feasibility
                       </span>
                     )}
                   </div>

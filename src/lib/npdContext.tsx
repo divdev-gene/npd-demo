@@ -14,7 +14,7 @@ const NPDContext = createContext<NPDContextType | null>(null)
 const STORAGE_KEY = "npd_records_v1"
 
 export function NPDProvider({ children }: { children: ReactNode }) {
-  const [npds, setNpds] = useState<NPDRecord[]>(mockNPDs)
+  const [npds, setNpds] = useState<NPDRecord[]>([])
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {

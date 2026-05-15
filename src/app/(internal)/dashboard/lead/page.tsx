@@ -1,220 +1,116 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
+import Link from "next/link"
 import { useNPDs } from "@/lib/npdContext"
-import { Badge } from "@/components/ui/badge"
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Cell,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip as RTooltip, Legend, ResponsiveContainer, Cell,
 } from "recharts"
 import {
-  Send, FileText, UserCheck, Package, Calendar, ClipboardCheck,
+  Package, Calendar, ClipboardCheck,
   AlertTriangle, AlertCircle, Layers, Star, Clock, CheckCircle2,
-  TrendingUp, FlaskConical, IndianRupee, ArrowRight,
+  FlaskConical, IndianRupee, ArrowRight, Zap,
+  Users, Timer, Hourglass, ThumbsUp,
 } from "lucide-react"
 import {
   ENQUIRY_SENT_KEY, LIVE_QUOTATIONS_KEY, VENDOR_QUOTE_APPROVALS_KEY,
-  VENDOR_STATUS_KEY, type VendorStatusResponse,
+  VENDOR_STATUS_KEY, VENDOR_DATE_APPROVAL_KEY,
+  type VendorStatusResponse,
 } from "@/lib/mockData"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const STAGE_LABELS = [
-  "Request Initialisation",
-  "Supplier Sourcing & Quotation",
-  "Supplier Dispatch",
-  "RND Evaluation",
-  "RND Testing & TQR",
-  "RND Approval",
-  "Sample Dispatch & R&D Acceptance",
-  "NPD Summary & Closure",
-]
-
 const STAGE_SHORT = [
-  "Request Init.",
-  "Sourcing & Quote",
-  "Dispatch",
-  "RND Evaluation",
-  "Testing & TQR",
-  "RND Approval",
-  "Sample Dispatch",
-  "Summary & Closure",
+  "Request Init", "Sourcing", "Dispatch",
+  "Design & Feasibility", "Testing & TQR", "RND Approval", "PP Pricing", "Closure",
 ]
-
-const STAGE_PHASES = [
-  { name: "Initiation", color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe", stages: [1] },
-  { name: "Sourcing",   color: "#2563eb", bg: "#dbeafe", border: "#bfdbfe", stages: [2, 3] },
-  { name: "R&D",        color: "#7c3aed", bg: "#ede9fe", border: "#ddd6fe", stages: [4, 5, 6] },
-  { name: "Closure",    color: "#059669", bg: "#d1fae5", border: "#a7f3d0", stages: [7, 8] },
+const PHASE_DEFS = [
+  { name: "Sourcing",   color: "#2563eb", stages: [2, 3] },
+  { name: "R&D",        color: "#7c3aed", stages: [4, 5, 6] },
+  { name: "Closure",    color: "#059669", stages: [7, 8] },
 ]
-
-const STAGE_COLORS = [
-  "#6366f1", "#2563eb", "#3b82f6", "#7c3aed", "#8b5cf6", "#a78bfa", "#059669", "#34d399",
+const STAGE_ACCENT = [
+  "#6366f1","#2563eb","#3b82f6","#7c3aed","#8b5cf6","#a78bfa","#059669","#34d399",
 ]
-
 const TAT_COLORS: Record<string, string> = {
-  green: "#10b981", amber: "#f59e0b", red: "#ef4444", black: "#0f172a",
+  green: "#10b981", amber: "#f59e0b", red: "#ef4444", black: "#dc2626",
 }
+const TAT_LABELS: Record<string, string> = {
+  green: "On Track", amber: "At Risk", red: "Due Today", black: "Overdue",
+}
+const DATE_PRESETS = ["All Time", "Last 7d", "Last 30d", "Last 90d", "This FY"] as const
+type DatePreset = typeof DATE_PRESETS[number]
 
-const SUPPLIER_HEATMAP = [
-  { name: "Shenzhen Optoelectronics", composite: 8.5, rejects: 2,  npds: 14, tatCompliance: 92  },
-  { name: "Cords India",              composite: 9.1, rejects: 0,  npds: 8,  tatCompliance: 100 },
-  { name: "SealTech",                 composite: 7.2, rejects: 5,  npds: 22, tatCompliance: 78  },
-  { name: "Tubetech India",           composite: 5.8, rejects: 12, npds: 19, tatCompliance: 55  },
+const ALL_SITES = [
+  "All",
+  "Rajpura Grade A", "Rajpura Commercial", "Rajpura RAC",
+  "Jhajjhar RAC",
+  "Sricity RAC",
+  "Air Purifier Division", "Water Purifier Division",
 ]
-
-const REJECTION_PARETO = [
-  { code: "DIM-01: Dimension Mismatch", count: 48 },
-  { code: "MAT-08: Material Grade",     count: 22 },
-  { code: "DOC-03: Missing Test Cert",  count: 14 },
-  { code: "PKG-01: Transit Damage",     count: 5  },
+const ALL_VERTICALS = [
+  "All",
+  "Plastics", "Sheet Metal", "Electronics & Electrical",
+  "Compressors & Motors", "Packaging & Others", "Others",
 ]
-
-const SITE_TAT_AVG = [
-  { site: "Rajpura A",      avgTAT: 28 },
-  { site: "Rajpura Comm",   avgTAT: 34 },
-  { site: "Jhajjhar",       avgTAT: 22 },
-  { site: "Sricity",        avgTAT: 45 },
-  { site: "Air Purifier",   avgTAT: 18 },
-  { site: "Water Purifier", avgTAT: 25 },
-]
-
-const SPOCS = [
-  { id: 1, name: "Rahul Sharma", initials: "RS", vertical: "Commodity",  npds: 12, breached: 1, red: 2 },
-  { id: 2, name: "Priya Rajan",  initials: "PR", vertical: "Electrical", npds: 8,  breached: 0, red: 0 },
-  { id: 3, name: "Aditi Verma",  initials: "AV", vertical: "Compliance", npds: 15, breached: 3, red: 4 },
-]
+const ALL_FY = ["All", "FY26", "FY25", "FY24"]
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function PanelHeader({ title, right }: { title: string; right?: React.ReactNode }) {
+const pct  = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
+const p75  = (arr: number[]) => {
+  if (!arr.length) return 0
+  const s = [...arr].sort((a, b) => a - b)
+  return s[Math.floor(0.75 * (s.length - 1))]
+}
+
+function SectionLabel({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100" style={{ background: "#FAFAFA" }}>
-      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em]">{title}</span>
-      {right && <span className="text-[10px] font-medium text-slate-400">{right}</span>}
+    <div className="flex items-center gap-2.5 mb-3">
+      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.16em] whitespace-nowrap">{label}</span>
+      <div className="flex-1 h-px bg-slate-200" />
     </div>
   )
 }
 
-function TATDot({ health, size = 6 }: { health: string; size?: number }) {
-  return <div style={{ width: size, height: size, backgroundColor: TAT_COLORS[health], borderRadius: "50%" }} />
-}
-
-// ── Stage Legend ───────────────────────────────────────────────────────────
-function StageLegend({ stageCounts }: { stageCounts: number[] }) {
-  return (
-    <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-      <PanelHeader
-        title="NPD Stage Reference"
-        right={<span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">LIVE COUNTS</span>}
-      />
-      <div className="px-3 pt-3 pb-2 overflow-x-auto">
-        <div className="flex gap-0 min-w-max">
-          {STAGE_PHASES.map((phase, pi) => (
-            <div key={pi} className="flex flex-col" style={{ marginRight: pi < STAGE_PHASES.length - 1 ? 8 : 0 }}>
-              {/* Phase label */}
-              <div className="flex items-center gap-1.5 mb-2 px-1">
-                <div className="h-px flex-1" style={{ backgroundColor: phase.color, opacity: 0.4 }} />
-                <span className="text-[9px] font-bold uppercase tracking-widest whitespace-nowrap"
-                  style={{ color: phase.color }}>
-                  {phase.name}
-                </span>
-                <div className="h-px flex-1" style={{ backgroundColor: phase.color, opacity: 0.4 }} />
-              </div>
-              {/* Stage pills */}
-              <div className="flex gap-1.5">
-                {phase.stages.map(sn => {
-                  const count = stageCounts[sn - 1] ?? 0
-                  return (
-                    <div key={sn}
-                      className="flex flex-col items-center gap-1 px-2.5 py-2 rounded-lg border"
-                      style={{ background: phase.bg, borderColor: phase.border, minWidth: 68 }}>
-                      {/* Stage number circle */}
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
-                        style={{ backgroundColor: phase.color }}>
-                        {sn}
-                      </div>
-                      {/* Stage name */}
-                      <span className="text-[9px] font-semibold text-center leading-tight" style={{ color: phase.color }}>
-                        {STAGE_SHORT[sn - 1]}
-                      </span>
-                      {/* NPD count — separated below name */}
-                      <span className="text-[10px] font-bold" style={{ color: count > 0 ? phase.color : "#cbd5e1" }}>
-                        {count} NPD{count !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* TAT health legend */}
-        <div className="flex items-center gap-5 mt-3 pt-2 border-t border-slate-100">
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">TAT Health:</span>
-          {Object.entries({ green: "On Track", amber: "At Risk", red: "Due Today", black: "Overdue" }).map(([k, v]) => (
-            <div key={k} className="flex items-center gap-1.5">
-              <TATDot health={k} size={7} />
-              <span className="text-[9px] font-semibold text-slate-500">{v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── KPI Components ─────────────────────────────────────────────────────────
-function KPIGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-0.5">{label}</span>
-      <div className="flex gap-2">{children}</div>
-    </div>
-  )
-}
-
-function KPICard({
-  icon: Icon, label, value, sub, accent, alert, badge, rate,
-}: {
-  icon?: React.ElementType
-  label: string
-  value: string | number
-  sub?: string
-  accent: string
-  alert?: boolean
-  badge?: string
-  rate?: number // 0-100 progress bar
+function FilterSelect({ label, options, value, onChange }: {
+  label: string; options: string[]; value: string; onChange: (v: string) => void
 }) {
   return (
-    <div className={`bg-white border-l-[3px] border border-slate-200 p-3 min-w-[100px] shadow-sm flex flex-col gap-1 rounded-sm`}
-      style={{ borderLeftColor: accent }}>
+    <div className="flex items-center gap-1.5">
+      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.16em] shrink-0">{label}</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-7 text-[11px] min-w-[110px] bg-white border-slate-200">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(o => <SelectItem key={o} value={o} className="text-[11px]">{o}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function KPICard({ icon: Icon, label, value, sub, accent, alert, rate }: {
+  icon?: React.ElementType; label: string; value: string | number
+  sub?: string; accent: string; alert?: boolean; rate?: number
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 border-l-[3px] px-3 py-2.5 rounded-sm bg-white shadow-sm"
+      style={{ borderLeftColor: accent, border: `1px solid ${accent}22`, borderLeft: `3px solid ${accent}` }}>
       <div className="flex items-center justify-between">
-        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-tight">{label}</span>
-        {Icon && <Icon size={12} color={accent} strokeWidth={2.5} />}
+        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-tight">{label}</span>
+        {Icon && <Icon size={11} style={{ color: accent }} strokeWidth={2.5} />}
       </div>
-      <div className="flex items-end gap-2">
-        <span className="text-[22px] font-bold font-mono leading-none" style={{ color: alert ? accent : "#0f172a" }}>
-          {value}
-        </span>
-        {badge && (
-          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded mb-0.5"
-            style={{ background: accent + "18", color: accent }}>
-            {badge}
-          </span>
-        )}
-      </div>
+      <span className="text-[22px] font-bold font-mono leading-none" style={{ color: alert ? accent : "#0f172a" }}>
+        {value}
+      </span>
       {rate !== undefined && (
-        <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all"
-            style={{ width: `${Math.min(rate, 100)}%`, backgroundColor: accent }} />
+        <div className="h-0.5 rounded-full bg-slate-100 overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${Math.min(rate, 100)}%`, backgroundColor: accent }} />
         </div>
       )}
-      {sub && (
-        <span className={`text-[9px] font-medium leading-tight ${alert ? "font-semibold" : "text-slate-400"}`}
-          style={alert ? { color: accent } : {}}>
-          {sub}
-        </span>
-      )}
+      {sub && <span className="text-[9px] font-medium text-slate-400 leading-tight">{sub}</span>}
     </div>
   )
 }
@@ -223,158 +119,53 @@ function FunnelStrip({ steps }: {
   steps: { label: string; value: number; pct?: string; color: string }[]
 }) {
   return (
-    <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-3">
-      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Sourcing Funnel</span>
-      <div className="flex items-center gap-0 mt-2">
-        {steps.map((s, i) => (
-          <div key={i} className="flex items-center">
-            <div className="flex flex-col items-center gap-1 px-3">
-              <div className="text-[20px] font-bold font-mono leading-none" style={{ color: s.color }}>
-                {s.value}
-              </div>
-              <div className="text-[9px] font-semibold text-slate-500 text-center leading-tight">{s.label}</div>
-              {s.pct && (
-                <div className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                  style={{ background: s.color + "18", color: s.color }}>
-                  {s.pct}
-                </div>
-              )}
-            </div>
-            {i < steps.length - 1 && (
-              <ArrowRight size={14} className="text-slate-300 shrink-0 mx-1" />
+    <div className="flex items-center gap-1 flex-wrap">
+      {steps.map((s, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <div className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-sm bg-white shadow-sm"
+            style={{ border: `1px solid ${s.color}22` }}>
+            <span className="text-[20px] font-bold font-mono leading-none" style={{ color: s.color }}>{s.value}</span>
+            <span className="text-[9px] font-semibold text-slate-400 text-center leading-tight max-w-[80px]">{s.label}</span>
+            {s.pct && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-0.5"
+                style={{ background: s.color + "15", color: s.color }}>{s.pct}</span>
             )}
           </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Panel helpers ──────────────────────────────────────────────────────────
-function TATHeatmap({ data }: { data: ReturnType<typeof useNPDs>["npds"] }) {
-  const groups = STAGE_LABELS.map((label, i) => ({
-    stage: i + 1, label,
-    items: data.filter(d => d.stage === i + 1),
-  })).filter(g => g.items.length > 0)
-
-  if (groups.length === 0)
-    return <div className="p-4 text-xs text-slate-400 italic">No active NPDs to display.</div>
-
-  return (
-    <div className="p-3 overflow-x-auto">
-      <div className="flex gap-2 min-w-max">
-        {groups.map(g => (
-          <div key={g.stage} className="w-20 min-w-[80px]">
-            <div className="text-[9px] font-bold text-slate-500 mb-2 tracking-wide uppercase line-clamp-1" title={g.label}>
-              S{g.stage} · {g.label.split(" ").slice(0, 2).join(" ")}
-            </div>
-            <div className="flex flex-col gap-1">
-              {g.items.map(npd => (
-                <div key={npd.id} title={`${npd.id} — ${npd.itemName}`}
-                  className="h-6 rounded-sm px-1.5 flex items-center gap-1.5 cursor-pointer hover:opacity-80 border-l-[3px] shadow-sm"
-                  style={{ backgroundColor: TAT_COLORS[npd.tatHealth] + "18", borderLeftColor: TAT_COLORS[npd.tatHealth] }}>
-                  <TATDot health={npd.tatHealth} size={6} />
-                  <span className="text-[9px] text-slate-800 font-mono font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
-                    {npd.id.split("-").slice(-1)[0]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function BottleneckPanel({ data }: { data: { stage: string; count: number; avgDaysOver: number }[] }) {
-  const max = data[0]?.count || 1
-  return (
-    <div className="p-3 space-y-2">
-      {data.map((row, i) => (
-        <div key={i}>
-          <div className="flex justify-between mb-1">
-            <span className="text-[10px] font-medium text-slate-600">{row.stage}</span>
-            <span className="text-[10px] text-slate-900 font-mono font-bold">
-              {row.count} NPD{row.count > 1 ? "s" : ""}
-              {row.avgDaysOver > 0 && <span className="text-red-500 ml-1">+{row.avgDaysOver}d</span>}
-            </span>
-          </div>
-          <div className="h-1.5 bg-slate-100 rounded-sm overflow-hidden">
-            <div className="h-full rounded-sm transition-all" style={{
-              width: `${(row.count / max) * 100}%`,
-              backgroundColor: i === 0 ? "#ef4444" : i === 1 ? "#f59e0b" : "#3b82f6",
-            }} />
-          </div>
+          {i < steps.length - 1 && <ArrowRight size={12} className="text-slate-300 shrink-0" />}
         </div>
       ))}
     </div>
   )
 }
 
-function SupplierHeatmapPanel() {
-  const scoreColor = (s: number) => s >= 8 ? "text-emerald-600" : s >= 6 ? "text-amber-600" : "text-red-600"
-  const tatColor   = (t: number) => t >= 80 ? "text-emerald-600" : t >= 60 ? "text-amber-600" : "text-red-600"
+function TATDot({ health, size = 6 }: { health: string; size?: number }) {
+  return <div style={{ width: size, height: size, borderRadius: "50%", backgroundColor: TAT_COLORS[health] ?? "#94a3b8", flexShrink: 0 }} />
+}
+
+function PanelCard({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left border-collapse text-[10px]">
-        <thead>
-          <tr className="bg-slate-50 border-b border-slate-200">
-            {["Supplier", "TQR Score", "Rejects", "Total NPDs", "TAT %"].map(h => (
-              <th key={h} className={`py-1.5 px-3 font-semibold text-slate-500 uppercase tracking-widest ${h !== "Supplier" ? "text-center" : ""}`}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {SUPPLIER_HEATMAP.map((s, i) => (
-            <tr key={i} className="hover:bg-slate-50/50">
-              <td className="py-1.5 px-3 font-medium text-slate-900">{s.name}</td>
-              <td className={`py-1.5 px-3 text-center font-mono font-bold ${scoreColor(s.composite)}`}>{s.composite.toFixed(1)}</td>
-              <td className={`py-1.5 px-3 text-center font-mono font-semibold ${s.rejects > 0 ? "text-red-600" : "text-emerald-600"}`}>{s.rejects}</td>
-              <td className="py-1.5 px-3 text-center text-slate-600 font-mono">{s.npds}</td>
-              <td className={`py-1.5 px-3 text-center font-mono font-bold ${tatColor(s.tatCompliance)}`}>{s.tatCompliance}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="bg-white rounded-xl overflow-hidden shadow-sm" style={{ border: "1px solid #f1f5f9" }}>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100" style={{ background: "#FAFAFA" }}>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em]">{title}</span>
+        {right && <span className="text-[10px] text-slate-400">{right}</span>}
+      </div>
+      {children}
     </div>
   )
 }
 
-function RejectionPareto() {
-  const max   = REJECTION_PARETO[0]?.count || 1
-  const total = REJECTION_PARETO.reduce((a, b) => a + b.count, 0)
-  let cum = 0
-  return (
-    <div className="p-3">
-      {REJECTION_PARETO.map((row, i) => {
-        cum += row.count
-        const pct = Math.round((cum / total) * 100)
-        return (
-          <div key={i} className="mb-2">
-            <div className="flex justify-between mb-1">
-              <span className="text-[10px] font-medium text-slate-600">{row.code}</span>
-              <span className="text-[10px] font-mono font-semibold">
-                <span className="text-slate-900">{row.count}</span>
-                <span className="text-slate-400 ml-1.5">{pct}%</span>
-              </span>
-            </div>
-            <div className="h-1.5 bg-slate-100 rounded-sm">
-              <div className="h-full rounded-sm bg-red-500" style={{ width: `${(row.count / max) * 100}%` }} />
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
+function EmptyState({ label }: { label: string }) {
+  return <div className="flex items-center justify-center py-10 text-[11px] text-slate-300 italic">{label}</div>
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
 export default function LeadDashboard() {
   const { npds } = useNPDs()
-  const [locFilter,  setLocFilter]  = useState("All")
-  const [vertFilter, setVertFilter] = useState("All")
 
+  const [locFilter,    setLocFilter]    = useState("All")
+  const [vertFilter,   setVertFilter]   = useState("All")
+  const [fyFilter,     setFyFilter]     = useState("All")
+  const [datePreset,   setDatePreset]   = useState<DatePreset>("All Time")
   const [enquiriesSent,   setEnquiriesSent]   = useState(0)
   const [quotesReceived,  setQuotesReceived]  = useState(0)
   const [vendorsApproved, setVendorsApproved] = useState(0)
@@ -383,7 +174,7 @@ export default function LeadDashboard() {
   const [fpaDone,         setFpaDone]         = useState(0)
   const [costSaved,       setCostSaved]       = useState(0)
 
-  useEffect(() => {
+  const refreshCounters = () => {
     try {
       const allSent: Record<string, string[]> = JSON.parse(localStorage.getItem(ENQUIRY_SENT_KEY) || "{}")
       setEnquiriesSent(Object.keys(allSent).length)
@@ -398,11 +189,11 @@ export default function LeadDashboard() {
 
       const allMRN:   Record<string, any>    = JSON.parse(localStorage.getItem("sample_receipt_v1") || "{}")
       const allMAppr: Record<string, string> = JSON.parse(localStorage.getItem("mrn_approval_v1")   || "{}")
-      const keys = Object.values(allMRN).map((v: any) => v?.mrnNumber).filter(Boolean) as string[]
-      setMrnPending(keys.filter(k => !allMAppr[k]).length)
+      const mrnKeys = Object.values(allMRN).map((v: any) => v?.mrnNumber).filter(Boolean) as string[]
+      setMrnPending(mrnKeys.filter(k => !allMAppr[k]).length)
 
       const allStatus: Record<string, Record<string, VendorStatusResponse>> = JSON.parse(localStorage.getItem(VENDOR_STATUS_KEY) || "{}")
-      const allDateA:  Record<string, Record<string, string>>                = JSON.parse(localStorage.getItem("vendor_date_approval_v1") || "{}")
+      const allDateA:  Record<string, Record<string, any>>                   = JSON.parse(localStorage.getItem(VENDOR_DATE_APPROVAL_KEY) || "{}")
       let ec = 0
       for (const [nId, vs] of Object.entries(allStatus))
         for (const [vn, r] of Object.entries(vs))
@@ -411,255 +202,505 @@ export default function LeadDashboard() {
 
       setFpaDone(Object.keys(JSON.parse(localStorage.getItem("fpa_data_v1") || "{}")).length)
       setCostSaved(Object.keys(JSON.parse(localStorage.getItem("sample_cost_v1") || "{}")).length)
+
     } catch {}
-  }, [npds])
+  }
 
-  const filtered    = locFilter === "All" ? npds : npds.filter(n => n.rAndDDivision === locFilter)
-  const filteredNPDs = vertFilter === "All" ? filtered : filtered.filter(n =>
-    n.itemCategory.includes(vertFilter) || n.typeOfWork.includes(vertFilter))
+  useEffect(() => { refreshCounters() }, [npds])
 
-  // Derived live KPIs
-  const totalActive    = npds.length
-  const overdue        = npds.filter(n => n.tatHealth === "black").length
-  const atRisk         = npds.filter(n => n.tatHealth === "amber" || n.tatHealth === "red").length
-  const onTrack        = npds.filter(n => n.tatHealth === "green").length
-  const tatCompliance  = totalActive > 0 ? Math.round((onTrack / totalActive) * 100) : 0
-  const completed      = npds.filter(n => n.stage >= 8).length
-  const gradeA         = npds.filter(n => n.gradeA).length
-  const critical       = npds.filter(n => n.priority === "Critical").length
-  const inSourcing     = npds.filter(n => n.stage >= 2 && n.stage <= 3).length
-  const inTesting      = npds.filter(n => n.stage === 4 || n.stage === 5).length
-  const completionRate = totalActive > 0 ? Math.round((completed / totalActive) * 100) : 0
-  const enquiryConv    = enquiriesSent  > 0 ? Math.round((quotesReceived / enquiriesSent)  * 100) : 0
-  const approvalConv   = quotesReceived > 0 ? Math.round((vendorsApproved / quotesReceived) * 100) : 0
-  const escalationList = npds.filter(n => n.tatHealth === "black")
-  const stageCounts    = STAGE_LABELS.map((_, i) => npds.filter(n => n.stage === i + 1).length)
+  useEffect(() => {
+    const id = setInterval(() => refreshCounters(), 2000)
+    return () => clearInterval(id)
+  }, [])
 
-  const stageDistData  = STAGE_LABELS.map((label, i) => ({
-    stage: `S${i + 1}`, label: label.split(" ").slice(0, 3).join(" "),
-    count: npds.filter(n => n.stage === i + 1).length,
+  useEffect(() => {
+    const handler = () => refreshCounters()
+    window.addEventListener("storage", handler)
+    window.addEventListener("npd_updated", handler)
+    return () => { window.removeEventListener("storage", handler); window.removeEventListener("npd_updated", handler) }
+  }, [])
+
+  const filtered = useMemo(() => {
+    let base = npds
+    if (locFilter !== "All") base = base.filter(n => n.rAndDDivision === locFilter)
+    if (vertFilter !== "All") base = base.filter(n => n.itemCategory === vertFilter)
+    if (fyFilter !== "All") base = base.filter(n => n.id.includes(`NPD-FY-20${fyFilter.slice(2)}`))
+    if (datePreset !== "All Time") {
+      const now = Date.now()
+      const cutoff =
+        datePreset === "Last 7d"  ? now - 7  * 86400000 :
+        datePreset === "Last 30d" ? now - 30 * 86400000 :
+        datePreset === "Last 90d" ? now - 90 * 86400000 :
+        /* This FY */ (() => {
+          const today = new Date()
+          const fyStart = new Date(today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1, 3, 1)
+          return fyStart.getTime()
+        })()
+      base = base.filter(n => n.createdAt ? new Date(n.createdAt).getTime() >= cutoff : true)
+    }
+    return base
+  }, [npds, locFilter, vertFilter, fyFilter, datePreset])
+
+  // ── Derived KPIs ──────────────────────────────────────────────────────────
+  const total        = filtered.length
+  const overdue      = filtered.filter(n => n.tatHealth === "black").length
+  const atRisk       = filtered.filter(n => n.tatHealth === "amber" || n.tatHealth === "red").length
+  const onTrack      = filtered.filter(n => n.tatHealth === "green").length
+  const tatComp      = pct(onTrack, total)
+  const completed    = filtered.filter(n => n.stage >= 8).length
+  const gradeA       = filtered.filter(n => n.gradeA).length
+  const critical     = filtered.filter(n => n.priority === "Critical").length
+  const inSourcing   = filtered.filter(n => n.stage >= 2 && n.stage <= 3).length
+  const inRnd        = filtered.filter(n => n.stage >= 4 && n.stage <= 6).length
+  const compRate     = pct(completed, total)
+  const enquiryConv  = pct(quotesReceived,  enquiriesSent)
+  const approvalConv = pct(vendorsApproved, quotesReceived)
+
+  const activeAges  = filtered.filter(n => n.stage < 8).map(n => (n.totalTat ?? 90) - n.tatDaysRemaining).filter(a => a >= 0)
+  const avgCycle    = activeAges.length ? Math.round(activeAges.reduce((s, a) => s + a, 0) / activeAges.length) : 0
+  const agingP75Val = p75(activeAges)
+
+  const rejectedQ = useMemo(() => {
+    try {
+      const all: Record<string, Record<string, string>> = JSON.parse(localStorage.getItem(VENDOR_QUOTE_APPROVALS_KEY) || "{}")
+      let r = 0; for (const v of Object.values(all)) r += Object.values(v).filter(x => x === "rejected").length
+      return r
+    } catch { return 0 }
+  }, [quotesReceived, vendorsApproved])
+  const rejRate = pct(rejectedQ, quotesReceived)
+
+  const stageDistData = STAGE_SHORT.slice(0, 7).map((label, i) => ({
+    stage: `S${i + 1}`, label,
+    count: filtered.filter(n => n.stage === i + 1).length,
   })).filter(d => d.count > 0)
 
-  const bottleneckData = STAGE_LABELS
-    .map((label, i) => ({ stage: `S${i + 1}: ${label.split(" ").slice(0, 2).join(" ")}`, count: npds.filter(n => n.stage === i + 1).length, avgDaysOver: 0 }))
-    .filter(d => d.count > 0).sort((a, b) => b.count - a.count).slice(0, 5)
+  const bottleneckData = STAGE_SHORT
+    .map((s, i) => ({ stage: `S${i + 1}: ${s}`, count: filtered.filter(n => n.stage === i + 1).length }))
+    .filter((d, i) => d.count > 0 && i + 1 < 8).sort((a, b) => b.count - a.count).slice(0, 6)
+  const bottleneckMax = bottleneckData[0]?.count || 1
 
-  const tatPendencyData = STAGE_LABELS.map((_, i) => ({
-    stage: `S${i + 1}`,
-    pending: npds.filter(n => n.stage === i + 1).length,
-    tatAvg: [3, 7, 5, 10, 14, 2, 6, 4][i] ?? 3,
+  const siteData = useMemo(() => {
+    const map: Record<string, number[]> = {}
+    filtered.forEach(n => {
+      if (!n.rAndDDivision) return
+      if (!map[n.rAndDDivision]) map[n.rAndDDivision] = []
+      map[n.rAndDDivision].push(n.tatDaysRemaining)
+    })
+    return Object.entries(map).map(([site, vals]) => ({
+      site: site.split(" ").slice(0, 2).join(" "),
+      avgTAT: Math.round(vals.reduce((s, v) => s + v, 0) / vals.length),
+    }))
+  }, [filtered])
+
+  const supplierData = useMemo(() => {
+    const map: Record<string, { npds: number; issues: number }> = {}
+    filtered.forEach(n => {
+      if (!n.supplier || n.supplier === "Pending Assignment") return
+      if (!map[n.supplier]) map[n.supplier] = { npds: 0, issues: 0 }
+      map[n.supplier].npds++
+      if (n.tatHealth === "black" || n.tatHealth === "red") map[n.supplier].issues++
+    })
+    return Object.entries(map)
+      .map(([name, d]) => ({ name, npds: d.npds, issues: d.issues, tatComp: pct(d.npds - d.issues, d.npds) }))
+      .sort((a, b) => b.npds - a.npds).slice(0, 6)
+  }, [filtered])
+
+  const spocData = useMemo(() => {
+    const map: Record<string, { total: number; breached: number; atRisk: number }> = {}
+    filtered.forEach(n => {
+      if (!n.spoc) return
+      if (!map[n.spoc]) map[n.spoc] = { total: 0, breached: 0, atRisk: 0 }
+      map[n.spoc].total++
+      if (n.tatHealth === "black") map[n.spoc].breached++
+      if (n.tatHealth === "red" || n.tatHealth === "amber") map[n.spoc].atRisk++
+    })
+    return Object.entries(map).map(([name, d]) => ({
+      name,
+      initials: name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
+      total: d.total, breached: d.breached, atRisk: d.atRisk,
+      compliance: pct(d.total - d.breached - d.atRisk, d.total),
+    }))
+  }, [filtered])
+
+  const tatPendencyData = STAGE_SHORT.slice(0, 7).map((_, i) => ({
+    stage:   `S${i + 1}`,
+    pending: filtered.filter(n => n.stage === i + 1).length,
+    tatAvg:  [3, 7, 5, 10, 14, 2, 6][i] ?? 3,
   }))
 
+  const escalations = filtered.filter(n => n.tatHealth === "black")
+
+  // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-[1600px] mx-auto flex flex-col gap-4">
+    <div className="-mx-6 -mt-6 min-h-full flex flex-col bg-[#F2F4F7] animate-in fade-in duration-300">
+      <div className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-5 flex flex-col gap-4">
 
-      {/* ── Filters ─────────────────────────────────────────────────────── */}
-      <div className="flex gap-4 flex-wrap items-center">
-        <div className="flex gap-1.5 items-center flex-wrap">
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mr-1">Location:</span>
-          {["All","Rajpura Grade A","Rajpura Commercial","Jhajjhar RAC","Sricity RAC","Air Purifier Division","Water Purifier Division"].map(v => (
-            <button key={v} onClick={() => setLocFilter(v)}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-colors ${
-                locFilter === v ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-              }`}>{v}</button>
-          ))}
+        {/* ── Filters ─────────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm px-4 py-3 flex flex-wrap gap-3 items-center">
+          <FilterSelect label="Site"     options={ALL_SITES}          value={locFilter}   onChange={setLocFilter} />
+          <div className="w-px h-5 bg-slate-100 hidden sm:block" />
+          <FilterSelect label="Category" options={ALL_VERTICALS}      value={vertFilter}  onChange={setVertFilter} />
+          <div className="w-px h-5 bg-slate-100 hidden sm:block" />
+          <FilterSelect label="FY"       options={ALL_FY}             value={fyFilter}    onChange={setFyFilter} />
+          <div className="w-px h-5 bg-slate-100 hidden sm:block" />
+          <FilterSelect label="Period"   options={[...DATE_PRESETS]}  value={datePreset}  onChange={v => setDatePreset(v as DatePreset)} />
+          {(locFilter !== "All" || vertFilter !== "All" || fyFilter !== "All" || datePreset !== "All Time") && (
+            <button
+              onClick={() => { setLocFilter("All"); setVertFilter("All"); setFyFilter("All"); setDatePreset("All Time") }}
+              className="ml-auto text-[10px] font-semibold text-slate-400 hover:text-slate-700 transition-colors px-2 py-1 rounded hover:bg-slate-50 transition-colors">
+              Clear all ×
+            </button>
+          )}
         </div>
-        <div className="flex gap-1.5 items-center">
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mr-1">Vertical:</span>
-          {["All","Commodity","Electrical","Compliance","Packaging"].map(v => (
-            <button key={v} onClick={() => setVertFilter(v)}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-colors ${
-                vertFilter === v ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-              }`}>{v}</button>
-          ))}
-        </div>
-      </div>
 
-      {/* ── Charts Row ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Live stage distribution */}
-        <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Stage Distribution</h3>
-            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">LIVE</span>
+        {/* ── Hero block ──────────────────────────────────────────────────── */}
+        {(
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+            <div className="flex flex-wrap items-start gap-8">
+              {/* Big number */}
+              <div>
+                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.16em]">Total Active NPDs</div>
+                <div className="text-[64px] font-bold font-mono leading-none text-slate-900 mt-1">{total}</div>
+                <div className="text-[11px] text-slate-400 mt-1">{compRate}% completion · {gradeA} Grade A</div>
+              </div>
+              <div className="self-stretch w-px bg-slate-100" />
+              {/* TAT tiles */}
+              <div className="grid grid-cols-2 gap-2.5 flex-1 min-w-[260px]">
+                {[
+                  { k: "green", label: "On Track",  v: onTrack,  icon: CheckCircle2 },
+                  { k: "amber", label: "At Risk",   v: atRisk,   icon: AlertCircle  },
+                  { k: "red",   label: "Due Today", v: filtered.filter(n => n.tatHealth === "red").length, icon: Clock },
+                  { k: "black", label: "Overdue",   v: overdue,  icon: AlertTriangle },
+                ].map(({ k, label, v, icon: Icon }) => (
+                  <div key={k} className="flex items-center gap-2.5 px-3 py-2 rounded-lg"
+                    style={{ background: TAT_COLORS[k] + "10", border: `1px solid ${TAT_COLORS[k]}30` }}>
+                    <Icon size={13} style={{ color: TAT_COLORS[k] }} />
+                    <div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: TAT_COLORS[k] }}>{label}</div>
+                      <div className="text-[20px] font-bold font-mono leading-none" style={{ color: v > 0 && k !== "green" ? TAT_COLORS[k] : "#0f172a" }}>{v}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="self-stretch w-px bg-slate-100" />
+              {/* Compliance meter */}
+              <div className="flex flex-col items-center justify-center gap-1.5 min-w-[110px]">
+                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.16em]">TAT Compliance</div>
+                <div className="relative w-20 h-20">
+                  <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+                    <circle cx="40" cy="40" r="32" fill="none" stroke="#f1f5f9" strokeWidth="7" />
+                    <circle cx="40" cy="40" r="32" fill="none"
+                      stroke={tatComp >= 80 ? "#10b981" : tatComp >= 50 ? "#f59e0b" : "#ef4444"}
+                      strokeWidth="7"
+                      strokeDasharray={`${(tatComp / 100) * 201} 201`}
+                      strokeLinecap="round" />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[18px] font-bold font-mono text-slate-900">{tatComp}%</span>
+                  </div>
+                </div>
+                <div className="text-[9px] text-slate-400">{onTrack}/{total} on track</div>
+              </div>
+            </div>
           </div>
-          {stageDistData.length === 0
-            ? <div className="flex-1 flex items-center justify-center text-[10px] text-slate-400">No data yet</div>
-            : (
-              <div className="flex-1">
+        )}
+
+        {/* ── Analytics ─────────────────────────────────────────────────────── */}
+        <div>
+          <SectionLabel label="Analytics" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+            {/* Stage distribution */}
+            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Stage Distribution</h3>
+                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">LIVE</span>
+              </div>
+              <div className="flex-1 relative">
+                {stageDistData.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No submissions yet</div>
+                )}
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stageDistData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                  <BarChart data={stageDistData.length ? stageDistData : [{ stage: "—", count: 0 }]} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <RechartsTooltip contentStyle={{ fontSize: "11px", borderRadius: "4px", border: "1px solid #e2e8f0" }}
+                    <RTooltip contentStyle={{ fontSize: "11px", borderRadius: "4px", border: "1px solid #e2e8f0" }}
                       formatter={(v, _, e: any) => [(v ?? 0) + " NPDs", e?.payload?.label ?? ""]} />
                     <Bar dataKey="count" radius={[2, 2, 0, 0]} barSize={18}>
-                      {stageDistData.map((_, i) => <Cell key={i} fill={STAGE_COLORS[i % STAGE_COLORS.length]} />)}
+                      {stageDistData.map((_, i) => <Cell key={i} fill={STAGE_ACCENT[i % STAGE_ACCENT.length]} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            )}
-        </div>
+            </div>
 
-        {/* TAT vs Pendency */}
-        <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
-          <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">TAT vs Pendency (by Stage)</h3>
-          <div className="flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={tatPendencyData.filter(d => d.pending > 0)} margin={{ top: 4, right: 10, left: -24, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="left"  tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <RechartsTooltip contentStyle={{ fontSize: "11px", borderRadius: "4px", border: "1px solid #e2e8f0" }} />
-                <Legend wrapperStyle={{ fontSize: "10px" }} />
-                <Bar yAxisId="left" dataKey="pending" name="Pending" fill="#3b82f6" radius={[2,2,0,0]} barSize={14} />
-                <Line yAxisId="right" dataKey="tatAvg" name="Avg TAT (d)" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} />
-              </BarChart>
-            </ResponsiveContainer>
+            {/* TAT vs Pendency */}
+            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
+              <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">TAT vs Pendency (by Stage)</h3>
+              <div className="flex-1 relative">
+                {tatPendencyData.every(d => d.pending === 0) && (
+                  <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No active stages</div>
+                )}
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={tatPendencyData} margin={{ top: 4, right: 10, left: -24, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left"  tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <RTooltip contentStyle={{ fontSize: "11px", borderRadius: "4px", border: "1px solid #e2e8f0" }} />
+                    <Legend wrapperStyle={{ fontSize: "10px" }} />
+                    <Bar yAxisId="left" dataKey="pending" name="Pending" fill="#3b82f6" radius={[2,2,0,0]} barSize={14} />
+                    <Line yAxisId="right" dataKey="tatAvg" name="Avg TAT (d)" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Site-wise TAT */}
+            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
+              <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">Site-wise Avg TAT Remaining (Days)</h3>
+              <div className="flex-1 relative">
+                {siteData.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No site data yet</div>
+                )}
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={siteData.length ? siteData : [{ site: "—", avgTAT: 0 }]} margin={{ top: 4, right: 10, left: -24, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="site" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <RTooltip contentStyle={{ fontSize: "11px", borderRadius: "4px", border: "1px solid #e2e8f0" }} />
+                    <Line type="monotone" dataKey="avgTAT" name="Avg TAT" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: "#10b981" }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
           </div>
         </div>
 
-        {/* Site-wise TAT */}
-        <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
-          <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">Site-wise Avg TAT (Days)</h3>
-          <div className="flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={SITE_TAT_AVG} margin={{ top: 4, right: 10, left: -24, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="site" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <RechartsTooltip contentStyle={{ fontSize: "11px", borderRadius: "4px", border: "1px solid #e2e8f0" }} />
-                <Line type="monotone" dataKey="avgTAT" name="Avg TAT" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: "#10b981" }} />
-              </LineChart>
-            </ResponsiveContainer>
+        {/* ── Pipeline Depth ───────────────────────────────────────────────── */}
+        <div>
+          <SectionLabel label="Pipeline Depth" />
+          <div className="grid grid-cols-6 gap-2">
+            <KPICard icon={Layers}        label="Total Active"   value={total}             accent="#0f172a" sub={`${inSourcing} in sourcing`} rate={compRate} />
+            <KPICard icon={CheckCircle2}  label="Completed"      value={completed}         accent="#059669" sub={`${compRate}% completion`} rate={compRate} />
+            <KPICard icon={Star}          label="Grade A"        value={gradeA}            accent="#7c3aed" sub="priority tracked" />
+            <KPICard icon={AlertTriangle} label="Critical"       value={critical}          accent="#dc2626" sub="high-urgency" alert={critical > 0} />
+            <KPICard icon={Clock}         label="TAT Compliance" value={`${tatComp}%`}     accent="#10b981" sub={`${onTrack} of ${total} on track`} rate={tatComp} />
+            <KPICard icon={FlaskConical}  label="In R&D / TQR"  value={inRnd}             accent="#8b5cf6" sub="Stages 4–6 active" />
           </div>
         </div>
-      </div>
 
-      {/* ── Stage Legend ─────────────────────────────────────────────────── */}
-      <StageLegend stageCounts={stageCounts} />
-
-      {/* ── TAT Heatmap ──────────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-        <PanelHeader title="TAT Heatmap — Active NPDs by Stage" right={
-          <div className="flex gap-1">
-            {["All","Commodity","Electrical","Compliance","Packaging"].map(v => (
-              <button key={v} onClick={() => setVertFilter(v)}
-                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-colors ${
-                  vertFilter === v ? "bg-slate-200 text-slate-800" : "text-slate-500 hover:bg-slate-100"
-                }`}>{v}</button>
-            ))}
+        {/* ── Efficiency ───────────────────────────────────────────────────── */}
+        <div>
+          <SectionLabel label="Efficiency Metrics" />
+          <div className="grid grid-cols-6 gap-2">
+            <KPICard icon={Timer}       label="Avg Age"          value={avgCycle > 0 ? `${avgCycle}d` : "—"}     accent="#2563eb" sub="avg days elapsed (active)" />
+            <KPICard icon={Hourglass}   label="Aging P75"        value={agingP75Val > 0 ? `${agingP75Val}d` : "—"} accent="#f59e0b" sub="75th pct. active NPD age" alert={agingP75Val > 40} />
+            <KPICard icon={AlertCircle} label="Supplier Reject"  value={`${rejRate}%`}                            accent="#ef4444" sub="rejection rate on quotes"  alert={rejRate > 10} />
+            <KPICard icon={Zap}         label="Enquiry Conv."    value={`${enquiryConv}%`}                        accent="#2563eb" sub={`${quotesReceived} quotes / ${enquiriesSent} sent`} rate={enquiryConv} />
+            <KPICard icon={Users}       label="Vendor Approval"  value={`${approvalConv}%`}                       accent="#059669" sub={`${vendorsApproved} approved of ${quotesReceived}`} rate={approvalConv} />
+            <KPICard icon={ThumbsUp}    label="Closed Rate"      value={`${compRate}%`}                           accent="#10b981" sub={`${completed} of ${total} NPDs closed`} rate={compRate} />
           </div>
-        } />
-        <TATHeatmap data={filteredNPDs} />
-      </div>
-
-      {/* ── KPI Dashboard ────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3">
-
-        {/* Row 1: Pipeline overview */}
-        <KPIGroup label="Pipeline Overview">
-          <KPICard icon={Layers}       label="Total Active"   value={totalActive}           accent="#0f172a" sub={`${inSourcing} in sourcing`} rate={completionRate} />
-          <KPICard icon={CheckCircle2} label="Completed"      value={completed}             accent="#059669" sub={`${completionRate}% completion rate`} rate={completionRate} />
-          <KPICard icon={Star}         label="Grade A NPDs"   value={gradeA}                accent="#7c3aed" sub="priority tracked" />
-          <KPICard icon={AlertTriangle}label="Critical"       value={critical}              accent="#dc2626" sub="high-urgency requests" alert={critical > 0} />
-          <KPICard icon={Clock}        label="TAT Compliance" value={`${tatCompliance}%`}   accent="#10b981" sub={`${onTrack} of ${totalActive} on track`} rate={tatCompliance} />
-          <KPICard icon={FlaskConical} label="In R&D / TQR"   value={inTesting}             accent="#8b5cf6" sub="Stages 4–5 active" />
-        </KPIGroup>
-
-        {/* Row 2: Sourcing funnel + actions */}
-        <div className="flex gap-2 flex-wrap">
-          <FunnelStrip steps={[
-            { label: "Enquiries Sent",   value: enquiriesSent,   color: "#2563eb" },
-            { label: "Quotes Received",  value: quotesReceived,  color: "#7c3aed", pct: `${enquiryConv}% response` },
-            { label: "Vendors Approved", value: vendorsApproved, color: "#059669", pct: `${approvalConv}% approval`  },
-          ]} />
-          <KPIGroup label="Approvals &amp; Quality">
-            <KPICard icon={Package}        label="MRNs Pending"   value={mrnPending}  accent="#f59e0b" sub="awaiting R&D Head" alert={mrnPending > 0} />
-            <KPICard icon={Calendar}       label="Ext. Requests"  value={extPending}  accent="#f97316" sub="dispatch extensions" alert={extPending > 0} />
-            <KPICard icon={ClipboardCheck} label="FPA Done"       value={fpaDone}     accent="#8b5cf6" sub="first-part approvals" />
-            <KPICard icon={IndianRupee}    label="Cost Finalised" value={costSaved}   accent="#0891b2" sub="sample costs saved" />
-          </KPIGroup>
-          <KPIGroup label="TAT Risk">
-            <KPICard icon={AlertTriangle}  label="Overdue"        value={overdue}     accent="#dc2626" sub="TAT breached" alert={overdue > 0} />
-            <KPICard icon={AlertCircle}    label="At Risk"        value={atRisk}      accent="#f59e0b" sub="amber / red TAT" alert={atRisk > 0} />
-            <KPICard icon={TrendingUp}     label="On Track"       value={onTrack}     accent="#10b981" sub="green TAT status" rate={tatCompliance} />
-          </KPIGroup>
         </div>
-      </div>
 
-      {/* ── Middle Row ───────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-          <PanelHeader title="Stage Bottleneck Analysis" right="live" />
-          {bottleneckData.length > 0
-            ? <BottleneckPanel data={bottleneckData} />
-            : <div className="p-4 text-[10px] text-slate-400 italic">No bottlenecks — all stages clear.</div>}
+        {/* ── Operations ───────────────────────────────────────────────────── */}
+        <div>
+          <SectionLabel label="Operations" />
+          <div className="flex gap-3 items-stretch">
+            <div className="bg-white rounded-lg border border-slate-100 shadow-sm px-4 py-3 shrink-0">
+              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em] mb-2.5">Sourcing Funnel</div>
+              <FunnelStrip steps={[
+                { label: "Enquiries Sent",   value: enquiriesSent,   color: "#2563eb" },
+                { label: "Quotes Received",  value: quotesReceived,  color: "#7c3aed", pct: `${enquiryConv}% resp.` },
+                { label: "Vendors Approved", value: vendorsApproved, color: "#059669", pct: `${approvalConv}% appr.` },
+              ]} />
+            </div>
+            <div className="grid grid-cols-4 gap-2 flex-1">
+              <KPICard icon={Package}        label="MRNs Pending"   value={mrnPending}  accent="#f59e0b" sub="awaiting R&D Head" alert={mrnPending > 0} />
+              <KPICard icon={Calendar}       label="Ext. Requests"  value={extPending}  accent="#f97316" sub="date extensions" alert={extPending > 0} />
+              <KPICard icon={ClipboardCheck} label="FPA Done"       value={fpaDone}     accent="#8b5cf6" sub="first-part approvals" />
+              <KPICard icon={IndianRupee}    label="Cost Finalised" value={costSaved}   accent="#0891b2" sub="sample costs saved" />
+            </div>
+          </div>
         </div>
-        <div className="flex-[1.5] bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-          <PanelHeader title="Supplier Performance Heatmap" right="TQR composite · 90d" />
-          <SupplierHeatmapPanel />
-        </div>
-      </div>
 
-      {/* ── Bottom Row ───────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-          <PanelHeader title="Rejection Root-Cause Pareto" right="89 total" />
-          <RejectionPareto />
-        </div>
-        <div className="flex-[2] bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-          <PanelHeader title="Escalation Queue"
-            right={<span className={escalationList.length > 0 ? "text-red-600" : "text-slate-400"}>{escalationList.length} overdue</span>} />
-          <div className="divide-y divide-slate-100 max-h-52 overflow-y-auto">
-            {escalationList.length === 0
-              ? <div className="p-3 text-[10px] text-slate-400">No active escalations</div>
-              : escalationList.map(e => (
-                <div key={e.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50">
-                  <TATDot health="black" size={8} />
-                  <span className="font-mono text-[10px] font-bold text-blue-700 min-w-[100px]">{e.id}</span>
-                  <span className="text-[11px] font-semibold text-slate-800 flex-1 truncate">{e.itemName}</span>
-                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[9px] px-1 h-4 uppercase">{e.productLine}</Badge>
-                  <span className="font-mono text-[10px] font-bold text-red-600 w-24 text-right">+{-e.tatDaysRemaining}d overdue</span>
-                  <button className="bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase hover:bg-red-100 transition-colors">Escalate</button>
+        {/* ── Stage Pipeline ────────────────────────────────────────────────── */}
+        <PanelCard title="Stage Pipeline — All NPDs" right={`${filtered.length} visible`}>
+          <div className="p-4">
+            {/* Phase header bands */}
+            <div className="grid grid-cols-7 gap-2 mb-1">
+              {PHASE_DEFS.map(phase => (
+                <div key={phase.name}
+                  className="flex items-center justify-center gap-1 py-0.5 rounded-sm"
+                  style={{ gridColumn: `span ${phase.stages.length}`, background: phase.color + "12", border: `1px solid ${phase.color}25` }}>
+                  <span className="text-[8px] font-bold uppercase tracking-[0.14em]" style={{ color: phase.color }}>{phase.name}</span>
                 </div>
               ))}
+            </div>
+            {/* Stage columns — always 8 */}
+            <div className="grid grid-cols-7 gap-2">
+              {PHASE_DEFS.flatMap(phase =>
+                phase.stages.map(sn => {
+                  const sNPDs = filtered.filter(n => n.stage === sn)
+                  const isDone = sn === 8
+                  return (
+                    <div key={sn} className="flex flex-col gap-1 min-h-[60px]">
+                      <div className="text-[9px] font-semibold px-1 py-0.5 rounded-sm mb-1 truncate flex items-center gap-1"
+                        style={{ color: isDone ? "#059669" : phase.color, background: isDone ? "#05966912" : phase.color + "08" }}>
+                        {isDone ? "✓" : `S${sn}`} · {isDone ? "Completed" : STAGE_SHORT[sn - 1]}
+                      </div>
+                      {sNPDs.length === 0
+                        ? <div className="flex-1 rounded-sm border border-dashed border-slate-100 min-h-[36px]" />
+                        : sNPDs.map(npd => (
+                          <Link key={npd.id} href={`/npd/${npd.id}`}
+                            className="h-7 rounded-sm px-2 flex items-center gap-1.5 hover:opacity-70 transition-opacity w-full"
+                            style={isDone
+                              ? { background: "#05966918", borderLeft: "2px solid #059669" }
+                              : { background: TAT_COLORS[npd.tatHealth] + "15", borderLeft: `2px solid ${TAT_COLORS[npd.tatHealth]}` }}
+                            title={`${npd.id} — ${npd.itemName}`}>
+                            {isDone
+                              ? <span className="text-[9px] text-emerald-600">✓</span>
+                              : <TATDot health={npd.tatHealth} size={5} />}
+                            <span className="text-[9px] font-mono font-semibold overflow-hidden text-ellipsis whitespace-nowrap"
+                              style={{ color: isDone ? "#059669" : "#334155" }}>
+                              {npd.id.split("-").slice(-1)[0]}
+                            </span>
+                          </Link>
+                        ))
+                      }
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            {/* TAT legend */}
+            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">TAT:</span>
+              {Object.entries(TAT_LABELS).map(([k, v]) => (
+                <div key={k} className="flex items-center gap-1.5">
+                  <TATDot health={k} size={6} />
+                  <span className="text-[9px] font-medium text-slate-400">{v}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
+        </PanelCard>
 
-      {/* ── SPOC Compliance ──────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden mb-4">
-        <PanelHeader title="45-Day Sample Compliance by Vertical" />
-        <div className="flex gap-4 p-3 overflow-x-auto">
-          {SPOCS.map(sp => {
-            const pct = Math.round(((sp.npds - sp.breached - sp.red) / sp.npds) * 100)
-            return (
-              <div key={sp.id} className="flex-1 bg-slate-50 border border-slate-200 p-3 rounded-sm min-w-[160px]">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold">{sp.initials}</div>
-                  <div>
-                    <div className="text-[11px] font-bold text-slate-900">{sp.name}</div>
-                    <div className="text-[9px] font-semibold text-slate-500 uppercase">{sp.vertical}</div>
+        {/* ── Middle row ────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <PanelCard title="Stage Bottleneck" right="live">
+            <div className="p-4 space-y-2.5 min-h-[80px]">
+              {bottleneckData.length === 0
+                ? <EmptyState label="No active stages" />
+                : bottleneckData.map((row, i) => (
+                  <div key={i}>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[10px] font-medium text-slate-500">{row.stage}</span>
+                      <span className="text-[11px] font-mono font-bold text-slate-800">{row.count} NPD{row.count > 1 ? "s" : ""}</span>
+                    </div>
+                    <div className="h-1.5 rounded-sm bg-slate-100 overflow-hidden">
+                      <div className="h-full rounded-sm" style={{
+                        width: `${(row.count / bottleneckMax) * 100}%`,
+                        background: i === 0 ? "#ef4444" : i === 1 ? "#f59e0b" : "#3b82f6",
+                      }} />
+                    </div>
                   </div>
-                </div>
-                <div className={`text-3xl font-mono font-bold ${pct >= 80 ? "text-emerald-600" : pct >= 60 ? "text-amber-500" : "text-red-500"}`}>{pct}%</div>
-                <div className="h-1.5 bg-slate-200 rounded-full mt-1.5 overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: pct >= 80 ? "#10b981" : pct >= 60 ? "#f59e0b" : "#ef4444" }} />
-                </div>
-                <div className="text-[9px] font-medium text-slate-500 mt-1.5 uppercase tracking-wider">
-                  {sp.npds} Active ·{" "}
-                  {sp.breached > 0 ? <span className="text-red-500 font-bold">{sp.breached} Breached</span> : "0 Breached"}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+                ))
+              }
+            </div>
+          </PanelCard>
 
+          <PanelCard title="Supplier Performance" right="live NPDs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-[10px]">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    {["Supplier","NPDs","Issues","TAT %"].map(h => (
+                      <th key={h} className="py-2 px-3 font-semibold text-slate-400 uppercase tracking-wider text-[9px]"
+                        style={{ textAlign: h !== "Supplier" ? "center" : "left" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {supplierData.length === 0
+                    ? <tr><td colSpan={4} className="py-8 text-center text-[10px] text-slate-300 italic">Suppliers appear once NPDs are assigned</td></tr>
+                    : supplierData.map((s, i) => (
+                      <tr key={i} className="hover:bg-slate-50/50">
+                        <td className="py-2 px-3 font-medium text-slate-700">{s.name}</td>
+                        <td className="py-2 px-3 text-center font-mono font-bold text-slate-900">{s.npds}</td>
+                        <td className="py-2 px-3 text-center font-mono font-semibold" style={{ color: s.issues > 0 ? "#ef4444" : "#059669" }}>{s.issues}</td>
+                        <td className="py-2 px-3 text-center font-mono font-bold"
+                          style={{ color: s.tatComp >= 80 ? "#059669" : s.tatComp >= 60 ? "#f59e0b" : "#ef4444" }}>
+                          {s.tatComp}%
+                        </td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
+            </div>
+          </PanelCard>
+        </div>
+
+        {/* ── Bottom row ────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <PanelCard title="Escalation Queue"
+            right={<span className={escalations.length > 0 ? "text-red-600 font-bold" : ""}>{escalations.length} overdue</span>}>
+            <div className="divide-y divide-slate-50 max-h-60 overflow-y-auto min-h-[60px]">
+              {escalations.length === 0
+                ? <EmptyState label="No active escalations — all NPDs within TAT" />
+                : escalations.map(e => (
+                  <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors">
+                    <TATDot health="black" size={7} />
+                    <Link href={`/npd/${e.id}`} className="font-mono text-[10px] font-bold text-blue-700 hover:underline min-w-[110px]">
+                      {e.id}
+                    </Link>
+                    <span className="text-[11px] font-semibold text-slate-700 flex-1 truncate">{e.itemName}</span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-semibold">{e.productLine}</span>
+                    <span className="font-mono text-[10px] font-bold text-red-600 w-20 text-right">+{-e.tatDaysRemaining}d</span>
+                  </div>
+                ))
+              }
+            </div>
+          </PanelCard>
+
+          <PanelCard title="SPOC TAT Compliance">
+            <div className="p-4 grid grid-cols-2 gap-2 max-h-60 overflow-y-auto min-h-[60px]">
+              {spocData.length === 0
+                ? <div className="col-span-2"><EmptyState label="SPOC data appears once NPDs have SPOCs assigned" /></div>
+                : spocData.map(sp => (
+                  <div key={sp.name} className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold">
+                        {sp.initials}
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-900">{sp.name}</div>
+                        <div className="text-[9px] text-slate-400">{sp.total} NPD{sp.total !== 1 ? "s" : ""}</div>
+                      </div>
+                    </div>
+                    <div className="text-[26px] font-mono font-bold leading-none"
+                      style={{ color: sp.compliance >= 80 ? "#059669" : sp.compliance >= 60 ? "#f59e0b" : "#ef4444" }}>
+                      {sp.compliance}%
+                    </div>
+                    <div className="h-1 rounded-full bg-slate-200 mt-1.5 overflow-hidden">
+                      <div className="h-full rounded-full" style={{
+                        width: `${sp.compliance}%`,
+                        background: sp.compliance >= 80 ? "#059669" : sp.compliance >= 60 ? "#f59e0b" : "#ef4444",
+                      }} />
+                    </div>
+                    {sp.breached > 0 && <div className="text-[9px] mt-1.5 font-semibold text-red-500">{sp.breached} breached</div>}
+                  </div>
+                ))
+              }
+            </div>
+          </PanelCard>
+        </div>
+
+        <div className="pb-4" />
+      </div>
     </div>
   )
 }
