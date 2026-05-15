@@ -411,12 +411,12 @@ export default function LeadDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
             {/* Stage distribution */}
-            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
+            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Stage Distribution</h3>
                 <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">LIVE</span>
               </div>
-              <div className="flex-1 min-h-0 relative">
+              <div className="relative" style={{ height: 180 }}>
                 {stageDistData.length === 0 && (
                   <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No submissions yet</div>
                 )}
@@ -436,9 +436,9 @@ export default function LeadDashboard() {
             </div>
 
             {/* TAT vs Pendency */}
-            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
+            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4">
               <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">TAT vs Pendency (by Stage)</h3>
-              <div className="flex-1 min-h-0 relative">
+              <div className="relative" style={{ height: 180 }}>
                 {tatPendencyData.every(d => d.pending === 0) && (
                   <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No active stages</div>
                 )}
@@ -458,9 +458,9 @@ export default function LeadDashboard() {
             </div>
 
             {/* Site-wise TAT */}
-            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
+            <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4">
               <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">Site-wise Avg TAT Remaining (Days)</h3>
-              <div className="flex-1 min-h-0 relative">
+              <div className="relative" style={{ height: 180 }}>
                 {siteData.length === 0 && (
                   <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No site data yet</div>
                 )}
