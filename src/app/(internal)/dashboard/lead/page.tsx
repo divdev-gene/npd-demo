@@ -79,7 +79,7 @@ function FilterSelect({ label, options, value, onChange }: {
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.16em] shrink-0">{label}</span>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={(v: string | null) => { if (v) onChange(v) }}>
         <SelectTrigger className="h-7 text-[11px] min-w-[110px] bg-white border-slate-200">
           <SelectValue />
         </SelectTrigger>
@@ -416,12 +416,12 @@ export default function LeadDashboard() {
                 <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Stage Distribution</h3>
                 <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">LIVE</span>
               </div>
-              <div className="flex-1 relative">
+              <div className="flex-1 min-h-0 relative">
                 {stageDistData.length === 0 && (
                   <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No submissions yet</div>
                 )}
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stageDistData.length ? stageDistData : [{ stage: "—", count: 0 }]} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                  <BarChart data={stageDistData.length ? stageDistData : [{ stage: "—", label: "—", count: 0 }]} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} allowDecimals={false} />
@@ -438,7 +438,7 @@ export default function LeadDashboard() {
             {/* TAT vs Pendency */}
             <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
               <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">TAT vs Pendency (by Stage)</h3>
-              <div className="flex-1 relative">
+              <div className="flex-1 min-h-0 relative">
                 {tatPendencyData.every(d => d.pending === 0) && (
                   <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No active stages</div>
                 )}
@@ -460,7 +460,7 @@ export default function LeadDashboard() {
             {/* Site-wise TAT */}
             <div className="bg-white border border-slate-100 rounded-xl shadow-sm p-4 h-64 flex flex-col">
               <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-3">Site-wise Avg TAT Remaining (Days)</h3>
-              <div className="flex-1 relative">
+              <div className="flex-1 min-h-0 relative">
                 {siteData.length === 0 && (
                   <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 italic z-10">No site data yet</div>
                 )}
