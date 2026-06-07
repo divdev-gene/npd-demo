@@ -4605,6 +4605,133 @@ export default function NpdDetailView() {
         {(isDone || rfqApproved) && ecnRndApproval && (
           <p className="text-[10px] text-slate-400">RFQ sent by {ecnRndApproval.approvedBy} · {new Date(ecnRndApproval.approvedAt).toLocaleString("en-IN")}</p>
         )}
+        {/* ── Price Negotiation sub-section ── */}
+        {isActive && (() => {
+          const neg = ecnNegotiation
+          const latestRound = neg?.rounds[neg.rounds.length - 1]
+          const pendingResponse = latestRound && !latestRound.supplierResponse
+          const awaitingApproval = latestRound?.supplierResponse && !neg?.approvedAt
+          const approved = !!neg?.approvedAt
+          const currSymbol = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+
+          return (
+            <div className="mt-4 border-t border-slate-200 pt-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Price Negotiation</span>
+                {approved && <span className="ml-auto text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Agreed: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}</span>}
+                {pendingResponse && <span className="ml-auto text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Awaiting Supplier — Round {latestRound.round}</span>}
+              </div>
+
+              {/* Round history */}
+              {neg && neg.rounds.length > 0 && (
+                <div className="space-y-2">
+                  {neg.rounds.map(r => (
+                    <div key={r.round} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Round {r.round}</span>
+                        <span className="text-[10px] text-slate-400">{new Date(r.sentAt).toLocaleString("en-IN")}</span>
+                      </div>
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-slate-500">Target: <strong className="text-slate-800">{currSymbol(r.currency)}{parseFloat(r.targetPrice).toLocaleString("en-IN")}</strong></span>
+                        {r.supplierResponse && (
+                          <span className="text-slate-500">Supplier: <strong className="text-slate-800">{currSymbol(r.supplierResponse.currency)}{parseFloat(r.supplierResponse.price).toLocaleString("en-IN")}</strong></span>
+                        )}
+                      </div>
+                      {r.supplierResponse && r.supplierResponse.docs.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {r.supplierResponse.docs.map(d => (
+                            <span key={d} className="text-[10px] bg-slate-100 text-slate-600 rounded px-2 py-0.5">{d}</span>
+                          ))}
+                        </div>
+                      )}
+                      {r.supplierResponse && (
+                        <p className="text-[10px] text-slate-400">Submitted {new Date(r.supplierResponse.submittedAt).toLocaleString("en-IN")}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Approve / Counter — shown when supplier has responded and not yet approved */}
+              {awaitingApproval && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const updated: NegotiationRecord = {
+                        ...neg!,
+                        approvedAt: Date.now(),
+                        approvedBy: currentRole,
+                        finalPrice: latestRound!.supplierResponse!.price,
+                        finalCurrency: latestRound!.supplierResponse!.currency,
+                      }
+                      const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_NEGOTIATION_KEY) ?? "{}")
+                      all[npdId] = updated
+                      localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all))
+                      setEcnNegotiation(updated)
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
+                  ><CheckCircle className="w-3.5 h-3.5" />Approve Price</button>
+                  <button
+                    onClick={() => {
+                      setNegTargetPrice("")
+                    }}
+                    className="text-xs font-semibold text-slate-500 hover:text-red-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg"
+                  >Counter with new target ↓</button>
+                </div>
+              )}
+
+              {/* Send new target form — shown when: no rounds yet, OR counter was clicked (negTargetPrice cleared and awaitingApproval) */}
+              {!approved && !pendingResponse && (!neg || awaitingApproval) && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-blue-800">
+                    {!neg ? "Start Price Negotiation" : `Send Counter Target (Round ${(neg.rounds.length) + 1})`}
+                  </p>
+                  <div className="flex gap-2">
+                    <select
+                      value={negCurrency}
+                      onChange={e => setNegCurrency(e.target.value as "INR" | "USD" | "EUR")}
+                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="INR">INR ₹</option>
+                      <option value="USD">USD $</option>
+                      <option value="EUR">EUR €</option>
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Target price / unit"
+                      value={negTargetPrice}
+                      onChange={e => setNegTargetPrice(e.target.value)}
+                      className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      disabled={!negTargetPrice || parseFloat(negTargetPrice) <= 0}
+                      onClick={() => {
+                        const existingRounds = neg?.rounds ?? []
+                        const newRound: NegotiationRound = {
+                          round: existingRounds.length + 1,
+                          targetPrice: negTargetPrice,
+                          currency: negCurrency,
+                          sentAt: Date.now(),
+                          sentBy: currentRole,
+                        }
+                        const updated: NegotiationRecord = { rounds: [...existingRounds, newRound] }
+                        const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_NEGOTIATION_KEY) ?? "{}")
+                        all[npdId] = updated
+                        localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all))
+                        setEcnNegotiation(updated)
+                        setNegTargetPrice("")
+                      }}
+                      className="bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap"
+                    >Send to Supplier</button>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Share the same supplier portal link — it will show this target price.</p>
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
     )
   }
