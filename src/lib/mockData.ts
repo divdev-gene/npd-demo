@@ -21,15 +21,23 @@ export type NPDRecord = {
   driveLink?: string;
   sampleQty?: number;
   createdAt?: string;
+  manufacturingLocation?: string;
+  remarks?: string;
+  tatDevelopment?: number;
+  tatProduction?: number;
+  existingPartNumber?: string;
+  ecnPartNumber?: string;
+  ecnPartName?: string;
+  ecnChangeDescription?: string;
 };
 
-export const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"];
+export const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi", "Rohan Desai"];
 
 export const VENDOR_EMAIL = "divyanshchawla12@gmail.com";
 
 export type VendorRecord = {
   name: string;
-  tier: "Tier 1" | "Tier 2" | "Tier 3";
+  tier: "Tier 1" | "Tier 2" | "Tier 3" | "New";
   commodityMatch: number;
   auditScore: number;
   certifications: string[];
@@ -37,6 +45,7 @@ export type VendorRecord = {
   spocName?: string;
   spocEmail?: string;
   spocPhone?: string;
+  isRequested?: boolean;
 };
 
 export const VENDOR_RFQ_TEMPLATE_KEY = "vendor_rfq_template_v1";
@@ -284,6 +293,19 @@ export const getTestsByCategory = (category: string): TestTemplate[] =>
 export const getTotalTestDays = (category: string): number =>
   (TEST_TEMPLATES[category] || []).reduce((sum, t) => sum + t.durationDays, 0);
 
+export const DQA_TESTS: { testName: string; unit: string; durationDays: number }[] = [
+  { testName: "Dimensional Inspection",      unit: "Pass/Fail", durationDays: 1 },
+  { testName: "Visual / Surface Inspection", unit: "Pass/Fail", durationDays: 1 },
+  { testName: "Hardness Test",               unit: "HRC/HRB",   durationDays: 1 },
+  { testName: "Salt Spray / Corrosion",      unit: "Hours",     durationDays: 3 },
+  { testName: "Vibration Test",              unit: "Pass/Fail", durationDays: 2 },
+  { testName: "Thermal Cycling",             unit: "Cycles",    durationDays: 2 },
+  { testName: "Drop / Impact Test",          unit: "Pass/Fail", durationDays: 1 },
+  { testName: "Life Cycle Simulation",       unit: "Cycles",    durationDays: 3 },
+  { testName: "IP Rating Verification",      unit: "Pass/Fail", durationDays: 1 },
+  { testName: "Chemical Resistance",         unit: "Pass/Fail", durationDays: 1 },
+];
+
 export type PushNotification = {
   id: string;
   title: string;
@@ -345,12 +367,32 @@ export const NPD_STAGES = [
   "Supplier Dispatch",             // 3
   "Design and Feasibility",        // 4
   "RND Testing & TQR",             // 5
-  "RND Approval",                  // 6
-  "PP Pricing",                    // 7
-  "NPD Summary & Closure",         // 8
+  "DQA Testing",                   // 6
+  "RND Approval",                  // 7
+  "PP Pricing",                    // 8
+  "NPD Summary & Closure",         // 9
 ] as const
-export const TOTAL_NPD_STAGES = 8
+export const TOTAL_NPD_STAGES = 9
+export const DQA_TESTS_KEY = "dqa_tests_v1"
+export const ECN_STAGE1_KEY = "ecn_stage1_v1"
+export const ECN_RND_APPROVAL_KEY = "ecn_rnd_approval_v1"
+export const ECN_SOURCING_DISPATCH_KEY = "ecn_sourcing_dispatch_v1"
+export const ECN_PRICE_ESTIMATION_KEY = "ecn_price_estimation_v1"
+export const ECN_DQA_TESTS_KEY = "ecn_dqa_tests_v1"
+export const ECN_HEAD_APPROVAL_KEY = "ecn_head_approval_v1"
+export const ECN_PP_PRICING_KEY    = "ecn_pp_pricing_v1"
+export const NCD_PP_PRICING_KEY    = "ncd_pp_pricing_v1"
+export const ECN_NEGOTIATION_KEY    = "ecn_negotiation_v1"
+export const ECN_PP_NEGOTIATION_KEY = "ecn_pp_negotiation_v1"
 export const AICM_FETCH_KEY = "aicm_fetch_v1"
+export const SOURCING_APPROVAL_KEY    = "sourcing_approval_v1"
+export const TAT_EXTENSION_REQ_KEY   = "tat_extension_request_v1"
+export const REQUESTED_VENDORS_KEY   = "requested_vendors_v1"
+export const MULTI_DISPATCH_KEY      = "multi_dispatch_v1"
+export const VENDOR_SAMPLES_KEY      = "vendor_samples_v1"
+export const VENDOR_TESTS_KEY        = "vendor_tests_v1"
+export const VENDOR_VERDICTS_KEY     = "vendor_verdicts_v1"
+export const FINAL_VENDOR_KEY        = "final_vendor_v1"
 
 export const MOCK_VENDOR_QUOTATIONS: Record<string, VendorQuotation[]> = {
   "NPD-FY-2026-0012": [
@@ -498,7 +540,7 @@ export const mockNPDs: NPDRecord[] = [/* no pre-loaded records — user adds NPD
     productLine: "Tower ACs",
     typeOfWork: "New Component Development (NCD)",
     rAndDDivision: "Sricity RAC",
-    stage: 6,
+    stage: 7,
     stageName: "RND Approval",
     tatHealth: "green",
     tatDaysRemaining: 1,
@@ -600,11 +642,28 @@ export const mockNPDs: NPDRecord[] = [/* no pre-loaded records — user adds NPD
 ];
 
 export const getStageName = (stage: number, type: string) => {
+  if (type.includes("Alternative Supplier")) {
+    const altStages = [
+      "Sourcing Request Initiation",
+      "Vendor Selection & RFQ",
+      "Sample Submission & Dispatch",
+      "R&D Qualification Testing",
+      "R&D Head Approval & Supplier Selection",
+      "Closure & MDM Update",
+    ]
+    return altStages[stage - 1] ?? `Stage ${stage}`
+  }
+
   if (type === "Engineering Change Notice (ECN)") {
     const ecnStages = [
-      "ECN Request Initiation", "R&D Change Validation", "Sourcing Impact Assessment",
-      "Supplier Acknowledgement", "Sample Re-submission", "R&D Validation on Changed Parameters",
-      "Partial TQR", "ECN Approval", "AICM Cost Update", "ECN Closure"
+      "ECN Request Initialisation",
+      "Sourcing Review & RFQ",
+      "Supplier Sample Dispatch",
+      "R&D Testing",
+      "DQA Testing",
+      "R&D Head Approval",
+      "PP Pricing",
+      "ECN Summary & Closure",
     ];
     return ecnStages[stage - 1] || "Unknown";
   }
