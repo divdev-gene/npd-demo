@@ -844,7 +844,7 @@ export default function NpdDetailView() {
       const raw = localStorage.getItem(ECN_NEGOTIATION_KEY)
       if (!raw) return
       const all: Record<string, NegotiationRecord> = JSON.parse(raw)
-      if (all[npdId]) setEcnNegotiation({ ...all[npdId] })
+      if (all[npdId]) setEcnNegotiation(all[npdId])
     }, 3000)
     return () => clearInterval(interval)
   }, [isECN, activeStage, npdId])
@@ -856,7 +856,7 @@ export default function NpdDetailView() {
       const raw = localStorage.getItem(ECN_PP_NEGOTIATION_KEY)
       if (!raw) return
       const all: Record<string, NegotiationRecord> = JSON.parse(raw)
-      if (all[npdId]) setEcnPpNegotiation({ ...all[npdId] })
+      if (all[npdId]) setEcnPpNegotiation(all[npdId])
     }, 3000)
     return () => clearInterval(interval)
   }, [isECN, activeStage, npdId])
