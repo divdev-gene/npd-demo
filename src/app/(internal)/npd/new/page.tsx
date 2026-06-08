@@ -483,7 +483,7 @@ export default function NewRequestWizard() {
             </div>
           </div>
 
-          {/* Item grid */}
+          {/* Item grid — horizontal scrollable table */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -499,134 +499,132 @@ export default function NewRequestWizard() {
               )}
             </div>
 
-            {bundleItems.map((item, idx) => {
-              const spocLabel = SPOC_DISPLAY_MAP[item.commodity] || ""
-              const isItemValid = !!item.itemName.trim() && !!item.commodity &&
-                (item.commodity !== "Others" || !!item.customCommodity.trim()) &&
-                !!item.driveLink && item.drawingFile && !!item.sampleQty &&
-                (!item.hasRevision || item.cplAttached)
-              return (
-                <div key={item.id} className={`rounded-xl border transition-colors ${isItemValid ? "border-emerald-200 bg-emerald-50/20" : "border-slate-200 bg-white"}`}>
-                  {/* Row header */}
-                  <div className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
-                    onClick={() => updateBundleItem(item.id, { expanded: !item.expanded })}>
-                    <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold shrink-0 ${isItemValid ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"}`}>
-                      {isItemValid ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 truncate">{item.itemName || <span className="text-slate-400 font-normal">Item {idx + 1} — click to fill</span>}</p>
-                      {item.commodity && <p className="text-[11px] text-slate-400">{spocLabel}</p>}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {bundleItems.length > 1 && (
-                        <button onClick={e => { e.stopPropagation(); removeBundleItem(item.id) }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      {item.expanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                    </div>
-                  </div>
-
-                  {/* Expanded fields */}
-                  {item.expanded && (
-                    <div className="border-t border-slate-100 px-4 pb-4 pt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Item Name <span className="text-red-500">*</span></Label>
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full border-collapse" style={{ minWidth: "1490px" }}>
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="sticky left-0 z-10 bg-slate-50 w-12 px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">#</th>
+                    <th className="w-[200px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Item Name <span className="text-red-400">*</span></th>
+                    <th className="w-[200px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Commodity / SPOC <span className="text-red-400">*</span></th>
+                    <th className="w-[220px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Drawing Link <span className="text-red-400">*</span></th>
+                    <th className="w-[140px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Upload <span className="text-red-400">*</span></th>
+                    <th className="w-[100px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Sample Qty <span className="text-red-400">*</span></th>
+                    <th className="w-[90px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">Revision?</th>
+                    <th className="w-[130px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Revision No</th>
+                    <th className="w-[120px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">CPL Sheet <span className="text-red-400 text-[9px]">*if rev</span></th>
+                    <th className="w-[200px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Remarks</th>
+                    <th className="w-10 px-2 py-2.5"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {bundleItems.map((item, idx) => {
+                    const isItemValid = !!item.itemName.trim() && !!item.commodity &&
+                      (item.commodity !== "Others" || !!item.customCommodity.trim()) &&
+                      !!item.driveLink && item.drawingFile && !!item.sampleQty &&
+                      (!item.hasRevision || item.cplAttached)
+                    return (
+                      <tr key={item.id} className={`border-l-2 transition-colors ${isItemValid ? "border-l-emerald-400" : "border-l-slate-200"}`}>
+                        {/* # */}
+                        <td className="sticky left-0 z-10 bg-white w-12 px-3 py-3 text-center">
+                          <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold mx-auto ${isItemValid ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"}`}>
+                            {isItemValid ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : idx + 1}
+                          </span>
+                        </td>
+                        {/* Item Name */}
+                        <td className="px-3 py-3">
                           <Input placeholder="e.g. Copper Header Tube" value={item.itemName}
-                            onChange={e => updateBundleItem(item.id, { itemName: e.target.value })} className="bg-white" />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Commodity / Category <span className="text-red-500">*</span></Label>
+                            onChange={e => updateBundleItem(item.id, { itemName: e.target.value })} className="bg-white h-8 text-sm" />
+                        </td>
+                        {/* Commodity */}
+                        <td className="px-3 py-3">
                           <Select value={item.commodity} onValueChange={(v: string | null) => { if (v) updateBundleItem(item.id, { commodity: v }) }}>
-                            <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Select category" /></SelectTrigger>
+                            <SelectTrigger className="w-full bg-white h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Plastics">Plastics</SelectItem>
                               <SelectItem value="Sheet Metal">Sheet Metal</SelectItem>
-                              <SelectItem value="Electronics & Electrical">Electronics & Electrical</SelectItem>
-                              <SelectItem value="Compressors & Motors">Compressors & Motors</SelectItem>
-                              <SelectItem value="Packaging & Others">Packaging & Others</SelectItem>
+                              <SelectItem value="Electronics & Electrical">Electronics &amp; Electrical</SelectItem>
+                              <SelectItem value="Compressors & Motors">Compressors &amp; Motors</SelectItem>
+                              <SelectItem value="Packaging & Others">Packaging &amp; Others</SelectItem>
                               <SelectItem value="Others">Others</SelectItem>
                             </SelectContent>
                           </Select>
                           {item.commodity === "Others" && (
-                            <Input placeholder="Specify commodity…" value={item.customCommodity}
-                              onChange={e => updateBundleItem(item.id, { customCommodity: e.target.value })} className="bg-white mt-1.5" />
+                            <Input placeholder="Specify…" value={item.customCommodity}
+                              onChange={e => updateBundleItem(item.id, { customCommodity: e.target.value })} className="bg-white h-7 text-xs mt-1" />
                           )}
-                          {item.commodity && (
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 mt-1.5">
-                              <User className="w-3 h-3 text-blue-700 shrink-0" />
-                              <span className="text-[11px] font-semibold text-blue-800">{SPOC_DISPLAY_MAP[item.commodity]}</span>
+                          {item.commodity && item.commodity !== "Others" && (
+                            <div className="flex items-center gap-1 mt-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200">
+                              <User className="w-2.5 h-2.5 text-blue-700 shrink-0" />
+                              <span className="text-[10px] font-semibold text-blue-800 truncate">{SPOC_NAME_MAP[item.commodity]}</span>
                             </div>
                           )}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Drawing / Spec Sheet Link <span className="text-red-500">*</span></Label>
+                        </td>
+                        {/* Drawing Link */}
+                        <td className="px-3 py-3">
                           <div className="relative">
-                            <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                             <Input placeholder="https://drive.google.com/…" type="url" value={item.driveLink}
-                              onChange={e => updateBundleItem(item.id, { driveLink: e.target.value })} className="pl-9 bg-white" />
+                              onChange={e => updateBundleItem(item.id, { driveLink: e.target.value })} className="pl-7 bg-white h-8 text-sm" />
                           </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Sample Quantity <span className="text-red-500">*</span></Label>
+                        </td>
+                        {/* Upload */}
+                        <td className="px-3 py-3">
+                          <div onClick={() => updateBundleItem(item.id, { drawingFile: !item.drawingFile })}
+                            className={`flex items-center justify-center gap-1.5 rounded-md border-2 border-dashed h-8 px-2 cursor-pointer transition-colors text-xs font-medium ${item.drawingFile ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-300 hover:border-blue-400 text-slate-500"}`}>
+                            {item.drawingFile
+                              ? <><CheckCircle className="w-3.5 h-3.5 shrink-0" /><span className="truncate">Uploaded</span></>
+                              : <span>Upload</span>
+                            }
+                          </div>
+                        </td>
+                        {/* Sample Qty */}
+                        <td className="px-3 py-3">
                           <Input type="number" min={1} placeholder="e.g. 5" value={item.sampleQty}
-                            onChange={e => updateBundleItem(item.id, { sampleQty: e.target.value })} className="bg-white max-w-[160px]" />
-                        </div>
-                      </div>
-
-                      <div
-                        onClick={() => updateBundleItem(item.id, { drawingFile: !item.drawingFile })}
-                        className={`rounded-lg border-2 border-dashed p-3 text-center cursor-pointer transition-colors ${item.drawingFile ? "border-emerald-400 bg-emerald-50" : "border-slate-300 hover:border-blue-400 hover:bg-slate-50"}`}>
-                        {item.drawingFile ? (
-                          <div className="flex items-center justify-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span className="text-sm font-semibold text-emerald-700">drawing_spec.pdf</span>
-                            <span className="text-xs text-red-400 ml-1">Remove</span>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-slate-500"><span className="font-medium text-slate-700">Upload drawing</span> · PDF, PNG, DWG <span className="text-red-500">*</span></p>
-                        )}
-                      </div>
-
-                      <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Checkbox id={`rev-${item.id}`} checked={item.hasRevision}
+                            onChange={e => updateBundleItem(item.id, { sampleQty: e.target.value })} className="bg-white h-8 text-sm" />
+                        </td>
+                        {/* Revision? */}
+                        <td className="px-3 py-3 text-center">
+                          <Checkbox checked={item.hasRevision}
                             onCheckedChange={c => updateBundleItem(item.id, { hasRevision: c === true, cplAttached: false, revisionNo: "" })} />
-                          <Label htmlFor={`rev-${item.id}`} className="text-sm font-medium text-slate-700 cursor-pointer">
-                            Drawing has a Revision Number?
-                          </Label>
-                        </div>
-                        {item.hasRevision && (
-                          <div className="pl-6 space-y-3 animate-in fade-in duration-200">
-                            <Input placeholder="Revision number" value={item.revisionNo}
-                              onChange={e => updateBundleItem(item.id, { revisionNo: e.target.value })} className="bg-white max-w-[200px]" />
-                            <div onClick={() => updateBundleItem(item.id, { cplAttached: !item.cplAttached })}
-                              className={`rounded-lg border-2 border-dashed p-3 text-center cursor-pointer transition-colors ${item.cplAttached ? "border-emerald-400 bg-emerald-50" : "border-slate-300 hover:border-blue-400 hover:bg-slate-50"}`}>
-                              {item.cplAttached
-                                ? <div className="flex items-center justify-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-600" /><span className="text-sm font-semibold text-emerald-700">CPL sheet attached</span></div>
-                                : <p className="text-sm text-slate-500">Attach CPL sheet <span className="text-red-500">*</span></p>
-                              }
-                            </div>
+                        </td>
+                        {/* Revision No */}
+                        <td className="px-3 py-3">
+                          <Input placeholder="e.g. R02" value={item.revisionNo}
+                            onChange={e => updateBundleItem(item.id, { revisionNo: e.target.value })}
+                            disabled={!item.hasRevision}
+                            className={`bg-white h-8 text-sm ${!item.hasRevision ? "opacity-40" : ""}`} />
+                        </td>
+                        {/* CPL Sheet */}
+                        <td className="px-3 py-3">
+                          <div onClick={() => { if (item.hasRevision) updateBundleItem(item.id, { cplAttached: !item.cplAttached }) }}
+                            className={`flex items-center justify-center gap-1.5 rounded-md border-2 border-dashed h-8 px-2 text-xs font-medium transition-colors ${!item.hasRevision ? "opacity-40 pointer-events-none border-slate-200 text-slate-400" : item.cplAttached ? "border-emerald-400 bg-emerald-50 text-emerald-700 cursor-pointer" : "border-slate-300 hover:border-blue-400 text-slate-500 cursor-pointer"}`}>
+                            {item.cplAttached
+                              ? <><CheckCircle className="w-3.5 h-3.5 shrink-0" /><span>Attached</span></>
+                              : <span>Attach CPL</span>
+                            }
                           </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Item Remarks</Label>
-                        <textarea rows={2} placeholder="Special notes for this item…" value={item.remarks}
-                          onChange={e => updateBundleItem(item.id, { remarks: e.target.value })}
-                          className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                        </td>
+                        {/* Remarks */}
+                        <td className="px-3 py-3">
+                          <textarea rows={1} placeholder="Notes…" value={item.remarks}
+                            onChange={e => updateBundleItem(item.id, { remarks: e.target.value })}
+                            className="w-full rounded-md border border-input bg-white px-2 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
+                        </td>
+                        {/* Delete */}
+                        <td className="px-2 py-3 text-center">
+                          {bundleItems.length > 1 && (
+                            <button onClick={() => removeBundleItem(item.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       ) : typeOfWork === "ECN" ? (
