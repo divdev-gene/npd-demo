@@ -162,6 +162,7 @@ function EmptyState({ label }: { label: string }) {
 export default function LeadDashboard() {
   const { npds } = useNPDs()
 
+  const [currentRole, setCurrentRole] = useState("rnd_user")
   const [locFilter,    setLocFilter]    = useState("All")
   const [vertFilter,   setVertFilter]   = useState("All")
   const [fyFilter,     setFyFilter]     = useState("All")
@@ -206,6 +207,13 @@ export default function LeadDashboard() {
     } catch {}
   }
 
+  useEffect(() => {
+    setCurrentRole(localStorage.getItem("poc_role") || "rnd_user")
+    const onRoleChange = (e: CustomEvent) => setCurrentRole(e.detail)
+    window.addEventListener("rolechange", onRoleChange as EventListener)
+    return () => window.removeEventListener("rolechange", onRoleChange as EventListener)
+  }, [])
+
   useEffect(() => { refreshCounters() }, [npds])
 
   useEffect(() => {
@@ -221,7 +229,11 @@ export default function LeadDashboard() {
   }, [])
 
   const filtered = useMemo(() => {
-    let base = npds
+    let base = npds.filter(n => {
+      if (!n.typeOfWork.includes("Alternative Supplier")) return true
+      const isDqa = currentRole === "dqa_engineer" || currentRole === "dqa_lead"
+      return currentRole.startsWith("rnd") || currentRole === "super_admin" || isDqa || n.raisedBy === currentRole
+    })
     if (locFilter !== "All") base = base.filter(n => n.rAndDDivision === locFilter)
     if (vertFilter !== "All") base = base.filter(n => n.itemCategory === vertFilter)
     if (fyFilter !== "All") base = base.filter(n => n.id.includes(`NPD-FY-20${fyFilter.slice(2)}`))
@@ -239,7 +251,7 @@ export default function LeadDashboard() {
       base = base.filter(n => n.createdAt ? new Date(n.createdAt).getTime() >= cutoff : true)
     }
     return base
-  }, [npds, locFilter, vertFilter, fyFilter, datePreset])
+  }, [npds, currentRole, locFilter, vertFilter, fyFilter, datePreset])
 
   // ── Derived KPIs ──────────────────────────────────────────────────────────
   const total        = filtered.length

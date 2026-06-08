@@ -12,7 +12,7 @@ import { Search, AlertTriangle, Star, Activity, Layers, Filter, FileText, BarCha
 const FULL_ACCESS_ROLES = ["sourcing_head", "super_admin", "rnd_head"]
 const SPOC_NAMES        = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"]
 
-const TYPE_FILTERS = ["All", "NCD", "ECN", "Compliance", "PP"] as const
+const TYPE_FILTERS = ["All", "NCD", "ECN", "NTD", "Compliance", "Alt Supplier"] as const
 type TypeFilter = typeof TYPE_FILTERS[number]
 
 const TAT_ACCENT: Record<string, string> = {
@@ -70,18 +70,30 @@ export default function ArchivePage() {
     return () => window.removeEventListener("rolechange", onRoleChange as EventListener)
   }, [])
 
+  const canSeeAltSupplier = (n: { typeOfWork: string; raisedBy?: string }) => {
+    if (!n.typeOfWork.includes("Alternative Supplier")) return true
+    const isDqa = currentRole === "dqa_engineer" || currentRole === "dqa_lead"
+    return currentRole.startsWith("rnd") || currentRole === "super_admin" || isDqa || n.raisedBy === currentRole
+  }
+
   const visibleNPDs = (() => {
-    if (FULL_ACCESS_ROLES.includes(currentRole)) return npds
-    if (currentRole === "rnd_user") return npds.filter(n => (n.raisedBy ?? "rnd_user") === "rnd_user")
-    if (SPOC_NAMES.includes(currentRole)) return npds.filter(n => n.spoc === currentRole && n.stage >= 2)
-    return npds
+    if (FULL_ACCESS_ROLES.includes(currentRole)) return npds.filter(canSeeAltSupplier)
+    if (currentRole === "rnd_user") return npds.filter(n =>
+      n.typeOfWork.includes("Alternative Supplier") || (n.raisedBy ?? "rnd_user") === "rnd_user"
+    )
+    if (SPOC_NAMES.includes(currentRole)) return npds.filter(n => {
+      if (n.typeOfWork.includes("Alternative Supplier")) return n.raisedBy === currentRole
+      return n.spoc === currentRole && n.stage >= 2
+    })
+    return npds.filter(canSeeAltSupplier)
   })()
 
   const typeFiltered = typeFilter === "All" ? visibleNPDs : visibleNPDs.filter(n => {
-    if (typeFilter === "NCD")        return n.typeOfWork.includes("NCD") || n.typeOfWork.includes("New Component")
-    if (typeFilter === "ECN")        return n.typeOfWork.includes("ECN") || n.typeOfWork.includes("Engineering Change")
-    if (typeFilter === "Compliance") return n.typeOfWork.includes("Compliance")
-    if (typeFilter === "PP")         return n.typeOfWork.includes("PP")
+    if (typeFilter === "NCD")          return n.typeOfWork.includes("NCD") || n.typeOfWork.includes("New Component")
+    if (typeFilter === "ECN")          return n.typeOfWork.includes("ECN") || n.typeOfWork.includes("Engineering Change")
+    if (typeFilter === "NTD")          return n.typeOfWork.includes("NTD") || n.typeOfWork.includes("New Tool")
+    if (typeFilter === "Compliance")   return n.typeOfWork.includes("Compliance")
+    if (typeFilter === "Alt Supplier") return n.typeOfWork.includes("Alternative Supplier")
     return true
   })
 
@@ -109,7 +121,7 @@ export default function ArchivePage() {
   ]
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-5">
+    <div className="max-w-[1400px] mx-auto space-y-5 animate-in fade-in duration-300">
 
       {/* Header */}
       <div className="flex items-end justify-between">
@@ -125,7 +137,7 @@ export default function ArchivePage() {
         {kpis.map((k, i) => {
           const Icon = k.icon
           return (
-            <div key={i} className="bg-white border border-slate-100 rounded-xl px-4 py-3.5 flex items-center gap-3 shadow-sm">
+            <div key={i} className="bg-white border border-slate-100 rounded-xl px-4 py-3.5 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow duration-200">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: k.bg }}>
                 <Icon className="w-4 h-4" style={{ color: k.color }} />
               </div>
@@ -175,7 +187,7 @@ export default function ArchivePage() {
             </span>
             <Link
               href="/report/all"
-              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all whitespace-nowrap"
             >
               <BarChart2 className="w-3.5 h-3.5" />
               View Full MIS Report
@@ -216,7 +228,7 @@ export default function ArchivePage() {
                   return (
                     <TableRow
                       key={npd.id}
-                      className="group cursor-pointer border-b border-slate-50 hover:bg-slate-50/70 transition-colors"
+                      className="group cursor-pointer border-b border-slate-50 hover:bg-slate-50/70 transition-colors duration-150"
                     >
                       <TableCell className="py-3.5 pl-5">
                         <div className="flex items-center gap-1.5">

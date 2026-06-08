@@ -16,8 +16,9 @@ import {
   MULTI_DISPATCH_KEY, VENDOR_SAMPLES_KEY, VENDOR_TESTS_KEY, VENDOR_VERDICTS_KEY, FINAL_VENDOR_KEY,
   DQA_TESTS_KEY, DQA_TESTS,
   ECN_STAGE1_KEY, ECN_RND_APPROVAL_KEY, ECN_SOURCING_DISPATCH_KEY,
-  ECN_PRICE_ESTIMATION_KEY, ECN_DQA_TESTS_KEY, ECN_HEAD_APPROVAL_KEY, ECN_PP_PRICING_KEY, NCD_PP_PRICING_KEY,
-  ECN_NEGOTIATION_KEY, ECN_PP_NEGOTIATION_KEY,
+  ECN_PRICE_ESTIMATION_KEY, ECN_DQA_TESTS_KEY, ECN_HEAD_APPROVAL_KEY, ECN_PP_PRICING_KEY, ECN_PP_RND_APPROVAL_KEY, NCD_PP_PRICING_KEY,
+  ECN_NEGOTIATION_KEY, ECN_PP_NEGOTIATION_KEY, ECN_INITIAL_QUOTE_KEY,
+  AS_STAGE1_KEY, AS_RND_APPROVAL_KEY, AS_PP_PRICING_KEY, AS_PP_SOURCING_APPROVED_KEY, AS_PP_RND_APPROVAL_KEY,
   DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD,
   getTestsByCategory, getTotalTestDays,
   type NPDRecord, type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse, type PushNotification, type TestResult,
@@ -330,7 +331,8 @@ export default function NpdDetailView() {
   // ── ECN-specific state ────────────────────────────────────────────────────
   const [ecnStage1Data,         setEcnStage1Data]          = useState<null | { submittedBy: string; submittedAt: number }>(null)
   const [ecnRndApproval,        setEcnRndApproval]         = useState<null | { verdict: "approved" | "pending" | "rejected"; approvedBy: string; approvedAt: number; note?: string; tatExtension?: { requested: boolean; days?: number; reason?: string; requestedAt?: number; rndDecision?: { decision: "approved" | "rejected"; decidedBy: string; decidedAt: number } } }>(null)
-  const [ecnSourcingDispatch,   setEcnSourcingDispatch]    = useState<null | { portalSentAt: number; sentBy: string; submission?: { dispatchDate: string; docs: string[]; submittedAt: number }; received?: { markedBy: string; markedAt: number } }>(null)
+  const [ecnSourcingDispatch,   setEcnSourcingDispatch]    = useState<null | { portalSentAt: number; sentBy: string; submission?: { dispatchDate: string; docs: string[]; submittedAt: number }; statusUpdate?: { onTrack: "yes" | "no"; newDate?: string; notes: string; updatedAt: number; dateApproved?: { approvedBy: string; approvedAt: number } }; received?: { markedBy: string; markedAt: number; doc?: string } }>(null)
+  const [ecnReceiptDoc,         setEcnReceiptDoc]          = useState("")
   // ECN TAT extension form locals
   const [ecnTatExtDays,         setEcnTatExtDays]          = useState("")
   const [ecnTatExtReason,       setEcnTatExtReason]        = useState("")
@@ -347,11 +349,14 @@ export default function NpdDetailView() {
   const [ecnHeadApproval,       setEcnHeadApproval]        = useState<null | { verdict: "approved" | "rejected"; remarks?: string; approvedBy: string; approvedAt: number }>(null)
   const [ecnHeadRemarks,        setEcnHeadRemarks]         = useState("")
   const [ecnPpPricing,          setEcnPpPricing]           = useState<null | { ppPrice: string; currency: string; moq: string; leadTime: string; submittedBy: string; submittedAt: number }>(null)
+  const [ecnPpRndApproval,      setEcnPpRndApproval]       = useState<null | { approvedBy: string; approvedAt: number; remarks?: string }>(null)
+  const [ecnPpRndRemarks,       setEcnPpRndRemarks]        = useState("")
   const [ecnPpPrice,            setEcnPpPrice]             = useState("")
   const [ecnPpCurrency,         setEcnPpCurrency]          = useState<"INR" | "USD" | "EUR">("INR")
   const [ecnPpMoq,              setEcnPpMoq]               = useState("")
   const [ecnPpLeadTime,         setEcnPpLeadTime]          = useState("")
   // ECN Price Negotiation (Stage 2)
+  const [ecnInitialQuote,    setEcnInitialQuote]     = useState<{ price: string; currency: "INR" | "USD" | "EUR"; date: string; docs: string[]; submittedAt: number } | null>(null)
   const [ecnNegotiation,     setEcnNegotiation]     = useState<NegotiationRecord | null>(null)
   const [negTargetPrice,     setNegTargetPrice]      = useState("")
   const [negCurrency,        setNegCurrency]         = useState<"INR" | "USD" | "EUR">("INR")
@@ -364,6 +369,22 @@ export default function NpdDetailView() {
   const [ncdPpCurrency,         setNcdPpCurrency]          = useState<"INR" | "USD" | "EUR">("INR")
   const [ncdPpMoq,              setNcdPpMoq]               = useState("")
   const [ncdPpLeadTime,         setNcdPpLeadTime]          = useState("")
+
+  // ── Alt Supplier-specific state ───────────────────────────────────────────
+  const [asStage1Data,    setAsStage1Data]    = useState<null | { supplierName: string; reason: string; docsLink?: string; submittedBy: string; submittedAt: number }>(null)
+  const [asRndApproval,   setAsRndApproval]   = useState<null | { approvedBy: string; approvedAt: number; note?: string }>(null)
+  const [asSupplierName,  setAsSupplierName]  = useState("")
+  const [asReason,        setAsReason]        = useState("")
+  const [asDocsLink,      setAsDocsLink]      = useState("")
+  const [asRndRemarks,    setAsRndRemarks]    = useState("")
+  const [asPpPricing,           setAsPpPricing]           = useState<null | { ppPrice: string; currency: string; moq: string; leadTime: string; submittedBy: string; submittedAt: number }>(null)
+  const [asPpSourcingApproved,  setAsPpSourcingApproved]  = useState<null | { approvedBy: string; approvedAt: number }>(null)
+  const [asPpRndApproval,       setAsPpRndApproval]       = useState<null | { approvedBy: string; approvedAt: number; remarks?: string }>(null)
+  const [asPpRndRemarks,        setAsPpRndRemarks]        = useState("")
+  const [asPpPrice,       setAsPpPrice]       = useState("")
+  const [asPpCurrency,    setAsPpCurrency]    = useState<"INR" | "USD" | "EUR">("INR")
+  const [asPpMoq,         setAsPpMoq]         = useState("")
+  const [asPpLeadTime,    setAsPpLeadTime]    = useState("")
 
   // Derived from state — declared early so useEffect closures below can reference it safely
   const isNCD = npd?.typeOfWork === "New Component Development (NCD)" || npd?.typeOfWork === "New Product Development (NPD)"
@@ -698,11 +719,23 @@ export default function NpdDetailView() {
       const allEcnPP = JSON.parse(rawEcnPP)
       if (allEcnPP[npdId]) setEcnPpPricing(allEcnPP[npdId])
     }
+    // ECN — PP Pricing R&D Approval
+    const rawPpRnd = localStorage.getItem(ECN_PP_RND_APPROVAL_KEY)
+    if (rawPpRnd) {
+      const allPpRnd = JSON.parse(rawPpRnd)
+      if (allPpRnd[npdId]) setEcnPpRndApproval(allPpRnd[npdId])
+    }
     // NCD — PP Pricing
     const rawNcdPP = localStorage.getItem(NCD_PP_PRICING_KEY)
     if (rawNcdPP) {
       const allNcdPP = JSON.parse(rawNcdPP)
       if (allNcdPP[npdId]) setNcdPpPricing(allNcdPP[npdId])
+    }
+    // ECN — Initial supplier quote (Stage 2)
+    const rawIQ = localStorage.getItem(ECN_INITIAL_QUOTE_KEY)
+    if (rawIQ) {
+      const allIQ = JSON.parse(rawIQ)
+      if (allIQ[npdId]) setEcnInitialQuote(allIQ[npdId])
     }
     // ECN — Stage 2 Negotiation
     const rawEcnNeg = localStorage.getItem(ECN_NEGOTIATION_KEY)
@@ -721,6 +754,37 @@ export default function NpdDetailView() {
     if (allDqa[npdId]) {
       setEcnDqaResults(allDqa[npdId].results)
       setEcnDqaSubmitted(true)
+    }
+
+    // Alt Supplier — Stage 1 sourcing submission
+    const rawAs1 = localStorage.getItem(AS_STAGE1_KEY)
+    if (rawAs1) {
+      const allAs1 = JSON.parse(rawAs1)
+      if (allAs1[npdId]) setAsStage1Data(allAs1[npdId])
+    }
+    // Alt Supplier — R&D approval
+    const rawAsRnd = localStorage.getItem(AS_RND_APPROVAL_KEY)
+    if (rawAsRnd) {
+      const allAsRnd = JSON.parse(rawAsRnd)
+      if (allAsRnd[npdId]) setAsRndApproval(allAsRnd[npdId])
+    }
+    // Alt Supplier — PP Pricing (stage 7)
+    const rawAsPp = localStorage.getItem(AS_PP_PRICING_KEY)
+    if (rawAsPp) {
+      const allAsPp = JSON.parse(rawAsPp)
+      if (allAsPp[npdId]) setAsPpPricing(allAsPp[npdId])
+    }
+    // Alt Supplier — PP Sourcing Approval (stage 7 — sourcing explicit approval)
+    const rawAsPpSrc = localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY)
+    if (rawAsPpSrc) {
+      const allAsPpSrc = JSON.parse(rawAsPpSrc)
+      if (allAsPpSrc[npdId]) setAsPpSourcingApproved(allAsPpSrc[npdId])
+    }
+    // Alt Supplier — PP R&D Approval (stage 7 → 8)
+    const rawAsPpRnd = localStorage.getItem(AS_PP_RND_APPROVAL_KEY)
+    if (rawAsPpRnd) {
+      const allAsPpRnd = JSON.parse(rawAsPpRnd)
+      if (allAsPpRnd[npdId]) setAsPpRndApproval(allAsPpRnd[npdId])
     }
 
     // Refresh live data when supplier submits in another tab
@@ -814,59 +878,116 @@ export default function NpdDetailView() {
   }, [plantVerdict])
 
   // ECN: auto-advance stage 3 → 4 when supplier submits dispatch portal
+  // AS: dispatch happens at stage 4 (after price approval advances to 4), so excluded here
   useEffect(() => {
-    if (!isECN || !npd) return
-    if (activeStage !== 3) return
+    if (!isECN || !npd || activeStage !== 3) return
     if (ecnSourcingDispatch?.submission?.submittedAt) {
       updateNPD(npdId, { stage: 4, stageName: getStageName(4, npd.typeOfWork) })
       setActiveStage(4)
     }
-  }, [ecnSourcingDispatch, activeStage, isECN])
+  }, [ecnSourcingDispatch?.submission?.submittedAt, activeStage, isECN])
 
-  // ECN: poll ECN_SOURCING_DISPATCH_KEY every 3s while at stage 3 to detect supplier submission
+  // AS: auto-advance stage 3 → 4 when price negotiation is approved
   useEffect(() => {
-    if (!isECN || activeStage !== 3) return
+    if (!isAltSupplier || !npd || activeStage !== 3) return
+    if (ecnNegotiation?.approvedAt) {
+      updateNPD(npdId, { stage: 4, stageName: getStageName(4, npd.typeOfWork) })
+      setActiveStage(4)
+    }
+  }, [ecnNegotiation?.approvedAt, isAltSupplier, activeStage])
+
+  // ECN: poll ECN_SOURCING_DISPATCH_KEY every 3s at stage 3
+  // AS: poll at stage 4 (dispatch happens after price approval)
+  useEffect(() => {
+    if (!isECN && !isAltSupplier) return
+    const stageToWatch = isAltSupplier ? 4 : 3
+    if (activeStage !== stageToWatch) return
     const interval = setInterval(() => {
       const raw = localStorage.getItem(ECN_SOURCING_DISPATCH_KEY)
       if (!raw) return
       const all = JSON.parse(raw)
-      if (all[npdId]?.submission?.submittedAt) {
-        setEcnSourcingDispatch(all[npdId])
+      if (all[npdId]) setEcnSourcingDispatch(all[npdId])
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [isECN, isAltSupplier, activeStage, npdId])
+
+  // ECN (stage 2) and AS (stage 3): poll ECN_INITIAL_QUOTE_KEY + ECN_NEGOTIATION_KEY every 3s
+  useEffect(() => {
+    const shouldPoll = (isECN && activeStage === 2) || (isAltSupplier && activeStage === 3)
+    if (!shouldPoll) return
+    const interval = setInterval(() => {
+      if (isECN || isAltSupplier) {
+        const rawIQ = localStorage.getItem(ECN_INITIAL_QUOTE_KEY)
+        if (rawIQ) {
+          const allIQ = JSON.parse(rawIQ)
+          if (allIQ[npdId]) setEcnInitialQuote(allIQ[npdId])
+        }
+      }
+      const rawN = localStorage.getItem(ECN_NEGOTIATION_KEY)
+      if (rawN) {
+        const all: Record<string, NegotiationRecord> = JSON.parse(rawN)
+        if (all[npdId]) setEcnNegotiation(all[npdId])
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [isECN, isAltSupplier, activeStage, npdId])
+
+  // ECN: poll ECN_PP_NEGOTIATION_KEY + ECN_PP_RND_APPROVAL_KEY every 3s while stage 7 is active
+  useEffect(() => {
+    if (!isECN || activeStage !== 7) return
+    const interval = setInterval(() => {
+      const rawNeg = localStorage.getItem(ECN_PP_NEGOTIATION_KEY)
+      if (rawNeg) {
+        const all: Record<string, NegotiationRecord> = JSON.parse(rawNeg)
+        if (all[npdId]) setEcnPpNegotiation(all[npdId])
+      }
+      const rawRnd = localStorage.getItem(ECN_PP_RND_APPROVAL_KEY)
+      if (rawRnd) {
+        const all: Record<string, { approvedBy: string; approvedAt: number; remarks?: string }> = JSON.parse(rawRnd)
+        if (all[npdId]) {
+          setEcnPpRndApproval(all[npdId])
+          // advance stage as soon as R&D approval is detected
+          updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
+          setActiveStage(8)
+        }
       }
     }, 3000)
     return () => clearInterval(interval)
   }, [isECN, activeStage, npdId])
 
-  // ECN: poll ECN_NEGOTIATION_KEY every 3s while stage 2 is active and a round is pending
+  // AS stage 7: poll PP pricing submission, sourcing approval, and R&D approval every 3s
   useEffect(() => {
-    if (!isECN || activeStage !== 2) return
+    if (!isAltSupplier || activeStage !== 7) return
     const interval = setInterval(() => {
-      const raw = localStorage.getItem(ECN_NEGOTIATION_KEY)
-      if (!raw) return
-      const all: Record<string, NegotiationRecord> = JSON.parse(raw)
-      if (all[npdId]) setEcnNegotiation(all[npdId])
+      const rawPp = localStorage.getItem(AS_PP_PRICING_KEY)
+      if (rawPp) {
+        const all = JSON.parse(rawPp)
+        if (all[npdId]) setAsPpPricing(all[npdId])
+      }
+      const rawSrc = localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY)
+      if (rawSrc) {
+        const all = JSON.parse(rawSrc)
+        if (all[npdId]) setAsPpSourcingApproved(all[npdId])
+      }
+      const rawRnd = localStorage.getItem(AS_PP_RND_APPROVAL_KEY)
+      if (rawRnd) {
+        const all: Record<string, { approvedBy: string; approvedAt: number; remarks?: string }> = JSON.parse(rawRnd)
+        if (all[npdId]) {
+          setAsPpRndApproval(all[npdId])
+          updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
+          setActiveStage(8)
+        }
+      }
     }, 3000)
     return () => clearInterval(interval)
-  }, [isECN, activeStage, npdId])
-
-  // ECN: poll ECN_PP_NEGOTIATION_KEY every 3s while stage 7 is active and a round is pending
-  useEffect(() => {
-    if (!isECN || activeStage !== 7) return
-    const interval = setInterval(() => {
-      const raw = localStorage.getItem(ECN_PP_NEGOTIATION_KEY)
-      if (!raw) return
-      const all: Record<string, NegotiationRecord> = JSON.parse(raw)
-      if (all[npdId]) setEcnPpNegotiation(all[npdId])
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [isECN, activeStage, npdId])
+  }, [isAltSupplier, activeStage, npdId])
 
   const totalStages = (() => {
     const t = npd.typeOfWork
     if (t.includes("ECN")) return 8
     if (t.includes("NTD")) return 10
     if (t.includes("Compliance")) return 6
-    if (t.includes("Alternative Supplier")) return 6
+    if (t.includes("Alternative Supplier")) return 8
     return TOTAL_NPD_STAGES
   })()
   const stageProgress = Array.from({ length: totalStages }, (_, idx) => ({
@@ -1289,6 +1410,26 @@ export default function NpdDetailView() {
       return
     }
 
+    // AS-specific demo advance
+    if (isAltSupplier) {
+      // Stage 7→8: sourcing submits PP pricing + sourcing approves
+      if (activeStage === 7) {
+        const pp = { ppPrice: "275", currency: "INR", moq: "500", leadTime: "30", submittedBy: currentRole, submittedAt: Date.now() }
+        const allPP: Record<string, typeof pp> = JSON.parse(localStorage.getItem(AS_PP_PRICING_KEY) ?? "{}")
+        allPP[npdId] = pp
+        localStorage.setItem(AS_PP_PRICING_KEY, JSON.stringify(allPP))
+        setAsPpPricing(pp)
+        const srcApproval = { approvedBy: currentRole, approvedAt: Date.now() }
+        const allSrc: Record<string, typeof srcApproval> = JSON.parse(localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY) ?? "{}")
+        allSrc[npdId] = srcApproval
+        localStorage.setItem(AS_PP_SOURCING_APPROVED_KEY, JSON.stringify(allSrc))
+        setAsPpSourcingApproved(srcApproval)
+      }
+      setActiveStage(next)
+      updateNPD(npdId, { stage: next, stageName: getStageName(next, npd.typeOfWork) })
+      return
+    }
+
     // Stage 2→3: auto-approve first vendor if none locked yet
     if (activeStage === 2 && (!npd.supplier || npd.supplier === "Pending Assignment")) {
       const firstVendor = getVendors(npd.itemCategory)[0]?.name ?? sentVendors[0]
@@ -1398,6 +1539,80 @@ export default function NpdDetailView() {
         setEcnPpPricing(null); setEcnPpPrice(""); setEcnPpMoq(""); setEcnPpLeadTime("")
         const rawPP = localStorage.getItem(ECN_PP_PRICING_KEY)
         if (rawPP) { const all = JSON.parse(rawPP); delete all[npdId]; localStorage.setItem(ECN_PP_PRICING_KEY, JSON.stringify(all)) }
+      }
+      // Clear negotiation key when rolling back from stage 2 or beyond
+      if (activeStage >= 2) {
+        const rawNeg = localStorage.getItem(ECN_NEGOTIATION_KEY)
+        if (rawNeg) { const all = JSON.parse(rawNeg); delete all[npdId]; localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all)) }
+        setEcnNegotiation(null)
+      }
+      // Clear PP negotiation key when rolling back from stage 7 or beyond
+      if (activeStage >= 7) {
+        const rawPpNeg = localStorage.getItem(ECN_PP_NEGOTIATION_KEY)
+        if (rawPpNeg) { const all = JSON.parse(rawPpNeg); delete all[npdId]; localStorage.setItem(ECN_PP_NEGOTIATION_KEY, JSON.stringify(all)) }
+        setEcnPpNegotiation(null)
+      }
+      setActiveStage(prev)
+      updateNPD(npdId, { stage: prev, stageName: getStageName(prev, npd.typeOfWork) })
+      return
+    }
+
+    // AS-specific revert (stages 1-8, shares ECN keys for stages 3-6)
+    if (isAltSupplier) {
+      if (activeStage === 2) {
+        setAsRndApproval(null); setAsRndRemarks("")
+        const rawRnd = localStorage.getItem(AS_RND_APPROVAL_KEY)
+        if (rawRnd) { const all = JSON.parse(rawRnd); delete all[npdId]; localStorage.setItem(AS_RND_APPROVAL_KEY, JSON.stringify(all)) }
+      }
+      if (activeStage === 3) {
+        setEcnSourcingDispatch(null)
+        const rawSD = localStorage.getItem(ECN_SOURCING_DISPATCH_KEY)
+        if (rawSD) { const all = JSON.parse(rawSD); delete all[npdId]; localStorage.setItem(ECN_SOURCING_DISPATCH_KEY, JSON.stringify(all)) }
+        setEcnNegotiation(null)
+        const rawNeg = localStorage.getItem(ECN_NEGOTIATION_KEY)
+        if (rawNeg) { const all = JSON.parse(rawNeg); delete all[npdId]; localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all)) }
+        setEcnInitialQuote(null)
+        const rawIQ = localStorage.getItem(ECN_INITIAL_QUOTE_KEY)
+        if (rawIQ) { const all = JSON.parse(rawIQ); delete all[npdId]; localStorage.setItem(ECN_INITIAL_QUOTE_KEY, JSON.stringify(all)) }
+      }
+      if (activeStage === 4) {
+        setEcnRndTestResults({}); setEcnRndTestSubmitted(false)
+        const rawVT = localStorage.getItem(VENDOR_TESTS_KEY)
+        if (rawVT) { const all = JSON.parse(rawVT); if (all[npdId]) { delete all[npdId][npd.supplier]; localStorage.setItem(VENDOR_TESTS_KEY, JSON.stringify(all)) } }
+        setEcnSourcingDispatch(null)
+        const rawSD4 = localStorage.getItem(ECN_SOURCING_DISPATCH_KEY)
+        if (rawSD4) { const all = JSON.parse(rawSD4); delete all[npdId]; localStorage.setItem(ECN_SOURCING_DISPATCH_KEY, JSON.stringify(all)) }
+        setEcnNegotiation(null)
+        const rawNeg4 = localStorage.getItem(ECN_NEGOTIATION_KEY)
+        if (rawNeg4) { const all = JSON.parse(rawNeg4); delete all[npdId]; localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all)) }
+        setEcnInitialQuote(null)
+        const rawIQ4 = localStorage.getItem(ECN_INITIAL_QUOTE_KEY)
+        if (rawIQ4) { const all = JSON.parse(rawIQ4); delete all[npdId]; localStorage.setItem(ECN_INITIAL_QUOTE_KEY, JSON.stringify(all)) }
+        setEcnPriceEstimation(null)
+        const rawPE = localStorage.getItem(ECN_PRICE_ESTIMATION_KEY)
+        if (rawPE) { const all = JSON.parse(rawPE); delete all[npdId]; localStorage.setItem(ECN_PRICE_ESTIMATION_KEY, JSON.stringify(all)) }
+      }
+      if (activeStage === 5) {
+        setEcnDqaResults({}); setEcnDqaSubmitted(false); setEcnDqaTestsData(null)
+        const rawDqa = localStorage.getItem(ECN_DQA_TESTS_KEY)
+        if (rawDqa) { const all = JSON.parse(rawDqa); delete all[npdId]; localStorage.setItem(ECN_DQA_TESTS_KEY, JSON.stringify(all)) }
+      }
+      if (activeStage === 6) {
+        setEcnHeadApproval(null); setEcnHeadRemarks("")
+        const rawHA = localStorage.getItem(ECN_HEAD_APPROVAL_KEY)
+        if (rawHA) { const all = JSON.parse(rawHA); delete all[npdId]; localStorage.setItem(ECN_HEAD_APPROVAL_KEY, JSON.stringify(all)) }
+      }
+      if (activeStage === 7) {
+        setAsPpPricing(null); setAsPpSourcingApproved(null); setAsPpPrice(""); setAsPpMoq(""); setAsPpLeadTime("")
+        const rawPP = localStorage.getItem(AS_PP_PRICING_KEY)
+        if (rawPP) { const all = JSON.parse(rawPP); delete all[npdId]; localStorage.setItem(AS_PP_PRICING_KEY, JSON.stringify(all)) }
+        const rawPPSrc = localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY)
+        if (rawPPSrc) { const all = JSON.parse(rawPPSrc); delete all[npdId]; localStorage.setItem(AS_PP_SOURCING_APPROVED_KEY, JSON.stringify(all)) }
+      }
+      if (activeStage === 8) {
+        setAsPpRndApproval(null); setAsPpRndRemarks("")
+        const rawPPRnd = localStorage.getItem(AS_PP_RND_APPROVAL_KEY)
+        if (rawPPRnd) { const all = JSON.parse(rawPPRnd); delete all[npdId]; localStorage.setItem(AS_PP_RND_APPROVAL_KEY, JSON.stringify(all)) }
       }
       setActiveStage(prev)
       updateNPD(npdId, { stage: prev, stageName: getStageName(prev, npd.typeOfWork) })
@@ -1626,6 +1841,17 @@ export default function NpdDetailView() {
       })),
   ]
 
+  const isDqaRole = currentRole === "dqa_engineer" || currentRole === "dqa_lead"
+  if (isAltSupplier && !isRnd && !isDqaRole && npd.raisedBy !== currentRole) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3 text-center">
+        <div className="text-slate-400 text-5xl">🔒</div>
+        <h2 className="text-lg font-bold text-slate-800">Access Restricted</h2>
+        <p className="text-sm text-slate-500 max-w-sm">This Alternative Supplier request is only visible to the requester and R&D team members.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto animate-in fade-in duration-300">
 
@@ -1803,6 +2029,519 @@ export default function NpdDetailView() {
           )}
 
           {/* ═══ ECN FLOW — R&D view (all 8 stages, newest first) ═══ */}
+          {isAltSupplier && (() => {
+  const asCards: React.ReactNode[] = []
+
+  // ── AS Stage 1: Sourcing Request Initiation ──────────────────────────────
+  {
+    const isActive = activeStage === 1
+    const isDone   = activeStage > 1
+    asCards.push(
+      <div key="as-s1" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-amber-300 bg-amber-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2 mb-3">
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-amber-600 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 1 — Sourcing Request Initiation</h4>
+          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Submitted</Badge>}
+          {isActive && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">Awaiting Sourcing</Badge>}
+        </div>
+        {isDone && asStage1Data && (
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs border-b border-slate-100 pb-1">
+              <span className="text-slate-400">Proposed Supplier</span>
+              <span className="font-semibold text-slate-800">{asStage1Data.supplierName}</span>
+            </div>
+            <div className="flex justify-between text-xs border-b border-slate-100 pb-1">
+              <span className="text-slate-400">Reason</span>
+              <span className="font-semibold text-slate-800 max-w-[200px] text-right">{asStage1Data.reason}</span>
+            </div>
+            {asStage1Data.docsLink && (
+              <div className="flex justify-between text-xs border-b border-slate-100 pb-1">
+                <span className="text-slate-400">Docs Link</span>
+                <span className="font-semibold text-blue-700">{asStage1Data.docsLink}</span>
+              </div>
+            )}
+            <p className="text-[10px] text-slate-400 mt-1">Submitted by {asStage1Data.submittedBy} · {new Date(asStage1Data.submittedAt).toLocaleString("en-IN")}</p>
+          </div>
+        )}
+        {isActive && (
+          <p className="text-xs text-slate-400 italic">Sourcing is preparing the alternate supplier request.</p>
+        )}
+      </div>
+    )
+  }
+
+  // ── AS Stage 2: R&D Review & Approval ────────────────────────────────────
+  if (activeStage >= 2) {
+    const isActive = activeStage === 2
+    const isDone   = activeStage > 2
+    const approved = !!asRndApproval
+    asCards.push(
+      <div key="as-s2" className={`rounded-xl border p-4 ${isDone || approved ? "bg-slate-50 border-slate-200" : isActive ? "border-teal-300 bg-teal-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2 mb-3">
+          {isDone || approved ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-teal-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 2 — R&D Review &amp; Approval</h4>
+          {(isDone || approved) && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
+          {isActive && !approved && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D</Badge>}
+        </div>
+        {asStage1Data && (
+          <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 mb-3 space-y-1">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Sourcing Request</p>
+            <div className="flex justify-between text-xs"><span className="text-slate-400">Proposed Supplier</span><span className="font-semibold text-slate-800">{asStage1Data.supplierName}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-slate-400">Existing Part No.</span><span className="font-semibold text-slate-800">{npd.existingPartNumber ?? "—"}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-slate-400">Reason</span><span className="font-semibold text-slate-800 max-w-[200px] text-right">{asStage1Data.reason}</span></div>
+          </div>
+        )}
+        {isActive && !approved && isRnd && (
+          <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-4 space-y-3">
+            <p className="text-xs font-semibold text-teal-800">Review &amp; Approve</p>
+            <textarea
+              rows={2}
+              placeholder="Remarks (optional)…"
+              value={asRndRemarks}
+              onChange={e => setAsRndRemarks(e.target.value)}
+              className="w-full rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-teal-400 placeholder:text-slate-400"
+            />
+            <button
+              onClick={() => {
+                const entry = { approvedBy: currentRole, approvedAt: Date.now(), note: asRndRemarks || undefined }
+                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_RND_APPROVAL_KEY) ?? "{}")
+                all[npdId] = entry
+                localStorage.setItem(AS_RND_APPROVAL_KEY, JSON.stringify(all))
+                setAsRndApproval(entry)
+                updateNPD(npdId, { stage: 3, stageName: getStageName(3, npd.typeOfWork) })
+                setActiveStage(3)
+              }}
+              className="w-full bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+            ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Proceed</button>
+          </div>
+        )}
+        {(isDone || approved) && asRndApproval && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 flex items-center gap-2 mt-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-emerald-800">Approved by {asRndApproval.approvedBy}</p>
+              {asRndApproval.note && <p className="text-[11px] text-slate-600 mt-0.5">"{asRndApproval.note}"</p>}
+              <p className="text-[10px] text-slate-400">{new Date(asRndApproval.approvedAt).toLocaleString("en-IN")}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── AS Stages 3-6: reuse ECN rendering ───────────────────────────────────
+  const supplier = npd.supplier
+  const vendorTestEntry = vendorTests[supplier] ?? null
+  const ecnRndTestsList = getTestsByCategory(npd.itemCategory).length > 0
+    ? getTestsByCategory(npd.itemCategory)
+    : getTestsByCategory("Others")
+  const sd = ecnSourcingDispatch
+  const portalUrl = `${baseUrl}/supplier/ecn-sourcing/${npdId}`
+
+  if (activeStage >= 3) {
+    const isActive   = activeStage === 3
+    const isDone     = activeStage > 3
+    const asNeg      = ecnNegotiation
+    const negDone    = !!asNeg?.approvedAt
+    const negPending = asNeg && !negDone
+    asCards.push(
+      <div key="as-s3" className={`rounded-xl border p-4 space-y-3 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-indigo-300 bg-indigo-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2">
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Truck className="w-4 h-4 text-indigo-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 3 — Price Negotiation &amp; Sample Dispatch</h4>
+          <span className="text-xs text-slate-500 ml-1">Supplier: <strong>{supplier}</strong></span>
+          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
+          {isActive && negPending && !sd?.submission && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Negotiating</Badge>}
+          {isActive && negDone && !sd?.submission && <Badge className="bg-blue-100 text-blue-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting Dispatch</Badge>}
+          {isActive && sd?.submission && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Dispatched</Badge>}
+        </div>
+
+        {/* Negotiation summary (R&D read-only) */}
+        {isActive && !ecnInitialQuote && (
+          <p className="text-xs text-slate-400 italic">Supplier will submit their price quote via the portal. Sourcing will then negotiate.</p>
+        )}
+        {isActive && ecnInitialQuote && !asNeg && (
+          <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-slate-500">Supplier&apos;s quoted price</span>
+            <span className="text-sm font-bold text-slate-800">
+              {ecnInitialQuote.currency === "INR" ? "₹" : ecnInitialQuote.currency === "USD" ? "$" : "€"}{parseFloat(ecnInitialQuote.price).toLocaleString("en-IN")} / unit
+            </span>
+          </div>
+        )}
+        {asNeg && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Price Negotiation Status</p>
+            {negDone && (
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 flex items-center gap-2">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-emerald-800">Price Agreed</p>
+                  <p className="text-[11px] text-emerald-700">
+                    {asNeg.finalCurrency === "INR" ? "₹" : asNeg.finalCurrency === "USD" ? "$" : "€"}
+                    {parseFloat(asNeg.finalPrice ?? "0").toLocaleString("en-IN")} / unit
+                  </p>
+                </div>
+              </div>
+            )}
+            {negPending && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 space-y-1">
+                <p className="text-xs font-semibold text-amber-800">Round {asNeg.rounds.length} in progress</p>
+                {asNeg.rounds.length > 0 && (() => {
+                  const lr = asNeg.rounds[asNeg.rounds.length - 1]
+                  return (
+                    <div className="flex gap-4 text-xs">
+                      <span className="text-slate-500">Target sent: <strong className="text-slate-800">
+                        {lr.currency === "INR" ? "₹" : lr.currency === "USD" ? "$" : "€"}{parseFloat(lr.targetPrice).toLocaleString("en-IN")}
+                      </strong></span>
+                      {lr.supplierResponse && (
+                        <span className="text-slate-500">Counter: <strong className="text-slate-800">
+                          {lr.supplierResponse.currency === "INR" ? "₹" : lr.supplierResponse.currency === "USD" ? "$" : "€"}{parseFloat(lr.supplierResponse.price).toLocaleString("en-IN")}
+                        </strong></span>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Dispatch details once done */}
+        {sd?.submission && (
+          <div className="border-t border-slate-200 pt-2 space-y-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dispatch Details</p>
+            <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Dispatch Date</p>
+              <p className="text-xs font-semibold text-slate-800 mt-0.5">{sd.submission.dispatchDate ?? "—"}</p>
+            </div>
+            {sd.submission.docs?.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {sd.submission.docs.map((doc, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 text-[11px] font-medium px-2 py-0.5 rounded-md border border-slate-200">
+                    <FileText className="w-3 h-3 text-slate-400" />{doc}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (activeStage >= 4 && (currentRole === "rnd_user" || currentRole === "rnd_head" || currentRole === "super_admin")) {
+    const isActive   = activeStage === 4
+    const isDone     = activeStage > 4
+    const savedTests = vendorTestEntry
+    const sd4        = ecnSourcingDispatch
+    const deliveryAccepted = !!sd4?.received
+    asCards.push(
+      <div key="as-s4" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-emerald-300 bg-emerald-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2 mb-3">
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-emerald-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 4 — R&D Testing</h4>
+          <span className="text-xs text-slate-500 ml-1">Supplier: <strong>{supplier}</strong></span>
+          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Submitted</Badge>}
+        </div>
+        {isActive && !deliveryAccepted && (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+            <p className="text-xs font-semibold text-indigo-800">Accept Delivery</p>
+            <p className="text-[11px] text-indigo-600">Confirm receipt of samples from <strong>{supplier}</strong> before testing.</p>
+            <div onClick={() => setEcnReceiptDoc(prev => prev ? "" : `delivery_receipt_${npdId}.pdf`)}
+              className={`rounded-lg border-2 border-dashed p-3 text-center cursor-pointer transition-all ${ecnReceiptDoc ? "border-emerald-400 bg-emerald-50" : "border-indigo-300 hover:border-indigo-400"}`}>
+              {ecnReceiptDoc
+                ? <span className="text-xs font-medium text-emerald-700 flex items-center justify-center gap-1"><CheckCircle className="w-3.5 h-3.5" />{ecnReceiptDoc} — click to remove</span>
+                : <span className="text-xs text-indigo-500">Click to attach delivery receipt</span>}
+            </div>
+            <button disabled={!ecnReceiptDoc}
+              onClick={() => {
+                const received = { markedBy: currentRole, markedAt: Date.now(), doc: ecnReceiptDoc }
+                const rawD = localStorage.getItem(ECN_SOURCING_DISPATCH_KEY)
+                const allD = rawD ? JSON.parse(rawD) : {}
+                allD[npdId] = { ...allD[npdId], received }
+                localStorage.setItem(ECN_SOURCING_DISPATCH_KEY, JSON.stringify(allD))
+                setEcnSourcingDispatch(prev => prev ? { ...prev, received } : prev)
+              }}
+              className="w-full bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-center gap-1"
+            ><CheckCircle className="w-3.5 h-3.5" />Confirm Delivery Receipt</button>
+          </div>
+        )}
+        {isActive && deliveryAccepted && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 flex items-center gap-2 mb-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <p className="text-xs font-semibold text-emerald-800">Delivery accepted</p>
+          </div>
+        )}
+        {isActive && deliveryAccepted && currentRole === "rnd_user" && !(savedTests?.status === "submitted" || ecnRndTestSubmitted) && (
+          <div className="space-y-2">
+            {ecnRndTestsList.map(t => (
+              <div key={t.testName} className="flex items-center gap-3">
+                <span className="text-xs text-slate-600 w-44 shrink-0">{t.testName} ({t.unit})</span>
+                <input type="text" placeholder="Result"
+                  value={ecnRndTestResults[t.testName] ?? ""}
+                  onChange={e => setEcnRndTestResults(prev => ({ ...prev, [t.testName]: e.target.value }))}
+                  className="flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs" />
+              </div>
+            ))}
+            <button
+              disabled={ecnRndTestsList.some(t => !ecnRndTestResults[t.testName]?.trim())}
+              onClick={() => {
+                const rawVT = localStorage.getItem(VENDOR_TESTS_KEY)
+                const allVT: Record<string, Record<string, { results: Record<string, string>; status: string; submittedAt?: string }>> = rawVT ? JSON.parse(rawVT) : {}
+                if (!allVT[npdId]) allVT[npdId] = {}
+                allVT[npdId][supplier] = { results: ecnRndTestResults, status: "submitted", submittedAt: new Date().toLocaleString("en-IN") }
+                localStorage.setItem(VENDOR_TESTS_KEY, JSON.stringify(allVT))
+                setVendorTests(allVT[npdId])
+                setEcnRndTestSubmitted(true)
+                updateNPD(npdId, { stage: 5, stageName: getStageName(5, npd.typeOfWork) })
+                setActiveStage(5)
+              }}
+              className="mt-2 bg-blue-900 hover:bg-blue-800 disabled:opacity-40 text-white text-xs font-bold px-4 py-2 rounded-lg"
+            >Submit R&D Test Results</button>
+          </div>
+        )}
+        {(isDone || savedTests?.status === "submitted" || ecnRndTestSubmitted) && (
+          <div className="space-y-1 mt-1">
+            {Object.entries(savedTests?.results ?? ecnRndTestResults).map(([name, val]) => (
+              <div key={name} className="flex justify-between text-xs border-b border-slate-100 pb-0.5">
+                <span className="text-slate-500">{name}</span>
+                <span className="font-semibold text-slate-800">{val}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (activeStage >= 5) {
+    const isActive = activeStage === 5
+    const isDone   = activeStage > 5
+    asCards.push(
+      <div key="as-s5" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-cyan-300 bg-cyan-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2 mb-3">
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-cyan-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 5 — DQA Testing</h4>
+          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
+          {isActive && ecnDqaSubmitted && <Badge className="bg-cyan-100 text-cyan-700 border-none text-xs ml-auto">Results Submitted</Badge>}
+        </div>
+        {ecnDqaSubmitted || isDone ? (
+          <div className="space-y-1">
+            {Object.entries(ecnDqaResults).map(([name, r]) => (
+              <div key={name} className="flex justify-between text-xs border-b border-slate-100 pb-0.5">
+                <span className="text-slate-500">{name}</span>
+                <span className={`font-semibold ${r.status === "pass" ? "text-emerald-700" : "text-red-600"}`}>{r.value}</span>
+              </div>
+            ))}
+            {ecnDqaTestsData && <p className="text-[10px] text-slate-400 mt-1">Submitted by {ecnDqaTestsData.submittedBy} · {new Date(ecnDqaTestsData.submittedAt).toLocaleString("en-IN")}</p>}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 italic">Awaiting DQA team to submit results.</p>
+        )}
+      </div>
+    )
+  }
+
+  const canApprove = currentRole === "rnd_head" || currentRole === "super_admin"
+
+  if (activeStage >= 6) {
+    const isActive = activeStage === 6
+    const isDone   = activeStage > 6
+    const approved = ecnHeadApproval?.verdict === "approved"
+    const rejected = ecnHeadApproval?.verdict === "rejected"
+    asCards.push(
+      <div key="as-s6" className={`rounded-xl border p-4 space-y-4 ${isDone || approved ? "bg-slate-50 border-slate-200" : isActive ? "border-violet-300 bg-violet-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2">
+          {isDone || approved ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-violet-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 6 — R&D Head Approval</h4>
+          <div className="ml-auto flex items-center gap-1.5">
+            {(isDone || approved) && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Approved</Badge>}
+            {rejected && <Badge className="bg-red-100 text-red-700 border-none text-xs">Rejected</Badge>}
+            {isActive && !ecnHeadApproval && canApprove && <Badge className="bg-violet-100 text-violet-700 border-none text-xs">Action Required</Badge>}
+            {isActive && !ecnHeadApproval && !canApprove && <Badge className="bg-amber-100 text-amber-700 border-none text-xs">Awaiting R&D Head</Badge>}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="bg-emerald-700 px-3 py-2 flex items-center gap-1.5">
+              <CheckCircle className="w-3 h-3 text-emerald-300" />
+              <span className="text-[10px] font-bold text-emerald-100 uppercase tracking-wider">R&D Test Results</span>
+            </div>
+            <div className="p-3">
+              {vendorTestEntry?.results ? (
+                <div className="divide-y divide-slate-100">
+                  {Object.entries(vendorTestEntry.results).map(([name, val]) => (
+                    <div key={name} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0">
+                      <span className="text-[11px] text-slate-500">{name}</span>
+                      <span className="text-[11px] font-semibold text-slate-800 bg-slate-100 rounded px-1.5 py-0.5">{val}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-xs text-slate-400 italic">No results yet</p>}
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="bg-cyan-700 px-3 py-2 flex items-center gap-1.5">
+              <CheckCircle className="w-3 h-3 text-cyan-300" />
+              <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider">DQA Test Results</span>
+            </div>
+            <div className="p-3">
+              {ecnDqaSubmitted ? (
+                <div className="divide-y divide-slate-100">
+                  {Object.entries(ecnDqaResults).map(([name, r]) => (
+                    <div key={name} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0">
+                      <span className="text-[11px] text-slate-500">{name}</span>
+                      <span className={`text-[11px] font-bold rounded px-1.5 py-0.5 ${r.status === "pass" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{r.value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-xs text-slate-400 italic">No results yet</p>}
+            </div>
+          </div>
+        </div>
+        {isActive && !ecnHeadApproval && canApprove && (
+          <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 space-y-3">
+            <p className="text-xs font-semibold text-violet-800">Review &amp; Decision</p>
+            <textarea rows={2} placeholder="Remarks (optional)…" value={ecnHeadRemarks}
+              onChange={e => setEcnHeadRemarks(e.target.value)}
+              className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder:text-slate-400" />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const entry = { verdict: "approved" as const, remarks: ecnHeadRemarks || undefined, approvedBy: currentRole, approvedAt: Date.now() }
+                  const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_HEAD_APPROVAL_KEY) ?? "{}")
+                  all[npdId] = entry
+                  localStorage.setItem(ECN_HEAD_APPROVAL_KEY, JSON.stringify(all))
+                  setEcnHeadApproval(entry)
+                  updateNPD(npdId, { stage: 7, stageName: getStageName(7, npd.typeOfWork) })
+                  setActiveStage(7)
+                }}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+              ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Proceed to PP Pricing</button>
+              <button
+                onClick={() => {
+                  const entry = { verdict: "rejected" as const, remarks: ecnHeadRemarks || undefined, approvedBy: currentRole, approvedAt: Date.now() }
+                  const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_HEAD_APPROVAL_KEY) ?? "{}")
+                  all[npdId] = entry
+                  localStorage.setItem(ECN_HEAD_APPROVAL_KEY, JSON.stringify(all))
+                  setEcnHeadApproval(entry)
+                }}
+                className="bg-white hover:bg-red-50 border border-red-300 text-red-600 text-xs font-bold px-4 py-2.5 rounded-lg"
+              >Reject</button>
+            </div>
+          </div>
+        )}
+        {ecnHeadApproval && (
+          <div className={`rounded-lg border px-4 py-3 flex items-start gap-3 ${approved ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+            {approved ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />}
+            <div>
+              <p className={`text-xs font-semibold ${approved ? "text-emerald-800" : "text-red-800"}`}>
+                {approved ? "Approved" : "Rejected"} by {ecnHeadApproval.approvedBy}
+              </p>
+              {ecnHeadApproval.remarks && <p className="text-[11px] text-slate-600 mt-0.5">"{ecnHeadApproval.remarks}"</p>}
+              <p className="text-[10px] text-slate-400 mt-0.5">{new Date(ecnHeadApproval.approvedAt).toLocaleString("en-IN")}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── AS Stage 7: PP Pricing (R&D view — approval action) ────────────────
+  if (activeStage >= 7) {
+    const isActive = activeStage === 7
+    const isDone   = activeStage > 7
+    const ppSymbolRnd = asPpPricing?.currency === "USD" ? "$" : asPpPricing?.currency === "EUR" ? "€" : "₹"
+    asCards.push(
+      <div key="as-s7" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2 mb-2">
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-orange-600 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing</h4>
+          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
+          {isActive && !asPpSourcingApproved && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting Sourcing</Badge>}
+          {isActive && asPpSourcingApproved && !asPpRndApproval && canApprove && <Badge className="bg-orange-100 text-orange-700 border-none text-xs ml-auto">Action Required</Badge>}
+          {isActive && asPpSourcingApproved && !asPpRndApproval && !canApprove && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Head</Badge>}
+        </div>
+        {!asPpSourcingApproved && isActive && (
+          <p className="text-xs text-slate-400 italic">Sourcing is preparing the PP pricing. You will be notified once submitted and approved by sourcing.</p>
+        )}
+        {asPpPricing && (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {[["Price / Unit", `${ppSymbolRnd}${parseFloat(asPpPricing.ppPrice).toLocaleString("en-IN")}`], ["MOQ", `${asPpPricing.moq} units`], ["Lead Time", `${asPpPricing.leadTime} days`], ["Currency", asPpPricing.currency]].map(([label, value]) => (
+              <div key={label} className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+                <p className="text-xs font-semibold text-slate-800 mt-0.5">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {isActive && asPpSourcingApproved && !asPpRndApproval && canApprove && (
+          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-3">
+            <p className="text-xs font-semibold text-orange-800">Approve PP Pricing to close stage and proceed to summary</p>
+            <textarea rows={2} placeholder="Remarks (optional)…" value={asPpRndRemarks}
+              onChange={e => setAsPpRndRemarks(e.target.value)}
+              className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-slate-400" />
+            <button
+              onClick={() => {
+                const entry = { approvedBy: currentRole, approvedAt: Date.now(), remarks: asPpRndRemarks || undefined }
+                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_PP_RND_APPROVAL_KEY) ?? "{}")
+                all[npdId] = entry
+                localStorage.setItem(AS_PP_RND_APPROVAL_KEY, JSON.stringify(all))
+                setAsPpRndApproval(entry)
+                updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
+                setActiveStage(8)
+              }}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+            ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Close to Stage 8</button>
+          </div>
+        )}
+        {asPpRndApproval && (
+          <p className="text-[10px] text-slate-400 mt-1">Approved by {asPpRndApproval.approvedBy} · {new Date(asPpRndApproval.approvedAt).toLocaleString("en-IN")}</p>
+        )}
+      </div>
+    )
+  }
+
+  // ── AS Stage 8: AS Summary & Closure ─────────────────────────────────────
+  if (activeStage >= 8) {
+    asCards.push(
+      <div key="as-s8" className="rounded-xl border border-emerald-300 bg-emerald-50/30 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+          <h4 className="font-bold text-slate-800 text-sm">Stage 8 — AS Summary &amp; Closure</h4>
+          <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>
+        </div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 mb-3">
+          {([
+            ["Item", npd.itemName],
+            ["Qualified Supplier", npd.supplier],
+            ["Existing Part No.", npd.existingPartNumber ?? "—"],
+            ["Priority", npd.priority],
+            ["Total TAT", npd.totalTat ? `${npd.totalTat} days` : "—"],
+            ...(asPpPricing ? [["PP Price / Unit", `${asPpPricing.currency === "INR" ? "₹" : asPpPricing.currency === "USD" ? "$" : "€"}${parseFloat(asPpPricing.ppPrice).toLocaleString("en-IN")}`] as [string, string]] : []),
+            ...(asPpPricing ? [["MOQ", `${asPpPricing.moq} units`] as [string, string]] : []),
+          ] as [string, string][]).map(([label, value]) => (
+            <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
+              <span className="text-slate-400 text-xs">{label}</span>
+              <span className="text-slate-800 font-medium text-xs text-right max-w-[160px] truncate">{value}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-emerald-200 rounded-lg px-3 py-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="text-sm font-semibold text-emerald-700">Alternative Supplier qualification complete.</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {[...asCards].reverse()}
+    </div>
+  )
+})()}
+
           {isECN && (() => {
   const ecnSummaryRows: [string, string][] = [
     ["Part Number",      npd.ecnPartNumber ?? "—"],
@@ -1893,7 +2632,7 @@ export default function NpdDetailView() {
     )
   }
 
-  // ── Stage 3: Supplier Sample Dispatch (R&D sees portal status) ──────────
+  // ── Stage 3: Supplier Sample Dispatch (R&D sees portal status + can mark received) ──────────
   if (activeStage >= 3) {
     const isActive = activeStage === 3
     const isDone   = activeStage > 3
@@ -1907,6 +2646,7 @@ export default function NpdDetailView() {
           <span className="text-xs text-slate-500 ml-1">Supplier: <strong>{supplier}</strong></span>
           {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Dispatched</Badge>}
           {isActive && !sd?.submission && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">Awaiting Supplier</Badge>}
+          {isActive && sd?.submission && <Badge className="bg-blue-100 text-blue-700 border-none text-xs ml-auto">Dispatched</Badge>}
         </div>
         {isActive && !sd && (
           <p className="text-xs text-slate-400 italic">Sourcing will send the supplier portal link to {supplier}.</p>
@@ -1921,23 +2661,13 @@ export default function NpdDetailView() {
             <p className="text-xs text-slate-400 italic">Waiting for supplier to submit dispatch documents…</p>
           </div>
         )}
-        {(isDone || sd?.submission) && (
+        {sd?.submission && (
           <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Dispatch Date</p>
-                <p className="text-xs font-semibold text-slate-800 mt-0.5">{sd?.submission?.dispatchDate ?? "—"}</p>
-              </div>
-              {ecnPriceEstimation && (
-                <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Price Estimate</p>
-                  <p className="text-xs font-semibold text-slate-800 mt-0.5">
-                    {ecnPriceEstimation.currency === "INR" ? "₹" : ecnPriceEstimation.currency === "USD" ? "$" : "€"}{parseFloat(ecnPriceEstimation.pricePerUnit).toLocaleString("en-IN")} / unit
-                  </p>
-                </div>
-              )}
+            <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Dispatch Date</p>
+              <p className="text-xs font-semibold text-slate-800 mt-0.5">{sd.submission.dispatchDate ?? "—"}</p>
             </div>
-            {sd?.submission?.docs && sd.submission.docs.length > 0 && (
+            {sd.submission.docs && sd.submission.docs.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {sd.submission.docs.map((doc, i) => (
                   <span key={i} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 text-[11px] font-medium px-2 py-0.5 rounded-md border border-slate-200">
@@ -1954,9 +2684,12 @@ export default function NpdDetailView() {
 
   // ── Stage 4: R&D Testing ─────────────────────────────────────────────────
   if (activeStage >= 4 && (currentRole === "rnd_user" || currentRole === "rnd_head" || currentRole === "super_admin")) {
-    const isActive = activeStage === 4
-    const isDone   = activeStage > 4
+    const isActive   = activeStage === 4
+    const isDone     = activeStage > 4
     const savedTests = vendorTestEntry
+    const sd4        = ecnSourcingDispatch
+    const deliveryAccepted = !!sd4?.received
+
     ecnCards.push(
       <div key="ecn-s4" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-emerald-300 bg-emerald-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
         <div className="flex items-center gap-2 mb-3">
@@ -1964,9 +2697,54 @@ export default function NpdDetailView() {
           <h4 className="font-bold text-slate-800 text-sm">Stage 4 — R&D Testing</h4>
           <span className="text-xs text-slate-500 ml-1">Supplier: <strong>{supplier}</strong></span>
           {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Submitted</Badge>}
+          {isActive && deliveryAccepted && !(savedTests?.status === "submitted" || ecnRndTestSubmitted) && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">Testing</Badge>}
           {isActive && (savedTests?.status === "submitted" || ecnRndTestSubmitted) && <Badge className="bg-blue-100 text-blue-700 border-none text-xs ml-auto">Results Submitted</Badge>}
         </div>
-        {isActive && currentRole === "rnd_user" && !(savedTests?.status === "submitted" || ecnRndTestSubmitted) && (
+
+        {/* ── Step 1: Accept delivery ── */}
+        {isActive && !deliveryAccepted && (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-indigo-600 shrink-0" />
+              <p className="text-xs font-semibold text-indigo-800">Accept Delivery</p>
+            </div>
+            <p className="text-[11px] text-indigo-600">Confirm physical receipt of samples from <strong>{supplier}</strong> and attach a delivery receipt document before proceeding to testing.</p>
+            <div
+              onClick={() => setEcnReceiptDoc(prev => prev ? "" : `delivery_receipt_${npdId}.pdf`)}
+              className={`rounded-lg border-2 border-dashed p-3 text-center cursor-pointer transition-all ${ecnReceiptDoc ? "border-emerald-400 bg-emerald-50" : "border-indigo-300 hover:border-indigo-400"}`}
+            >
+              {ecnReceiptDoc
+                ? <span className="text-xs font-medium text-emerald-700 flex items-center justify-center gap-1"><CheckCircle className="w-3.5 h-3.5" />{ecnReceiptDoc} — click to remove</span>
+                : <span className="text-xs text-indigo-500">Click to attach delivery receipt</span>}
+            </div>
+            <button
+              disabled={!ecnReceiptDoc}
+              onClick={() => {
+                const received = { markedBy: currentRole, markedAt: Date.now(), doc: ecnReceiptDoc }
+                const rawD = localStorage.getItem(ECN_SOURCING_DISPATCH_KEY)
+                const allD = rawD ? JSON.parse(rawD) : {}
+                allD[npdId] = { ...allD[npdId], received }
+                localStorage.setItem(ECN_SOURCING_DISPATCH_KEY, JSON.stringify(allD))
+                setEcnSourcingDispatch(prev => prev ? { ...prev, received } : prev)
+              }}
+              className="w-full bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-center gap-1"
+            ><CheckCircle className="w-3.5 h-3.5" />Confirm Delivery Receipt</button>
+          </div>
+        )}
+
+        {/* Delivery accepted confirmation */}
+        {isActive && deliveryAccepted && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 flex items-center gap-2 mb-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-emerald-800">Delivery accepted — {new Date(sd4!.received!.markedAt).toLocaleString("en-IN")}</p>
+              {sd4!.received!.doc && <p className="text-[10px] text-emerald-600">Receipt: {sd4!.received!.doc}</p>}
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2: Testing (only after delivery accepted) ── */}
+        {isActive && deliveryAccepted && currentRole === "rnd_user" && !(savedTests?.status === "submitted" || ecnRndTestSubmitted) && (
           <div className="space-y-2">
             {ecnRndTestsList.map(t => (
               <div key={t.testName} className="flex items-center gap-3">
@@ -2041,57 +2819,81 @@ export default function NpdDetailView() {
 
   // ── Stage 6: R&D Head Approval (combined RND + DQA view) ─────────────────
   if (activeStage >= 6) {
-    const isActive = activeStage === 6
-    const isDone   = activeStage > 6
+    const isActive   = activeStage === 6
+    const isDone     = activeStage > 6
     const canApprove = currentRole === "rnd_head" || currentRole === "super_admin"
+    const approved   = ecnHeadApproval?.verdict === "approved"
+    const rejected   = ecnHeadApproval?.verdict === "rejected"
+
     ecnCards.push(
-      <div key="ecn-s6" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-violet-300 bg-violet-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
-        <div className="flex items-center gap-2 mb-3">
+      <div key="ecn-s6" className={`rounded-xl border p-4 space-y-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-violet-300 bg-violet-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        {/* Header */}
+        <div className="flex items-center gap-2">
           {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-violet-700 shrink-0" />}
           <h4 className="font-bold text-slate-800 text-sm">Stage 6 — R&D Head Approval</h4>
-          {isDone && ecnHeadApproval?.verdict === "approved" && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
-          {isActive && !ecnHeadApproval && canApprove && <Badge className="bg-violet-100 text-violet-700 border-none text-xs ml-auto">Action Required</Badge>}
-          {isActive && !ecnHeadApproval && !canApprove && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">Awaiting R&D Head</Badge>}
-          {ecnHeadApproval?.verdict === "rejected" && <Badge className="bg-red-100 text-red-700 border-none text-xs ml-auto">Rejected</Badge>}
-        </div>
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          {/* R&D Results panel */}
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">R&D Test Results</p>
-            {vendorTestEntry?.results ? (
-              <div className="space-y-0.5">
-                {Object.entries(vendorTestEntry.results).map(([name, val]) => (
-                  <div key={name} className="flex justify-between text-xs">
-                    <span className="text-slate-500">{name}</span>
-                    <span className="font-semibold text-slate-800">{val}</span>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="text-xs text-slate-400 italic">No R&D results yet</p>}
-          </div>
-          {/* DQA Results panel */}
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">DQA Test Results</p>
-            {ecnDqaSubmitted ? (
-              <div className="space-y-0.5">
-                {Object.entries(ecnDqaResults).map(([name, r]) => (
-                  <div key={name} className="flex justify-between text-xs">
-                    <span className="text-slate-500">{name}</span>
-                    <span className={`font-semibold ${r.status === "pass" ? "text-emerald-700" : "text-red-600"}`}>{r.value}</span>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="text-xs text-slate-400 italic">No DQA results yet</p>}
+          <div className="ml-auto flex items-center gap-1.5">
+            {approved && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Approved</Badge>}
+            {rejected && <Badge className="bg-red-100 text-red-700 border-none text-xs">Rejected</Badge>}
+            {isActive && !ecnHeadApproval && canApprove && <Badge className="bg-violet-100 text-violet-700 border-none text-xs">Action Required</Badge>}
+            {isActive && !ecnHeadApproval && !canApprove && <Badge className="bg-amber-100 text-amber-700 border-none text-xs">Awaiting R&D Head</Badge>}
           </div>
         </div>
+
+        {/* Test results — two columns */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* R&D Results */}
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="bg-emerald-700 px-3 py-2 flex items-center gap-1.5">
+              <CheckCircle className="w-3 h-3 text-emerald-300" />
+              <span className="text-[10px] font-bold text-emerald-100 uppercase tracking-wider">R&D Test Results</span>
+            </div>
+            <div className="p-3">
+              {vendorTestEntry?.results ? (
+                <div className="divide-y divide-slate-100">
+                  {Object.entries(vendorTestEntry.results).map(([name, val]) => (
+                    <div key={name} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0">
+                      <span className="text-[11px] text-slate-500">{name}</span>
+                      <span className="text-[11px] font-semibold text-slate-800 bg-slate-100 rounded px-1.5 py-0.5">{val}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-xs text-slate-400 italic">No results yet</p>}
+            </div>
+          </div>
+
+          {/* DQA Results */}
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="bg-cyan-700 px-3 py-2 flex items-center gap-1.5">
+              <CheckCircle className="w-3 h-3 text-cyan-300" />
+              <span className="text-[10px] font-bold text-cyan-100 uppercase tracking-wider">DQA Test Results</span>
+            </div>
+            <div className="p-3">
+              {ecnDqaSubmitted ? (
+                <div className="divide-y divide-slate-100">
+                  {Object.entries(ecnDqaResults).map(([name, r]) => (
+                    <div key={name} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0">
+                      <span className="text-[11px] text-slate-500">{name}</span>
+                      <span className={`text-[11px] font-bold rounded px-1.5 py-0.5 ${r.status === "pass" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                        {r.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-xs text-slate-400 italic">No results yet</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Approval action */}
         {isActive && !ecnHeadApproval && canApprove && (
-          <div className="space-y-2">
+          <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 space-y-3">
+            <p className="text-xs font-semibold text-violet-800">Review &amp; Decision</p>
             <textarea
               rows={2}
-              placeholder="Remarks (optional)..."
+              placeholder="Remarks (optional)…"
               value={ecnHeadRemarks}
               onChange={e => setEcnHeadRemarks(e.target.value)}
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs resize-none"
+              className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder:text-slate-400"
             />
             <div className="flex gap-2">
               <button
@@ -2104,8 +2906,8 @@ export default function NpdDetailView() {
                   updateNPD(npdId, { stage: 7, stageName: getStageName(7, npd.typeOfWork) })
                   setActiveStage(7)
                 }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg"
-              >Approve &amp; Proceed to PP Pricing →</button>
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+              ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Proceed to PP Pricing</button>
               <button
                 onClick={() => {
                   const entry = { verdict: "rejected" as const, remarks: ecnHeadRemarks || undefined, approvedBy: currentRole, approvedAt: Date.now() }
@@ -2114,43 +2916,108 @@ export default function NpdDetailView() {
                   localStorage.setItem(ECN_HEAD_APPROVAL_KEY, JSON.stringify(all))
                   setEcnHeadApproval(entry)
                 }}
-                className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-lg"
+                className="bg-white hover:bg-red-50 border border-red-300 text-red-600 text-xs font-bold px-4 py-2.5 rounded-lg"
               >Reject</button>
             </div>
           </div>
         )}
+
+        {/* Outcome */}
         {ecnHeadApproval && (
-          <p className="text-[10px] text-slate-400">{ecnHeadApproval.verdict === "approved" ? "Approved" : "Rejected"} by {ecnHeadApproval.approvedBy} · {new Date(ecnHeadApproval.approvedAt).toLocaleString("en-IN")}{ecnHeadApproval.remarks ? ` · "${ecnHeadApproval.remarks}"` : ""}</p>
+          <div className={`rounded-lg border px-4 py-3 flex items-start gap-3 ${approved ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+            {approved
+              ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              : <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />}
+            <div>
+              <p className={`text-xs font-semibold ${approved ? "text-emerald-800" : "text-red-800"}`}>
+                {approved ? "Approved" : "Rejected"} by {ecnHeadApproval.approvedBy}
+              </p>
+              {ecnHeadApproval.remarks && <p className="text-[11px] text-slate-600 mt-0.5">"{ecnHeadApproval.remarks}"</p>}
+              <p className="text-[10px] text-slate-400 mt-0.5">{new Date(ecnHeadApproval.approvedAt).toLocaleString("en-IN")}</p>
+            </div>
+          </div>
         )}
       </div>
     )
   }
 
-  // ── Stage 7: PP Pricing (sourcing fills; R&D sees read-only) ─────────────
-  if (activeStage >= 7) {
-    const isDone = activeStage > 7
+  // ── Stage 7: PP Pricing — R&D reviews and approves to close ECN ────────────
+  if (activeStage >= 6) {
+    const isActive   = activeStage === 7
+    const isDone     = activeStage > 7
+    const isUpcoming = activeStage === 6
+    const canApprove = currentRole === "rnd_head" || currentRole === "super_admin"
     ecnCards.push(
-      <div key="ecn-s7" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : "border-orange-300 bg-orange-50/30"}`}>
-        <div className="flex items-center gap-2 mb-2">
+      <div key="ecn-s7" className={`rounded-xl border p-4 space-y-3 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        {/* Header */}
+        <div className="flex items-center gap-2">
           {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Clock className="w-4 h-4 text-orange-500 shrink-0" />}
-          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing</h4>
-          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
-          {!isDone && !ecnPpPricing && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting Sourcing</Badge>}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing &amp; R&D Approval</h4>
+          <div className="ml-auto flex items-center gap-1.5">
+            {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Complete</Badge>}
+            {isUpcoming && <Badge className="bg-slate-100 text-slate-400 border-none text-xs">Upcoming</Badge>}
+            {isActive && !ecnPpPricing && <Badge className="bg-amber-100 text-amber-700 border-none text-xs flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting Sourcing</Badge>}
+            {isActive && ecnPpPricing && !ecnPpRndApproval && canApprove && <Badge className="bg-orange-100 text-orange-700 border-none text-xs">Action Required</Badge>}
+            {isActive && ecnPpPricing && !ecnPpRndApproval && !canApprove && <Badge className="bg-blue-100 text-blue-700 border-none text-xs flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Head</Badge>}
+          </div>
         </div>
+
+        {/* PP Pricing summary — shown once sourcing submits */}
         {ecnPpPricing && (
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 mt-2">
-            {([
-              ["PP Price / Unit", `${ecnPpPricing.currency === "INR" ? "₹" : ecnPpPricing.currency === "USD" ? "$" : "€"}${parseFloat(ecnPpPricing.ppPrice).toLocaleString("en-IN")}`],
-              ["Currency", ecnPpPricing.currency],
-              ["MOQ", ecnPpPricing.moq ? `${ecnPpPricing.moq} units` : "—"],
-              ["Lead Time", ecnPpPricing.leadTime ? `${ecnPpPricing.leadTime} days` : "—"],
-              ["Submitted By", ecnPpPricing.submittedBy],
-            ] as [string, string][]).map(([label, value]) => (
-              <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
-                <span className="text-slate-400 text-xs">{label}</span>
-                <span className="text-slate-800 font-medium text-xs text-right max-w-[160px] truncate">{value}</span>
-              </div>
-            ))}
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Sourcing PP Pricing</p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              {([
+                ["PP Price / Unit", `${ecnPpPricing.currency === "INR" ? "₹" : ecnPpPricing.currency === "USD" ? "$" : "€"}${parseFloat(ecnPpPricing.ppPrice).toLocaleString("en-IN")}`],
+                ["MOQ", ecnPpPricing.moq ? `${ecnPpPricing.moq} units` : "—"],
+                ["Lead Time", ecnPpPricing.leadTime ? `${ecnPpPricing.leadTime} days` : "—"],
+                ["Submitted By", ecnPpPricing.submittedBy],
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
+                  <span className="text-slate-400 text-xs">{label}</span>
+                  <span className="text-slate-800 font-semibold text-xs">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* R&D Approval action */}
+        {isActive && ecnPpPricing && !ecnPpRndApproval && canApprove && (
+          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-3">
+            <p className="text-xs font-semibold text-orange-800">R&D Approval — Confirm Plant Testing Complete</p>
+            <p className="text-[11px] text-slate-500">Approve only after confirming the plant has completed all required testing and the PP pricing is acceptable.</p>
+            <textarea
+              rows={2}
+              placeholder="Remarks (optional)…"
+              value={ecnPpRndRemarks}
+              onChange={e => setEcnPpRndRemarks(e.target.value)}
+              className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-slate-400"
+            />
+            <button
+              onClick={() => {
+                const entry = { approvedBy: currentRole, approvedAt: Date.now(), remarks: ecnPpRndRemarks || undefined }
+                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_PP_RND_APPROVAL_KEY) ?? "{}")
+                all[npdId] = entry
+                localStorage.setItem(ECN_PP_RND_APPROVAL_KEY, JSON.stringify(all))
+                setEcnPpRndApproval(entry)
+                updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
+                setActiveStage(8)
+              }}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+            ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Close to Stage 8</button>
+          </div>
+        )}
+
+        {/* Approval outcome */}
+        {ecnPpRndApproval && (
+          <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-emerald-800">Approved by {ecnPpRndApproval.approvedBy}</p>
+              {ecnPpRndApproval.remarks && <p className="text-[11px] text-slate-600 mt-0.5">"{ecnPpRndApproval.remarks}"</p>}
+              <p className="text-[10px] text-slate-400 mt-0.5">{new Date(ecnPpRndApproval.approvedAt).toLocaleString("en-IN")}</p>
+            </div>
           </div>
         )}
       </div>
@@ -2158,39 +3025,46 @@ export default function NpdDetailView() {
   }
 
   // ── Stage 8: ECN Summary & Closure ────────────────────────────────────────
-  if (activeStage >= 8) {
+  if (activeStage >= 7) {
+    const isUpcoming = activeStage === 7
     ecnCards.push(
-      <div key="ecn-s8" className="rounded-xl border border-emerald-300 bg-emerald-50/30 p-4">
+      <div key="ecn-s8" className={`rounded-xl border p-4 ${isUpcoming ? "bg-slate-50 border-slate-200 opacity-50" : "border-emerald-300 bg-emerald-50/30"}`}>
         <div className="flex items-center gap-2 mb-3">
-          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+          {isUpcoming ? <Circle className="w-4 h-4 text-slate-400 shrink-0" /> : <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
           <h4 className="font-bold text-slate-800 text-sm">Stage 8 — ECN Summary &amp; Closure</h4>
-          <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>
+          {isUpcoming
+            ? <Badge className="bg-slate-100 text-slate-400 border-none text-xs ml-auto">Upcoming</Badge>
+            : <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 mb-3">
-          {([
-            ["Part Number",      npd.ecnPartNumber ?? "—"],
-            ["Part Name",        npd.ecnPartName ?? npd.itemName],
-            ["Fixed Supplier",   npd.supplier],
-            ["Change Desc",      npd.ecnChangeDescription ?? "—"],
-            ["Total TAT",        `${npd.totalTat} days`],
-            ["Priority",         npd.priority],
-            ...(ecnSourcingDispatch?.submission?.dispatchDate
-              ? [["Dispatch Date", ecnSourcingDispatch.submission.dispatchDate] as [string, string]]
-              : []),
-            ...(ecnPriceEstimation
-              ? [["Price / Unit", `${ecnPriceEstimation.currency === "INR" ? "₹" : ecnPriceEstimation.currency === "USD" ? "$" : "€"}${parseFloat(ecnPriceEstimation.pricePerUnit).toLocaleString("en-IN")}`] as [string, string]]
-              : []),
-          ] as [string, string][]).map(([label, value]) => (
-            <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
-              <span className="text-slate-400 text-xs">{label}</span>
-              <span className="text-slate-800 font-medium text-xs text-right max-w-[160px] truncate">{value}</span>
+        {!isUpcoming && (
+          <>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 mb-3">
+              {([
+                ["Part Number",      npd.ecnPartNumber ?? "—"],
+                ["Part Name",        npd.ecnPartName ?? npd.itemName],
+                ["Fixed Supplier",   npd.supplier],
+                ["Change Desc",      npd.ecnChangeDescription ?? "—"],
+                ["Total TAT",        `${npd.totalTat} days`],
+                ["Priority",         npd.priority],
+                ...(ecnSourcingDispatch?.submission?.dispatchDate
+                  ? [["Dispatch Date", ecnSourcingDispatch.submission.dispatchDate] as [string, string]]
+                  : []),
+                ...(ecnPriceEstimation
+                  ? [["Price / Unit", `${ecnPriceEstimation.currency === "INR" ? "₹" : ecnPriceEstimation.currency === "USD" ? "$" : "€"}${parseFloat(ecnPriceEstimation.pricePerUnit).toLocaleString("en-IN")}`] as [string, string]]
+                  : []),
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
+                  <span className="text-slate-400 text-xs">{label}</span>
+                  <span className="text-slate-800 font-medium text-xs text-right max-w-[160px] truncate">{value}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 mt-2 bg-white border border-emerald-200 rounded-lg px-3 py-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span className="text-sm font-semibold text-emerald-700">ECN process complete. All stages signed off.</span>
-        </div>
+            <div className="flex items-center gap-2 mt-2 bg-white border border-emerald-200 rounded-lg px-3 py-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="text-sm font-semibold text-emerald-700">ECN process complete. All stages signed off.</span>
+            </div>
+          </>
+        )}
       </div>
     )
   }
@@ -2203,8 +3077,8 @@ export default function NpdDetailView() {
   )
 })()}
 
-          {/* ── Section 1: My Actions (NCD/NPD — NOT rendered for ECN) ─────── */}
-          {!isECN && <Card className="transition-shadow duration-200 hover:shadow-md">
+          {/* ── Section 1: My Actions (NCD/NPD — NOT rendered for ECN or Alt Supplier) ─────── */}
+          {!isECN && !isAltSupplier && <Card className="transition-shadow duration-200 hover:shadow-md">
             <CardHeader className="pb-3 border-b bg-slate-50">
               <CardTitle className="text-base">My Actions</CardTitle>
             </CardHeader>
@@ -3633,7 +4507,7 @@ export default function NpdDetailView() {
               )}
 
               {/* ── Stage 8: Sample Dispatch & R&D Acceptance — NCD/NPD only ── */}
-              {!isECN && activeStage >= 8 && (
+              {!isECN && !isAltSupplier && activeStage >= 8 && (
                 <div className={`rounded-xl border p-4 ${
                   activeStage === 8 ? "border-orange-300 bg-orange-50/30 shadow-sm" : "border-slate-200 bg-slate-50 opacity-50"
                 }`}>
@@ -3793,7 +4667,7 @@ export default function NpdDetailView() {
               )}
 
               {/* ── Stage 9: NPD Summary & Closure — NCD/NPD only ── */}
-              {!isECN && activeStage >= 9 && (
+              {!isECN && !isAltSupplier && activeStage >= 9 && (
                 <div className="rounded-xl border border-emerald-300 bg-emerald-50/40 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -3816,7 +4690,7 @@ export default function NpdDetailView() {
           </Card>}
 
           {/* ── Section 2: Sourcing Info (read-only) — NCD/NPD only ─────────── */}
-          {!isECN && activeStage >= 2 && (
+          {!isECN && !isAltSupplier && activeStage >= 2 && (
             <Card className="transition-shadow duration-200 hover:shadow-md">
               <CardHeader className="pb-3 border-b bg-slate-50">
                 <div className="flex items-center justify-between">
@@ -4067,8 +4941,8 @@ export default function NpdDetailView() {
         </div>
       )}
 
-      {/* ═══ ECN Stage 5 — DQA Testing (standalone; visible to dqa + rnd roles) ═══ */}
-      {isECN && activeStage >= 5 && (() => {
+      {/* ═══ ECN/AS Stage 5 — DQA Testing (standalone; visible to dqa + rnd roles) ═══ */}
+      {(isECN || isAltSupplier) && activeStage >= 5 && (() => {
         const isActive  = activeStage === 5
         const isDone    = activeStage > 5
         const isDqaUser = currentRole === "dqa_engineer" || currentRole === "dqa_lead"
@@ -4189,7 +5063,7 @@ export default function NpdDetailView() {
       })()}
 
       {/* ═══════════════════ STAGE 9 — NPD SUMMARY & CLOSURE (NCD/NPD only) ═══════════════════ */}
-      {!isECN && activeStage >= 9 && (
+      {!isECN && !isAltSupplier && activeStage >= 9 && (
         <Card className="border-emerald-200 shadow-sm">
           <CardHeader className="bg-emerald-50 border-b border-emerald-200 pb-3">
             <CardTitle className="text-emerald-900 flex items-center gap-2 text-base">
@@ -4453,6 +5327,507 @@ export default function NpdDetailView() {
             </div>
           )}
 
+          {/* ═══ ALT SUPPLIER SOURCING STAGES ═══ */}
+          {isAltSupplier && (() => {
+  const asSourcingCards: React.ReactNode[] = []
+  const portalUrl = `${baseUrl}/supplier/ecn-sourcing/${npdId}`
+  const sd = ecnSourcingDispatch
+
+  // ── AS Stage 1: Sourcing fills the request form ──────────────────────────
+  {
+    const isActive = activeStage === 1
+    const isDone   = activeStage > 1
+    asSourcingCards.push(
+      <div key="as-src-s1" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-amber-300 bg-amber-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2 mb-3">
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-amber-600 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 1 — Sourcing Request Initiation</h4>
+          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Submitted</Badge>}
+          {isActive && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">Action Required</Badge>}
+        </div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 mb-3">
+          {[["Existing Part No.", npd.existingPartNumber ?? "—"], ["Item", npd.itemName], ["Priority", npd.priority], ["TAT", npd.totalTat ? `${npd.totalTat} days` : "—"]].map(([label, value]) => (
+            <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
+              <span className="text-slate-400 text-xs">{label}</span>
+              <span className="text-slate-800 font-medium text-xs text-right max-w-[160px] truncate">{value}</span>
+            </div>
+          ))}
+        </div>
+        {isActive && !asStage1Data && isSpocOrSourcing && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+            <p className="text-xs font-semibold text-amber-800">Submit Alternate Supplier Request</p>
+            <div className="space-y-2">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Proposed Supplier Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ABC Components Ltd."
+                  value={asSupplierName}
+                  onChange={e => setAsSupplierName(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Reason for Alternate Sourcing *</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Current supplier lead time too high, cost reduction opportunity…"
+                  value={asReason}
+                  onChange={e => setAsReason(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-slate-400"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Supporting Docs Link (optional)</label>
+                <input
+                  type="text"
+                  placeholder="https://drive.google.com/…"
+                  value={asDocsLink}
+                  onChange={e => setAsDocsLink(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+            </div>
+            <button
+              disabled={!asSupplierName.trim() || !asReason.trim()}
+              onClick={() => {
+                const entry = { supplierName: asSupplierName.trim(), reason: asReason.trim(), docsLink: asDocsLink.trim() || undefined, submittedBy: currentRole, submittedAt: Date.now() }
+                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_STAGE1_KEY) ?? "{}")
+                all[npdId] = entry
+                localStorage.setItem(AS_STAGE1_KEY, JSON.stringify(all))
+                setAsStage1Data(entry)
+                updateNPD(npdId, { stage: 2, stageName: getStageName(2, npd.typeOfWork), supplier: asSupplierName.trim() })
+                setActiveStage(2)
+              }}
+              className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+            ><CheckCircle className="w-3.5 h-3.5" />Submit to R&D for Approval</button>
+          </div>
+        )}
+        {(isDone || asStage1Data) && asStage1Data && (
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs border-b border-slate-100 pb-1"><span className="text-slate-400">Proposed Supplier</span><span className="font-semibold text-slate-800">{asStage1Data.supplierName}</span></div>
+            <div className="flex justify-between text-xs border-b border-slate-100 pb-1"><span className="text-slate-400">Reason</span><span className="font-semibold text-slate-800 max-w-[200px] text-right">{asStage1Data.reason}</span></div>
+            {asStage1Data.docsLink && <div className="flex justify-between text-xs"><span className="text-slate-400">Docs</span><span className="font-semibold text-blue-700">{asStage1Data.docsLink}</span></div>}
+            <p className="text-[10px] text-slate-400 mt-1">Submitted by {asStage1Data.submittedBy} · {new Date(asStage1Data.submittedAt).toLocaleString("en-IN")}</p>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── AS Stage 2: Awaiting R&D Approval ────────────────────────────────────
+  if (activeStage >= 2) {
+    const isActive = activeStage === 2
+    const isDone   = activeStage > 2
+    asSourcingCards.push(
+      <div key="as-src-s2" className={`rounded-xl border p-4 ${isDone || asRndApproval ? "bg-slate-50 border-slate-200" : isActive ? "border-teal-300 bg-teal-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2 mb-2">
+          {isDone || asRndApproval ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-teal-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 2 — R&D Review &amp; Approval</h4>
+          {(isDone || asRndApproval) && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
+          {isActive && !asRndApproval && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D</Badge>}
+        </div>
+        {isActive && !asRndApproval && <p className="text-xs text-slate-400 italic">R&D team is reviewing the alternate supplier request.</p>}
+        {(isDone || asRndApproval) && asRndApproval && (
+          <p className="text-[10px] text-slate-400">Approved by {asRndApproval.approvedBy} · {new Date(asRndApproval.approvedAt).toLocaleString("en-IN")}</p>
+        )}
+      </div>
+    )
+  }
+
+  // ── AS Stage 3: Price Negotiation + Supplier Sample Dispatch ─────────────
+  if (activeStage >= 3) {
+    const isActive = activeStage === 3
+    const isDone   = activeStage > 3
+    const neg      = ecnNegotiation
+    const negApproved  = !!neg?.approvedAt
+    const currSymbol   = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+    asSourcingCards.push(
+      <div key="as-src-s3" className={`rounded-xl border p-4 space-y-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-indigo-300 bg-indigo-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2">
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Truck className="w-4 h-4 text-indigo-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 3 — Price Negotiation &amp; Sample Dispatch</h4>
+          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Price Agreed</Badge>}
+          {isActive && !ecnInitialQuote && <Badge className="bg-slate-100 text-slate-600 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting Quote</Badge>}
+          {isActive && ecnInitialQuote && !negApproved && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">Negotiating</Badge>}
+          {isActive && negApproved && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Price Agreed</Badge>}
+        </div>
+
+        {/* Portal link — always shown when active */}
+        {isActive && (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Supplier Portal URL</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-blue-700 break-all flex-1">{portalUrl}</span>
+              <button onClick={() => navigator.clipboard?.writeText(portalUrl)}
+                className="shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
+                <Copy className="w-3 h-3" />Copy
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">Share this link with <strong>{npd.supplier}</strong> — they will enter their quoted price and you can negotiate from there.</p>
+          </div>
+        )}
+
+        {/* Supplier initial quote — awaiting submission */}
+        {isActive && !ecnInitialQuote && (
+          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+            <p className="text-xs font-semibold text-amber-800">Awaiting supplier to submit their initial price</p>
+          </div>
+        )}
+
+        {/* Supplier initial quote received */}
+        {isActive && ecnInitialQuote && (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5 space-y-1">
+            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Supplier&apos;s Quoted Price</p>
+            <div className="flex items-center justify-between">
+              <span className="text-base font-bold text-emerald-900">
+                {currSymbol(ecnInitialQuote.currency)}{parseFloat(ecnInitialQuote.price).toLocaleString("en-IN")} <span className="text-xs font-normal">/ unit</span>
+              </span>
+              <span className="text-[10px] text-emerald-600">Valid until {new Date(ecnInitialQuote.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Price Negotiation widget — gated behind supplier's initial quote */}
+        {isActive && ecnInitialQuote && (() => {
+          const latestRound    = neg?.rounds[neg.rounds.length - 1]
+          const pendingResponse = latestRound && !latestRound.supplierResponse
+          const awaitingApproval = latestRound?.supplierResponse && !neg?.approvedAt
+
+          return (
+            <div className="border-t border-slate-200 pt-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Price Negotiation</span>
+                {negApproved && <span className="ml-auto text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Agreed: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}</span>}
+                {pendingResponse && <span className="ml-auto text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Awaiting Supplier — Round {latestRound.round}</span>}
+              </div>
+
+              {/* Round history */}
+              {neg && neg.rounds.length > 0 && (
+                <div className="space-y-2">
+                  {neg.rounds.map(r => (
+                    <div key={r.round} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Round {r.round}</span>
+                        <span className="text-[10px] text-slate-400">{new Date(r.sentAt).toLocaleString("en-IN")}</span>
+                      </div>
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-slate-500">Target: <strong className="text-slate-800">{currSymbol(r.currency)}{parseFloat(r.targetPrice).toLocaleString("en-IN")}</strong></span>
+                        {r.supplierResponse && (
+                          <span className="text-slate-500">Supplier: <strong className="text-slate-800">{currSymbol(r.supplierResponse.currency)}{parseFloat(r.supplierResponse.price).toLocaleString("en-IN")}</strong></span>
+                        )}
+                      </div>
+                      {(r.supplierResponse?.docs?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {r.supplierResponse!.docs.map(d => <span key={d} className="text-[10px] bg-slate-100 text-slate-600 rounded px-2 py-0.5">{d}</span>)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Approve / Counter */}
+              {awaitingApproval && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const updated: NegotiationRecord = {
+                        ...neg!,
+                        approvedAt: Date.now(),
+                        approvedBy: currentRole,
+                        finalPrice: latestRound!.supplierResponse!.price,
+                        finalCurrency: latestRound!.supplierResponse!.currency,
+                      }
+                      const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_NEGOTIATION_KEY) ?? "{}")
+                      all[npdId] = updated
+                      localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all))
+                      setEcnNegotiation(updated)
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
+                  ><CheckCircle className="w-3.5 h-3.5" />Approve Price</button>
+                  <button
+                    onClick={() => setNegTargetPrice("")}
+                    className="text-xs font-semibold text-slate-500 hover:text-red-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg"
+                  >Counter with new target ↓</button>
+                </div>
+              )}
+
+              {/* Send target price form */}
+              {!negApproved && !pendingResponse && (!neg || awaitingApproval) && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-blue-800">
+                    {!neg ? "Send Counter Target (Round 1)" : `Send Counter Target (Round ${neg.rounds.length + 1})`}
+                  </p>
+                  <div className="flex gap-2">
+                    <select value={negCurrency} onChange={e => setNegCurrency(e.target.value as "INR" | "USD" | "EUR")}
+                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="INR">INR ₹</option>
+                      <option value="USD">USD $</option>
+                      <option value="EUR">EUR €</option>
+                    </select>
+                    <input type="number" min="0" step="0.01" placeholder="Your target price / unit"
+                      value={negTargetPrice} onChange={e => setNegTargetPrice(e.target.value)}
+                      className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button
+                      disabled={!negTargetPrice || parseFloat(negTargetPrice) <= 0}
+                      onClick={() => {
+                        const existingRounds = neg?.rounds ?? []
+                        const newRound: NegotiationRound = {
+                          round: existingRounds.length + 1,
+                          targetPrice: negTargetPrice,
+                          currency: negCurrency,
+                          sentAt: Date.now(),
+                          sentBy: currentRole,
+                        }
+                        const updated: NegotiationRecord = { rounds: [...existingRounds, newRound] }
+                        const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_NEGOTIATION_KEY) ?? "{}")
+                        all[npdId] = updated
+                        localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all))
+                        setEcnNegotiation(updated)
+                        setNegTargetPrice("")
+                      }}
+                      className="bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap"
+                    >Send to Supplier</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* Price agreed — stage will auto-advance to 4 for dispatch */}
+        {(isDone || negApproved) && ecnNegotiation?.finalPrice && (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 flex items-center gap-2">
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <p className="text-xs font-semibold text-emerald-800">
+              Price agreed: {currSymbol(ecnNegotiation.finalCurrency ?? "INR")}{parseFloat(ecnNegotiation.finalPrice).toLocaleString("en-IN")} / unit — proceeding to dispatch
+            </p>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── AS Stage 4: Supplier Sample Dispatch (dispatch portal link + status) ──
+  if (activeStage >= 4) {
+    const isActive4 = activeStage === 4
+    const isDone4   = activeStage > 4
+    asSourcingCards.push(
+      <div key="as-src-s4" className={`rounded-xl border p-4 space-y-3 ${isDone4 ? "bg-slate-50 border-slate-200" : isActive4 ? "border-indigo-300 bg-indigo-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2">
+          {isDone4 ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Truck className="w-4 h-4 text-indigo-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 4 — Supplier Sample Dispatch</h4>
+          {isDone4 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Dispatched</Badge>}
+          {isActive4 && !ecnSourcingDispatch?.submission && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting Dispatch</Badge>}
+          {isActive4 && ecnSourcingDispatch?.submission && <Badge className="bg-blue-100 text-blue-700 border-none text-xs ml-auto">Dispatched</Badge>}
+        </div>
+        {isActive4 && (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Supplier Portal URL</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-blue-700 break-all flex-1">{portalUrl}</span>
+              <button onClick={() => navigator.clipboard?.writeText(portalUrl)}
+                className="shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
+                <Copy className="w-3 h-3" />Copy
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">Ask <strong>{npd.supplier}</strong> to submit dispatch documents on this portal.</p>
+          </div>
+        )}
+        {ecnSourcingDispatch?.submission && (
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Dispatch Date</p>
+                <p className="text-xs font-semibold text-slate-800 mt-0.5">{ecnSourcingDispatch.submission.dispatchDate ?? "—"}</p>
+              </div>
+              {ecnNegotiation?.finalPrice && (
+                <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Agreed Price</p>
+                  <p className="text-xs font-semibold text-slate-800 mt-0.5">
+                    {(ecnNegotiation.finalCurrency ?? "INR") === "INR" ? "₹" : (ecnNegotiation.finalCurrency ?? "INR") === "USD" ? "$" : "€"}{parseFloat(ecnNegotiation.finalPrice).toLocaleString("en-IN")} / unit
+                  </p>
+                </div>
+              )}
+            </div>
+            {(ecnSourcingDispatch.submission.docs?.length ?? 0) > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {ecnSourcingDispatch.submission.docs!.map((doc, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 text-[11px] font-medium px-2 py-0.5 rounded-md border border-slate-200">
+                    <FileText className="w-3 h-3 text-slate-400" />{doc}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (activeStage >= 5) {
+    asSourcingCards.push(
+      <div key="as-src-s5" className={`rounded-xl border p-4 ${activeStage > 5 ? "bg-slate-50 border-slate-200" : "border-cyan-300 bg-cyan-50/30"}`}>
+        <div className="flex items-center gap-2">
+          {activeStage > 5 ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-cyan-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 5 — DQA Testing</h4>
+          {activeStage > 5 && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
+          {activeStage === 5 && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">In Progress</Badge>}
+        </div>
+      </div>
+    )
+  }
+
+  if (activeStage >= 6) {
+    const isActive = activeStage === 6
+    const isDone   = activeStage > 6
+    const approved = ecnHeadApproval?.verdict === "approved"
+    asSourcingCards.push(
+      <div key="as-src-s6" className={`rounded-xl border p-4 ${isDone || approved ? "bg-slate-50 border-slate-200" : "border-violet-300 bg-violet-50/30"}`}>
+        <div className="flex items-center gap-2">
+          {isDone || approved ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-violet-700 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 6 — R&D Head Approval</h4>
+          {(isDone || approved) && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
+          {isActive && !approved && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Head</Badge>}
+        </div>
+      </div>
+    )
+  }
+
+  // ── AS Stage 7: PP Pricing (sourcing primary actor) ───────────────────────
+  if (activeStage >= 7) {
+    const isActive = activeStage === 7
+    const isDone   = activeStage > 7
+    const ppSymbol = asPpPricing?.currency === "USD" ? "$" : asPpPricing?.currency === "EUR" ? "€" : "₹"
+    asSourcingCards.push(
+      <div key="as-src-s7" className={`rounded-xl border p-4 space-y-3 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        <div className="flex items-center gap-2">
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-orange-600 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing</h4>
+          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
+          {isActive && !asPpPricing && <Badge className="bg-orange-100 text-orange-700 border-none text-xs ml-auto">Action Required</Badge>}
+          {isActive && asPpPricing && !asPpSourcingApproved && <Badge className="bg-orange-100 text-orange-700 border-none text-xs ml-auto">Approve to Send</Badge>}
+          {isActive && asPpSourcingApproved && !asPpRndApproval && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Approval</Badge>}
+          {asPpRndApproval && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
+        </div>
+
+        {/* Step 1: Fill PP pricing form */}
+        {isActive && !asPpPricing && (
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <div className="w-28 shrink-0">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Currency</label>
+                <select value={asPpCurrency} onChange={e => setAsPpCurrency(e.target.value as "INR" | "USD" | "EUR")}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400">
+                  <option value="INR">INR ₹</option>
+                  <option value="USD">USD $</option>
+                  <option value="EUR">EUR €</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Price / Unit *</label>
+                <input type="number" min="0" step="0.01" placeholder="e.g. 140.00" value={asPpPrice}
+                  onChange={e => setAsPpPrice(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">MOQ (units) *</label>
+                <input type="number" min="1" placeholder="e.g. 500" value={asPpMoq}
+                  onChange={e => setAsPpMoq(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Lead Time (days) *</label>
+                <input type="number" min="1" placeholder="e.g. 21" value={asPpLeadTime}
+                  onChange={e => setAsPpLeadTime(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+              </div>
+            </div>
+            <button
+              disabled={!asPpPrice || !asPpMoq || !asPpLeadTime || parseFloat(asPpPrice) <= 0}
+              onClick={() => {
+                const entry = { ppPrice: asPpPrice, currency: asPpCurrency, moq: asPpMoq, leadTime: asPpLeadTime, submittedBy: currentRole, submittedAt: Date.now() }
+                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_PP_PRICING_KEY) ?? "{}")
+                all[npdId] = entry
+                localStorage.setItem(AS_PP_PRICING_KEY, JSON.stringify(all))
+                setAsPpPricing(entry)
+              }}
+              className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+            ><CheckCircle className="w-3.5 h-3.5" />Submit PP Pricing</button>
+          </div>
+        )}
+
+        {/* Pricing summary tiles — shown once submitted */}
+        {asPpPricing && (
+          <div className="grid grid-cols-2 gap-2">
+            {[["Price / Unit", `${ppSymbol}${parseFloat(asPpPricing.ppPrice).toLocaleString("en-IN")}`], ["MOQ", `${asPpPricing.moq} units`], ["Lead Time", `${asPpPricing.leadTime} days`], ["Currency", asPpPricing.currency]].map(([label, value]) => (
+              <div key={label} className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+                <p className="text-xs font-semibold text-slate-800 mt-0.5">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Step 2: Sourcing approves and sends to R&D */}
+        {isActive && asPpPricing && !asPpSourcingApproved && (
+          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-2">
+            <p className="text-xs font-semibold text-orange-800">Review the PP pricing above and approve to send for R&D Head approval.</p>
+            <button
+              onClick={() => {
+                const entry = { approvedBy: currentRole, approvedAt: Date.now() }
+                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY) ?? "{}")
+                all[npdId] = entry
+                localStorage.setItem(AS_PP_SOURCING_APPROVED_KEY, JSON.stringify(all))
+                setAsPpSourcingApproved(entry)
+              }}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+            ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Send to R&D</button>
+          </div>
+        )}
+
+        {/* After sourcing approves — awaiting R&D */}
+        {isActive && asPpSourcingApproved && !asPpRndApproval && (
+          <p className="text-[10px] text-slate-400">Approved by {asPpSourcingApproved.approvedBy} · {new Date(asPpSourcingApproved.approvedAt).toLocaleString("en-IN")} — Awaiting R&D Head approval</p>
+        )}
+
+        {/* R&D approved */}
+        {asPpRndApproval && (
+          <p className="text-[10px] text-emerald-600 font-medium">R&D Head approved by {asPpRndApproval.approvedBy} · {new Date(asPpRndApproval.approvedAt).toLocaleString("en-IN")}</p>
+        )}
+      </div>
+    )
+  }
+
+  // ── AS Stage 8: Closure banner ────────────────────────────────────────────
+  if (activeStage >= 8) {
+    asSourcingCards.push(
+      <div key="as-src-s8" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <h4 className="font-bold text-slate-800 text-sm">Stage 8 — AS Summary &amp; Closure</h4>
+          <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>
+        </div>
+        <p className="text-xs text-emerald-700 mt-2 font-semibold">Alternative Supplier qualification complete. All stages signed off.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Alt Supplier — Sourcing Actions</span>
+        <Badge className="bg-slate-100 text-slate-500 border-none text-xs">{getStageName(activeStage, npd.typeOfWork)}</Badge>
+      </div>
+      {[...asSourcingCards].reverse()}
+    </div>
+  )
+})()}
+
           {/* ═══ ECN SOURCING STAGES (sourcing primary actor) ═══ */}
           {isECN && (() => {
   const portalUrl = `${baseUrl}/supplier/ecn-sourcing/${npdId}`
@@ -4613,6 +5988,7 @@ export default function NpdDetailView() {
           const awaitingApproval = latestRound?.supplierResponse && !neg?.approvedAt
           const approved = !!neg?.approvedAt
           const currSymbol = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+          const iq = ecnInitialQuote
 
           return (
             <div className="mt-4 border-t border-slate-200 pt-4 space-y-3">
@@ -4620,7 +5996,25 @@ export default function NpdDetailView() {
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Price Negotiation</span>
                 {approved && <span className="ml-auto text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Agreed: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}</span>}
                 {pendingResponse && <span className="ml-auto text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Awaiting Supplier — Round {latestRound.round}</span>}
+                {!iq && !neg && <span className="ml-auto text-[10px] text-slate-400">Waiting for supplier&apos;s initial quote…</span>}
               </div>
+
+              {/* Supplier's initial quote */}
+              {iq && (
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supplier Initial Quote</span>
+                    <span className="text-[10px] text-slate-400">{new Date(iq.submittedAt).toLocaleString("en-IN")}</span>
+                  </div>
+                  <p className="text-sm font-bold text-slate-800">{currSymbol(iq.currency)}{parseFloat(iq.price).toLocaleString("en-IN")} <span className="text-xs font-normal text-slate-500">/ unit</span></p>
+                  {iq.date && <p className="text-[10px] text-slate-500">Valid until: <strong>{new Date(iq.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</strong></p>}
+                  {iq.docs?.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {iq.docs.map(d => <span key={d} className="text-[10px] bg-slate-100 text-slate-600 rounded px-2 py-0.5">{d}</span>)}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Round history */}
               {neg && neg.rounds.length > 0 && (
@@ -4680,8 +6074,8 @@ export default function NpdDetailView() {
                 </div>
               )}
 
-              {/* Send new target form — shown when: no rounds yet, OR counter was clicked (negTargetPrice cleared and awaitingApproval) */}
-              {!approved && !pendingResponse && (!neg || awaitingApproval) && (
+              {/* Send target form — only shown after supplier submits initial quote; no rounds yet OR counter clicked */}
+              {iq && !approved && !pendingResponse && (!neg || awaitingApproval) && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2">
                   <p className="text-xs font-semibold text-blue-800">
                     {!neg ? "Start Price Negotiation" : `Send Counter Target (Round ${(neg.rounds.length) + 1})`}
@@ -4809,6 +6203,54 @@ export default function NpdDetailView() {
                 ))}
               </div>
             )}
+            {/* Supplier status update */}
+            {sd?.statusUpdate && (() => {
+              const su = sd.statusUpdate!
+              return (
+                <div className={`rounded-lg border px-3 py-2.5 space-y-1.5 ${su.onTrack === "yes" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                  <div className="flex items-center gap-2">
+                    {su.onTrack === "yes"
+                      ? <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      : <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                    <span className={`text-xs font-semibold ${su.onTrack === "yes" ? "text-emerald-800" : "text-red-800"}`}>
+                      Supplier: <strong>{su.onTrack === "yes" ? "On track" : "Not on track"}</strong>
+                      {su.notes ? ` — ${su.notes}` : ""}
+                    </span>
+                  </div>
+                  {su.onTrack === "no" && su.newDate && (
+                    <div className="flex items-center justify-between gap-3 pl-5">
+                      <div>
+                        <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Proposed New Date</p>
+                        <p className="text-xs font-semibold text-red-900">{new Date(su.newDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p>
+                      </div>
+                      {su.dateApproved ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 rounded-full px-2 py-0.5">
+                          ✓ Approved by {su.dateApproved.approvedBy}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const approved = { approvedBy: currentRole, approvedAt: Date.now() }
+                            const rawD = localStorage.getItem(ECN_SOURCING_DISPATCH_KEY)
+                            const allD = rawD ? JSON.parse(rawD) : {}
+                            allD[npdId] = {
+                              ...allD[npdId],
+                              statusUpdate: { ...su, dateApproved: approved },
+                            }
+                            localStorage.setItem(ECN_SOURCING_DISPATCH_KEY, JSON.stringify(allD))
+                            setEcnSourcingDispatch(prev => prev ? {
+                              ...prev,
+                              statusUpdate: { ...su, dateApproved: approved },
+                            } : prev)
+                          }}
+                          className="text-[10px] font-bold bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded-lg whitespace-nowrap"
+                        >Approve New Date</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>
@@ -4846,17 +6288,19 @@ export default function NpdDetailView() {
       </div>
     </div>
   )
-  if (activeStage >= 7) {
+  if (activeStage >= 6) {
     const isActive = activeStage === 7
     const isDone   = activeStage > 7
     sourcingCards.push(
       <div key="src-s7" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
         <div className="flex items-center gap-2 mb-3">
           {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-orange-500 shrink-0" />}
-          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing</h4>
+          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing &amp; R&D Approval</h4>
           {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
+          {!isDone && !isActive && <Badge className="bg-slate-100 text-slate-400 border-none text-xs ml-auto">Upcoming</Badge>}
           {isActive && !ecnPpPricing && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">Action Required</Badge>}
-          {isActive && ecnPpPricing && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Submitted</Badge>}
+          {isActive && ecnPpPricing && !ecnPpRndApproval && <Badge className="bg-blue-100 text-blue-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Approval</Badge>}
+          {isActive && ecnPpPricing && ecnPpRndApproval && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
         </div>
 
         {/* Reference price from supplier dispatch */}
@@ -4869,205 +6313,266 @@ export default function NpdDetailView() {
           </div>
         )}
 
-        {/* PP Price Negotiation */}
+        {/* ── Active: PP Pricing form (primary action) ── */}
         {isActive && !ecnPpPricing && (() => {
-          const neg = ecnPpNegotiation
-          const latestRound = neg?.rounds[neg.rounds.length - 1]
-          const pendingResponse = latestRound && !latestRound.supplierResponse
-          const awaitingApproval = latestRound?.supplierResponse && !neg?.approvedAt
-          const approved = !!neg?.approvedAt
-          const currSymbol = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+          const neg            = ecnPpNegotiation
+          const latestRound    = neg?.rounds[neg.rounds.length - 1]
+          const pendingResp    = latestRound && !latestRound.supplierResponse
+          const awaitApproval  = latestRound?.supplierResponse && !neg?.approvedAt
+          const negApproved    = !!neg?.approvedAt
+          const currSymbol     = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+          // Negotiation in-flight: only show negotiation widget, no price form
+          const negInFlight    = neg && !negApproved
 
           return (
-            <div className="mb-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">PP Price Negotiation</span>
-                {approved && <span className="ml-auto text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Agreed: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}</span>}
-                {pendingResponse && <span className="ml-auto text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Awaiting Supplier — Round {latestRound.round}</span>}
-              </div>
+            <div className="space-y-3">
+              {/* ── Submission form (shown when no negotiation in flight) ── */}
+              {!negInFlight && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-orange-800">Submit PP Pricing</p>
 
-              {/* Round history */}
-              {neg && neg.rounds.length > 0 && (
-                <div className="space-y-2">
-                  {neg.rounds.map(r => (
-                    <div key={r.round} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Round {r.round}</span>
-                        <span className="text-[10px] text-slate-400">{new Date(r.sentAt).toLocaleString("en-IN")}</span>
-                      </div>
-                      <div className="flex gap-4 text-xs">
-                        <span className="text-slate-500">Target: <strong className="text-slate-800">{currSymbol(r.currency)}{parseFloat(r.targetPrice).toLocaleString("en-IN")}</strong></span>
-                        {r.supplierResponse && (
-                          <span className="text-slate-500">Supplier: <strong className="text-slate-800">{currSymbol(r.supplierResponse.currency)}{parseFloat(r.supplierResponse.price).toLocaleString("en-IN")}</strong></span>
-                        )}
-                      </div>
-                      {r.supplierResponse && r.supplierResponse.docs.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {r.supplierResponse.docs.map(d => (
-                            <span key={d} className="text-[10px] bg-slate-100 text-slate-600 rounded px-2 py-0.5">{d}</span>
-                          ))}
-                        </div>
-                      )}
-                      {r.supplierResponse && (
-                        <p className="text-[10px] text-slate-400">Submitted {new Date(r.supplierResponse.submittedAt).toLocaleString("en-IN")}</p>
+                  {/* Negotiated price banner */}
+                  {negApproved && (
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="text-xs font-semibold text-emerald-800">
+                        Negotiated price: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}
+                      </span>
+                      {!ecnPpPrice && (
+                        <button
+                          className="ml-auto text-[11px] font-bold text-emerald-700 underline"
+                          onClick={() => { setEcnPpPrice(neg!.finalPrice!); setEcnPpCurrency(neg!.finalCurrency!) }}
+                        >Use this price</button>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
+                  )}
 
-              {/* Approve / Counter */}
-              {awaitingApproval && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      const updated: NegotiationRecord = {
-                        ...neg!,
-                        approvedAt: Date.now(),
-                        approvedBy: currentRole,
-                        finalPrice: latestRound!.supplierResponse!.price,
-                        finalCurrency: latestRound!.supplierResponse!.currency,
-                      }
-                      const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_PP_NEGOTIATION_KEY) ?? "{}")
-                      all[npdId] = updated
-                      localStorage.setItem(ECN_PP_NEGOTIATION_KEY, JSON.stringify(all))
-                      setEcnPpNegotiation(updated)
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
-                  ><CheckCircle className="w-3.5 h-3.5" />Approve Price</button>
-                  <button
-                    onClick={() => setPpNegTargetPrice("")}
-                    className="text-xs font-semibold text-slate-500 hover:text-red-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg"
-                  >Counter with new target ↓</button>
-                </div>
-              )}
-
-              {/* Send new target form */}
-              {!approved && !pendingResponse && (!neg || awaitingApproval) && (
-                <div className="rounded-lg border border-orange-200 bg-orange-50/40 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-orange-800">
-                    {!neg ? "Start PP Price Negotiation" : `Send Counter Target (Round ${(neg.rounds.length) + 1})`}
-                  </p>
+                  {/* One price row */}
                   <div className="flex gap-2">
                     <select
-                      value={ppNegCurrency}
-                      onChange={e => setPpNegCurrency(e.target.value as "INR" | "USD" | "EUR")}
-                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      value={ecnPpCurrency}
+                      onChange={e => setEcnPpCurrency(e.target.value as "INR" | "USD" | "EUR")}
+                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
                     >
                       <option value="INR">INR ₹</option>
                       <option value="USD">USD $</option>
                       <option value="EUR">EUR €</option>
                     </select>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="Target PP price / unit"
-                      value={ppNegTargetPrice}
-                      onChange={e => setPpNegTargetPrice(e.target.value)}
-                      className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    />
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="PP price / unit *"
+                        value={ecnPpPrice}
+                        onChange={e => setEcnPpPrice(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="MOQ (units)"
+                        value={ecnPpMoq}
+                        onChange={e => setEcnPpMoq(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Lead time (days)"
+                        value={ecnPpLeadTime}
+                        onChange={e => setEcnPpLeadTime(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    disabled={!ecnPpPrice || parseFloat(ecnPpPrice) <= 0}
+                    onClick={() => {
+                      const entry = { ppPrice: ecnPpPrice, currency: ecnPpCurrency, moq: ecnPpMoq, leadTime: ecnPpLeadTime, submittedBy: currentRole, submittedAt: Date.now() }
+                      const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_PP_PRICING_KEY) ?? "{}")
+                      all[npdId] = entry
+                      localStorage.setItem(ECN_PP_PRICING_KEY, JSON.stringify(all))
+                      setEcnPpPricing(entry)
+                    }}
+                    className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+                  ><CheckCircle className="w-3.5 h-3.5" />Submit PP Pricing &amp; Close ECN →</button>
+                </div>
+              )}
+
+              {/* ── PP Price Negotiation (secondary; shown below submission OR when in-flight) ── */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">PP Price Negotiation</span>
+                  {negApproved && <span className="ml-auto text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Agreed: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}</span>}
+                  {pendingResp && <span className="ml-auto text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Awaiting Supplier — Round {latestRound!.round}</span>}
+                </div>
+
+                {/* Round history */}
+                {neg && neg.rounds.length > 0 && (
+                  <div className="space-y-1.5">
+                    {neg.rounds.map(r => (
+                      <div key={r.round} className="rounded-lg border border-slate-200 bg-white px-3 py-2 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Round {r.round}</span>
+                          <span className="text-[10px] text-slate-400">{new Date(r.sentAt).toLocaleString("en-IN")}</span>
+                        </div>
+                        <div className="flex gap-4 text-xs">
+                          <span className="text-slate-500">Target: <strong className="text-slate-800">{currSymbol(r.currency)}{parseFloat(r.targetPrice).toLocaleString("en-IN")}</strong></span>
+                          {r.supplierResponse && (
+                            <span className="text-slate-500">Supplier: <strong className="text-slate-800">{currSymbol(r.supplierResponse.currency)}{parseFloat(r.supplierResponse.price).toLocaleString("en-IN")}</strong></span>
+                          )}
+                        </div>
+                        {r.supplierResponse?.docs && r.supplierResponse.docs.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {r.supplierResponse.docs.map(d => (
+                              <span key={d} className="text-[10px] bg-slate-100 text-slate-600 rounded px-2 py-0.5">{d}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Approve / Counter */}
+                {awaitApproval && (
+                  <div className="flex gap-2">
                     <button
-                      disabled={!ppNegTargetPrice || parseFloat(ppNegTargetPrice) <= 0}
                       onClick={() => {
-                        const existingRounds = neg?.rounds ?? []
-                        const newRound: NegotiationRound = {
-                          round: existingRounds.length + 1,
-                          targetPrice: ppNegTargetPrice,
-                          currency: ppNegCurrency,
-                          sentAt: Date.now(),
-                          sentBy: currentRole,
+                        const updated: NegotiationRecord = {
+                          ...neg!,
+                          approvedAt: Date.now(),
+                          approvedBy: currentRole,
+                          finalPrice: latestRound!.supplierResponse!.price,
+                          finalCurrency: latestRound!.supplierResponse!.currency,
                         }
-                        const updated: NegotiationRecord = { rounds: [...existingRounds, newRound] }
                         const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_PP_NEGOTIATION_KEY) ?? "{}")
                         all[npdId] = updated
                         localStorage.setItem(ECN_PP_NEGOTIATION_KEY, JSON.stringify(all))
                         setEcnPpNegotiation(updated)
-                        setPpNegTargetPrice("")
                       }}
-                      className="bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap"
-                    >Send to Supplier</button>
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
+                    ><CheckCircle className="w-3.5 h-3.5" />Approve Price</button>
+                    <button
+                      onClick={() => setPpNegTargetPrice("")}
+                      className="text-xs font-semibold text-slate-500 hover:text-red-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg"
+                    >Counter ↓</button>
                   </div>
-                  <p className="text-[10px] text-slate-400">Share the same supplier portal link — it will show this PP target price.</p>
-                </div>
-              )}
+                )}
+
+                {/* Send target form — only when no negotiation OR countering */}
+                {!negApproved && !pendingResp && (!neg || awaitApproval) && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                      {!neg ? "Start Price Negotiation (optional)" : `Send Counter Target — Round ${neg.rounds.length + 1}`}
+                    </p>
+                    <div className="flex gap-2">
+                      <select
+                        value={ppNegCurrency}
+                        onChange={e => setPpNegCurrency(e.target.value as "INR" | "USD" | "EUR")}
+                        className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      >
+                        <option value="INR">INR ₹</option>
+                        <option value="USD">USD $</option>
+                        <option value="EUR">EUR €</option>
+                      </select>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Target price / unit"
+                        value={ppNegTargetPrice}
+                        onChange={e => setPpNegTargetPrice(e.target.value)}
+                        className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                      <button
+                        disabled={!ppNegTargetPrice || parseFloat(ppNegTargetPrice) <= 0}
+                        onClick={() => {
+                          const existingRounds = neg?.rounds ?? []
+                          const newRound: NegotiationRound = {
+                            round: existingRounds.length + 1,
+                            targetPrice: ppNegTargetPrice,
+                            currency: ppNegCurrency,
+                            sentAt: Date.now(),
+                            sentBy: currentRole,
+                          }
+                          const updated: NegotiationRecord = { rounds: [...existingRounds, newRound] }
+                          const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_PP_NEGOTIATION_KEY) ?? "{}")
+                          all[npdId] = updated
+                          localStorage.setItem(ECN_PP_NEGOTIATION_KEY, JSON.stringify(all))
+                          setEcnPpNegotiation(updated)
+                          setPpNegTargetPrice("")
+                        }}
+                        className="bg-slate-700 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap"
+                      >Send to Supplier</button>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Share the supplier portal link — the supplier will see this target price and respond.</p>
+                  </div>
+                )}
+              </div>
             </div>
           )
         })()}
 
         {/* Submitted state */}
-        {(isDone || ecnPpPricing) && ecnPpPricing && (
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-            {([
-              ["PP Price / Unit", `${ecnPpPricing.currency === "INR" ? "₹" : ecnPpPricing.currency === "USD" ? "$" : "€"}${parseFloat(ecnPpPricing.ppPrice).toLocaleString("en-IN")}`],
-              ["MOQ", ecnPpPricing.moq ? `${ecnPpPricing.moq} units` : "—"],
-              ["Lead Time", ecnPpPricing.leadTime ? `${ecnPpPricing.leadTime} days` : "—"],
-              ["Submitted By", ecnPpPricing.submittedBy],
-            ] as [string, string][]).map(([label, value]) => (
-              <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
-                <span className="text-slate-400 text-xs">{label}</span>
-                <span className="text-slate-800 font-medium text-xs text-right max-w-[160px] truncate">{value}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Input form — active stage, not yet submitted; if negotiation started, require approval first */}
-        {isActive && !ecnPpPricing && (!ecnPpNegotiation || !!ecnPpNegotiation.approvedAt) && (
+        {ecnPpPricing && (
           <div className="space-y-3">
-            <div className="flex gap-3">
-              <div className="w-28 shrink-0">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Currency</label>
-                <select value={ecnPpCurrency} onChange={e => setEcnPpCurrency(e.target.value as "INR" | "USD" | "EUR")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-                  <option value="INR">INR ₹</option>
-                  <option value="USD">USD $</option>
-                  <option value="EUR">EUR €</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">PP Price / Unit <span className="text-red-500">*</span></label>
-                <input type="number" min="0" step="0.01" placeholder="e.g. 140.00" value={ecnPpPrice} onChange={e => setEcnPpPrice(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+              {([
+                ["PP Price / Unit", `${ecnPpPricing.currency === "INR" ? "₹" : ecnPpPricing.currency === "USD" ? "$" : "€"}${parseFloat(ecnPpPricing.ppPrice).toLocaleString("en-IN")}`],
+                ["MOQ", ecnPpPricing.moq ? `${ecnPpPricing.moq} units` : "—"],
+                ["Lead Time", ecnPpPricing.leadTime ? `${ecnPpPricing.leadTime} days` : "—"],
+                ["Submitted By", ecnPpPricing.submittedBy],
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
+                  <span className="text-slate-400 text-xs">{label}</span>
+                  <span className="text-slate-800 font-medium text-xs text-right max-w-[160px] truncate">{value}</span>
+                </div>
+              ))}
             </div>
-            {ecnPpNegotiation?.approvedAt && !ecnPpPrice && (
-              <p className="text-[11px] text-emerald-700 -mt-1">
-                Negotiated price: <button className="font-bold underline" onClick={() => { setEcnPpPrice(ecnPpNegotiation.finalPrice!); setEcnPpCurrency(ecnPpNegotiation.finalCurrency!) }}>Use {ecnPpNegotiation.finalCurrency === "INR" ? "₹" : ecnPpNegotiation.finalCurrency === "USD" ? "$" : "€"}{parseFloat(ecnPpNegotiation.finalPrice!).toLocaleString("en-IN")}</button>
-              </p>
+            {/* R&D approval outcome */}
+            {ecnPpRndApproval ? (
+              <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-emerald-800">R&D Approved — advancing to Stage 8</p>
+                  {ecnPpRndApproval.remarks && <p className="text-[11px] text-slate-600 mt-0.5">"{ecnPpRndApproval.remarks}"</p>}
+                  <p className="text-[10px] text-slate-400 mt-0.5">By {ecnPpRndApproval.approvedBy} · {new Date(ecnPpRndApproval.approvedAt).toLocaleString("en-IN")}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+                <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                <p className="text-xs text-blue-700 font-medium">Submitted — awaiting R&D approval to close ECN</p>
+              </div>
             )}
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">MOQ (units)</label>
-                <input type="number" min="1" placeholder="e.g. 500" value={ecnPpMoq} onChange={e => setEcnPpMoq(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Lead Time (days)</label>
-                <input type="number" min="1" placeholder="e.g. 30" value={ecnPpLeadTime} onChange={e => setEcnPpLeadTime(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              </div>
-            </div>
-            <button
-              disabled={!ecnPpPrice || parseFloat(ecnPpPrice) <= 0}
-              onClick={() => {
-                const entry = { ppPrice: ecnPpPrice, currency: ecnPpCurrency, moq: ecnPpMoq, leadTime: ecnPpLeadTime, submittedBy: currentRole, submittedAt: Date.now() }
-                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_PP_PRICING_KEY) ?? "{}")
-                all[npdId] = entry
-                localStorage.setItem(ECN_PP_PRICING_KEY, JSON.stringify(all))
-                setEcnPpPricing(entry)
-                updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
-                setActiveStage(8)
-              }}
-              className="bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2"
-            ><CheckCircle className="w-3.5 h-3.5" />Submit PP Pricing &amp; Close ECN →</button>
           </div>
         )}
       </div>
     )
   }
-  if (activeStage >= 8) sourcingCards.push(
-    <div key="src-s8" className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-      <p className="text-sm font-semibold text-emerald-800">ECN Complete — All stages signed off</p>
-    </div>
-  )
+  if (activeStage >= 7) {
+    const s8Done = activeStage >= 8
+    sourcingCards.push(
+      <div key="src-s8" className={`rounded-xl border px-4 py-3 flex items-center gap-3 ${s8Done ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+        {s8Done ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <Circle className="w-4 h-4 text-slate-400 shrink-0" />}
+        <div className="flex-1">
+          <p className="text-xs font-bold text-slate-700">Stage 8 — ECN Summary &amp; Closure</p>
+          {s8Done && <p className="text-xs text-emerald-700 font-semibold mt-0.5">ECN Complete — All stages signed off</p>}
+        </div>
+        {!s8Done && <Badge className="bg-slate-100 text-slate-400 border-none text-xs">Upcoming</Badge>}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -5081,7 +6586,7 @@ export default function NpdDetailView() {
 })()}
 
           {/* ── Section 1: Supplier Sourcing & Quotations (NCD/NPD only) ── */}
-          {!isECN && (activeStage < 2 ? (
+          {!isECN && !isAltSupplier && (activeStage < 2 ? (
             <Card className="transition-shadow duration-200 hover:shadow-md">
               <CardContent className="py-8 text-center text-slate-400">
                 <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -6195,7 +7700,7 @@ export default function NpdDetailView() {
           ))}
 
           {/* ── Section 2: Supplier Dispatch (NCD/NPD only) ────────────────── */}
-          {!isECN && activeStage >= 3 && activeStage >= 8 && dispatchInfo && (
+          {!isECN && !isAltSupplier && activeStage >= 3 && activeStage >= 8 && dispatchInfo && (
             <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div className="flex-1 min-w-0">
@@ -6205,7 +7710,7 @@ export default function NpdDetailView() {
               <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-full shrink-0">Stage 3 ✓</span>
             </div>
           )}
-          {!isECN && activeStage >= 3 && activeStage < 8 && (
+          {!isECN && !isAltSupplier && activeStage >= 3 && activeStage < 8 && (
             <Card className="border-orange-300 shadow-sm">
               <CardHeader className="bg-orange-50 border-b border-orange-200 pb-3">
                 <div className="flex items-center justify-between">
@@ -6297,7 +7802,7 @@ export default function NpdDetailView() {
           )}
 
           {/* ── Section 2b: Sample Dispatch (stage 7) — NCD/NPD only ─────── */}
-          {!isECN && activeStage >= 8 && activeStage < 9 && (() => {
+          {!isECN && !isAltSupplier && activeStage >= 8 && activeStage < 9 && (() => {
             const supplier = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
             const supplierSpoc7 = Object.values(VENDOR_CATALOG).flat().find(v => v.name === supplier)?.spocName ?? supplier
             const spocContact7 = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }

@@ -298,12 +298,6 @@ export const DQA_TESTS: { testName: string; unit: string; durationDays: number }
   { testName: "Visual / Surface Inspection", unit: "Pass/Fail", durationDays: 1 },
   { testName: "Hardness Test",               unit: "HRC/HRB",   durationDays: 1 },
   { testName: "Salt Spray / Corrosion",      unit: "Hours",     durationDays: 3 },
-  { testName: "Vibration Test",              unit: "Pass/Fail", durationDays: 2 },
-  { testName: "Thermal Cycling",             unit: "Cycles",    durationDays: 2 },
-  { testName: "Drop / Impact Test",          unit: "Pass/Fail", durationDays: 1 },
-  { testName: "Life Cycle Simulation",       unit: "Cycles",    durationDays: 3 },
-  { testName: "IP Rating Verification",      unit: "Pass/Fail", durationDays: 1 },
-  { testName: "Chemical Resistance",         unit: "Pass/Fail", durationDays: 1 },
 ];
 
 export type PushNotification = {
@@ -380,10 +374,17 @@ export const ECN_SOURCING_DISPATCH_KEY = "ecn_sourcing_dispatch_v1"
 export const ECN_PRICE_ESTIMATION_KEY = "ecn_price_estimation_v1"
 export const ECN_DQA_TESTS_KEY = "ecn_dqa_tests_v1"
 export const ECN_HEAD_APPROVAL_KEY = "ecn_head_approval_v1"
-export const ECN_PP_PRICING_KEY    = "ecn_pp_pricing_v1"
+export const ECN_PP_PRICING_KEY        = "ecn_pp_pricing_v1"
+export const ECN_PP_RND_APPROVAL_KEY   = "ecn_pp_rnd_approval_v1"
 export const NCD_PP_PRICING_KEY    = "ncd_pp_pricing_v1"
 export const ECN_NEGOTIATION_KEY    = "ecn_negotiation_v1"
 export const ECN_PP_NEGOTIATION_KEY = "ecn_pp_negotiation_v1"
+export const ECN_INITIAL_QUOTE_KEY  = "ecn_initial_quote_v1"
+export const AS_STAGE1_KEY                 = "as_stage1_v1"
+export const AS_RND_APPROVAL_KEY           = "as_rnd_approval_v1"
+export const AS_PP_PRICING_KEY             = "as_pp_pricing_v1"
+export const AS_PP_SOURCING_APPROVED_KEY   = "as_pp_sourcing_approved_v1"
+export const AS_PP_RND_APPROVAL_KEY        = "as_pp_rnd_approval_v1"
 export const AICM_FETCH_KEY = "aicm_fetch_v1"
 export const SOURCING_APPROVAL_KEY    = "sourcing_approval_v1"
 export const TAT_EXTENSION_REQ_KEY   = "tat_extension_request_v1"
@@ -645,11 +646,13 @@ export const getStageName = (stage: number, type: string) => {
   if (type.includes("Alternative Supplier")) {
     const altStages = [
       "Sourcing Request Initiation",
-      "Vendor Selection & RFQ",
-      "Sample Submission & Dispatch",
-      "R&D Qualification Testing",
-      "R&D Head Approval & Supplier Selection",
-      "Closure & MDM Update",
+      "R&D Review & Approval",
+      "Supplier Sample Dispatch",
+      "R&D Testing",
+      "DQA Testing",
+      "R&D Head Approval",
+      "PP Pricing",
+      "AS Summary & Closure",
     ]
     return altStages[stage - 1] ?? `Stage ${stage}`
   }
