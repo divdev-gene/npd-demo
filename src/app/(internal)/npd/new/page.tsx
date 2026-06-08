@@ -28,13 +28,12 @@ type BundleItem = {
   revisionNo: string
   cplAttached: boolean
   remarks: string
-  expanded: boolean
 }
 
 const makeBundleItem = (id: string): BundleItem => ({
   id, itemName: "", commodity: "", customCommodity: "", driveLink: "",
   drawingFile: false, sampleQty: "", hasRevision: false, revisionNo: "",
-  cplAttached: false, remarks: "", expanded: true,
+  cplAttached: false, remarks: "",
 })
 
 const WORK_TYPES = [
@@ -523,9 +522,9 @@ export default function NewRequestWizard() {
                       !!item.driveLink && item.drawingFile && !!item.sampleQty &&
                       (!item.hasRevision || item.cplAttached)
                     return (
-                      <tr key={item.id} className={`border-l-2 transition-colors ${isItemValid ? "border-l-emerald-400" : "border-l-slate-200"}`}>
+                      <tr key={item.id}>
                         {/* # */}
-                        <td className="sticky left-0 z-10 bg-white w-12 px-3 py-3 text-center">
+                        <td className={`sticky left-0 z-10 bg-white w-12 px-3 py-3 text-center border-l-2 transition-colors ${isItemValid ? "border-l-emerald-400" : "border-l-slate-200"}`}>
                           <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold mx-auto ${isItemValid ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"}`}>
                             {isItemValid ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : idx + 1}
                           </span>
@@ -558,6 +557,12 @@ export default function NewRequestWizard() {
                               <span className="text-[10px] font-semibold text-blue-800 truncate">{SPOC_NAME_MAP[item.commodity]}</span>
                             </div>
                           )}
+                          {item.commodity === "Others" && item.customCommodity.trim() && (
+                            <div className="flex items-center gap-1 mt-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200">
+                              <User className="w-2.5 h-2.5 text-blue-700 shrink-0" />
+                              <span className="text-[10px] font-semibold text-blue-800 truncate">Rohan Desai</span>
+                            </div>
+                          )}
                         </td>
                         {/* Drawing Link */}
                         <td className="px-3 py-3">
@@ -584,7 +589,9 @@ export default function NewRequestWizard() {
                         </td>
                         {/* Revision? */}
                         <td className="px-3 py-3 text-center">
-                          <Checkbox checked={item.hasRevision}
+                          <Checkbox
+                            checked={item.hasRevision}
+                            aria-label={`Item ${idx + 1}: drawing has revision number`}
                             onCheckedChange={c => updateBundleItem(item.id, { hasRevision: c === true, cplAttached: false, revisionNo: "" })} />
                         </td>
                         {/* Revision No */}
@@ -592,7 +599,7 @@ export default function NewRequestWizard() {
                           <Input placeholder="e.g. R02" value={item.revisionNo}
                             onChange={e => updateBundleItem(item.id, { revisionNo: e.target.value })}
                             disabled={!item.hasRevision}
-                            className={`bg-white h-8 text-sm ${!item.hasRevision ? "opacity-40" : ""}`} />
+                            className="bg-white h-8 text-sm" />
                         </td>
                         {/* CPL Sheet */}
                         <td className="px-3 py-3">
