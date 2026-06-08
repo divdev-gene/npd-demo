@@ -401,6 +401,8 @@ export const VENDOR_SAMPLES_KEY      = "vendor_samples_v1"
 export const VENDOR_TESTS_KEY        = "vendor_tests_v1"
 export const VENDOR_VERDICTS_KEY     = "vendor_verdicts_v1"
 export const FINAL_VENDOR_KEY        = "final_vendor_v1"
+export const ECN_PLANT_EVAL_KEY = "ecn_plant_eval_v1"
+export const AS_PLANT_EVAL_KEY  = "as_plant_eval_v1"
 
 export const MOCK_VENDOR_QUOTATIONS: Record<string, VendorQuotation[]> = {
   "NPD-FY-2026-0012": [
@@ -658,7 +660,7 @@ export const getStageName = (stage: number, type: string) => {
       "R&D Testing",
       "DQA Testing",
       "R&D Head Approval",
-      "PP Pricing",
+      "Plant Evaluation & Testing",
       "AS Summary & Closure",
     ]
     return altStages[stage - 1] ?? `Stage ${stage}`
@@ -672,7 +674,7 @@ export const getStageName = (stage: number, type: string) => {
       "R&D Testing",
       "DQA Testing",
       "R&D Head Approval",
-      "PP Pricing",
+      "Plant Evaluation & Testing",
       "ECN Summary & Closure",
     ];
     return ecnStages[stage - 1] || "Unknown";

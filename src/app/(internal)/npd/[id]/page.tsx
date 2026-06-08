@@ -16,9 +16,10 @@ import {
   MULTI_DISPATCH_KEY, VENDOR_SAMPLES_KEY, VENDOR_TESTS_KEY, VENDOR_VERDICTS_KEY, FINAL_VENDOR_KEY,
   DQA_TESTS_KEY, DQA_TESTS,
   ECN_STAGE1_KEY, ECN_RND_APPROVAL_KEY, ECN_SOURCING_DISPATCH_KEY,
-  ECN_PRICE_ESTIMATION_KEY, ECN_DQA_TESTS_KEY, ECN_HEAD_APPROVAL_KEY, ECN_PP_PRICING_KEY, ECN_PP_RND_APPROVAL_KEY, NCD_PP_PRICING_KEY,
-  ECN_NEGOTIATION_KEY, ECN_PP_NEGOTIATION_KEY, ECN_INITIAL_QUOTE_KEY,
-  AS_STAGE1_KEY, AS_RND_APPROVAL_KEY, AS_PP_PRICING_KEY, AS_PP_SOURCING_APPROVED_KEY, AS_PP_RND_APPROVAL_KEY,
+  ECN_PRICE_ESTIMATION_KEY, ECN_DQA_TESTS_KEY, ECN_HEAD_APPROVAL_KEY, NCD_PP_PRICING_KEY,
+  ECN_NEGOTIATION_KEY, ECN_INITIAL_QUOTE_KEY,
+  ECN_PLANT_EVAL_KEY, AS_PLANT_EVAL_KEY,
+  AS_STAGE1_KEY, AS_RND_APPROVAL_KEY,
   DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD,
   getTestsByCategory, getTotalTestDays,
   type NPDRecord, type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse, type PushNotification, type TestResult,
@@ -348,22 +349,16 @@ export default function NpdDetailView() {
   const [ecnDqaTestsData,       setEcnDqaTestsData]        = useState<null | { results: Record<string, { value: string; status: string }>; submittedAt: number; submittedBy: string }>(null)
   const [ecnHeadApproval,       setEcnHeadApproval]        = useState<null | { verdict: "approved" | "rejected"; remarks?: string; approvedBy: string; approvedAt: number }>(null)
   const [ecnHeadRemarks,        setEcnHeadRemarks]         = useState("")
-  const [ecnPpPricing,          setEcnPpPricing]           = useState<null | { ppPrice: string; currency: string; moq: string; leadTime: string; submittedBy: string; submittedAt: number }>(null)
-  const [ecnPpRndApproval,      setEcnPpRndApproval]       = useState<null | { approvedBy: string; approvedAt: number; remarks?: string }>(null)
-  const [ecnPpRndRemarks,       setEcnPpRndRemarks]        = useState("")
-  const [ecnPpPrice,            setEcnPpPrice]             = useState("")
-  const [ecnPpCurrency,         setEcnPpCurrency]          = useState<"INR" | "USD" | "EUR">("INR")
-  const [ecnPpMoq,              setEcnPpMoq]               = useState("")
-  const [ecnPpLeadTime,         setEcnPpLeadTime]          = useState("")
+  // Plant Evaluation & Testing (ECN + AS Stage 7)
+  const [ecnPlantEval,     setEcnPlantEval]     = useState<{ results: Record<string, string>; submittedAt: number; submittedBy: string } | null>(null)
+  const [asPlantEval,      setAsPlantEval]      = useState<{ results: Record<string, string>; submittedAt: number; submittedBy: string } | null>(null)
+  const [ecnPlantTestResults, setEcnPlantTestResults] = useState<Record<string, string>>({})
+  const [asPlantTestResults,  setAsPlantTestResults]  = useState<Record<string, string>>({})
   // ECN Price Negotiation (Stage 2)
   const [ecnInitialQuote,    setEcnInitialQuote]     = useState<{ price: string; currency: "INR" | "USD" | "EUR"; date: string; docs: string[]; submittedAt: number } | null>(null)
   const [ecnNegotiation,     setEcnNegotiation]     = useState<NegotiationRecord | null>(null)
   const [negTargetPrice,     setNegTargetPrice]      = useState("")
   const [negCurrency,        setNegCurrency]         = useState<"INR" | "USD" | "EUR">("INR")
-  // ECN PP Negotiation (Stage 7)
-  const [ecnPpNegotiation,   setEcnPpNegotiation]   = useState<NegotiationRecord | null>(null)
-  const [ppNegTargetPrice,   setPpNegTargetPrice]    = useState("")
-  const [ppNegCurrency,      setPpNegCurrency]       = useState<"INR" | "USD" | "EUR">("INR")
   const [ncdPpPricing,          setNcdPpPricing]           = useState<null | { ppPrice: string; currency: string; moq: string; leadTime: string; submittedBy: string; submittedAt: number }>(null)
   const [ncdPpPrice,            setNcdPpPrice]             = useState("")
   const [ncdPpCurrency,         setNcdPpCurrency]          = useState<"INR" | "USD" | "EUR">("INR")
@@ -377,14 +372,6 @@ export default function NpdDetailView() {
   const [asReason,        setAsReason]        = useState("")
   const [asDocsLink,      setAsDocsLink]      = useState("")
   const [asRndRemarks,    setAsRndRemarks]    = useState("")
-  const [asPpPricing,           setAsPpPricing]           = useState<null | { ppPrice: string; currency: string; moq: string; leadTime: string; submittedBy: string; submittedAt: number }>(null)
-  const [asPpSourcingApproved,  setAsPpSourcingApproved]  = useState<null | { approvedBy: string; approvedAt: number }>(null)
-  const [asPpRndApproval,       setAsPpRndApproval]       = useState<null | { approvedBy: string; approvedAt: number; remarks?: string }>(null)
-  const [asPpRndRemarks,        setAsPpRndRemarks]        = useState("")
-  const [asPpPrice,       setAsPpPrice]       = useState("")
-  const [asPpCurrency,    setAsPpCurrency]    = useState<"INR" | "USD" | "EUR">("INR")
-  const [asPpMoq,         setAsPpMoq]         = useState("")
-  const [asPpLeadTime,    setAsPpLeadTime]    = useState("")
 
   // Derived from state — declared early so useEffect closures below can reference it safely
   const isNCD = npd?.typeOfWork === "New Component Development (NCD)" || npd?.typeOfWork === "New Product Development (NPD)"
@@ -713,18 +700,6 @@ export default function NpdDetailView() {
       const allEcnHA = JSON.parse(rawEcnHA)
       if (allEcnHA[npdId]) setEcnHeadApproval(allEcnHA[npdId])
     }
-    // ECN — PP Pricing
-    const rawEcnPP = localStorage.getItem(ECN_PP_PRICING_KEY)
-    if (rawEcnPP) {
-      const allEcnPP = JSON.parse(rawEcnPP)
-      if (allEcnPP[npdId]) setEcnPpPricing(allEcnPP[npdId])
-    }
-    // ECN — PP Pricing R&D Approval
-    const rawPpRnd = localStorage.getItem(ECN_PP_RND_APPROVAL_KEY)
-    if (rawPpRnd) {
-      const allPpRnd = JSON.parse(rawPpRnd)
-      if (allPpRnd[npdId]) setEcnPpRndApproval(allPpRnd[npdId])
-    }
     // NCD — PP Pricing
     const rawNcdPP = localStorage.getItem(NCD_PP_PRICING_KEY)
     if (rawNcdPP) {
@@ -743,13 +718,6 @@ export default function NpdDetailView() {
       const allNeg = JSON.parse(rawEcnNeg)
       if (allNeg[npdId]) setEcnNegotiation(allNeg[npdId])
     }
-    // ECN — PP Negotiation
-    const rawEcnPpNeg = localStorage.getItem(ECN_PP_NEGOTIATION_KEY)
-    if (rawEcnPpNeg) {
-      const allPpNeg = JSON.parse(rawEcnPpNeg)
-      if (allPpNeg[npdId]) setEcnPpNegotiation(allPpNeg[npdId])
-    }
-
     // ECN — DQA results (DQA_TESTS_KEY) — same key as NCD; already loaded above in rawDqa/allDqa
     if (allDqa[npdId]) {
       setEcnDqaResults(allDqa[npdId].results)
@@ -768,23 +736,17 @@ export default function NpdDetailView() {
       const allAsRnd = JSON.parse(rawAsRnd)
       if (allAsRnd[npdId]) setAsRndApproval(allAsRnd[npdId])
     }
-    // Alt Supplier — PP Pricing (stage 7)
-    const rawAsPp = localStorage.getItem(AS_PP_PRICING_KEY)
-    if (rawAsPp) {
-      const allAsPp = JSON.parse(rawAsPp)
-      if (allAsPp[npdId]) setAsPpPricing(allAsPp[npdId])
+    // ECN — Plant Evaluation (Stage 7)
+    const rawEcnPlantEval = localStorage.getItem(ECN_PLANT_EVAL_KEY)
+    if (rawEcnPlantEval) {
+      const allEcnPlantEval = JSON.parse(rawEcnPlantEval)
+      if (allEcnPlantEval[npdId]) { setEcnPlantEval(allEcnPlantEval[npdId]); setEcnPlantTestResults(allEcnPlantEval[npdId].results) }
     }
-    // Alt Supplier — PP Sourcing Approval (stage 7 — sourcing explicit approval)
-    const rawAsPpSrc = localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY)
-    if (rawAsPpSrc) {
-      const allAsPpSrc = JSON.parse(rawAsPpSrc)
-      if (allAsPpSrc[npdId]) setAsPpSourcingApproved(allAsPpSrc[npdId])
-    }
-    // Alt Supplier — PP R&D Approval (stage 7 → 8)
-    const rawAsPpRnd = localStorage.getItem(AS_PP_RND_APPROVAL_KEY)
-    if (rawAsPpRnd) {
-      const allAsPpRnd = JSON.parse(rawAsPpRnd)
-      if (allAsPpRnd[npdId]) setAsPpRndApproval(allAsPpRnd[npdId])
+    // AS — Plant Evaluation (Stage 7)
+    const rawAsPlantEval = localStorage.getItem(AS_PLANT_EVAL_KEY)
+    if (rawAsPlantEval) {
+      const allAsPlantEval = JSON.parse(rawAsPlantEval)
+      if (allAsPlantEval[npdId]) { setAsPlantEval(allAsPlantEval[npdId]); setAsPlantTestResults(allAsPlantEval[npdId].results) }
     }
 
     // Refresh live data when supplier submits in another tab
@@ -932,55 +894,7 @@ export default function NpdDetailView() {
     return () => clearInterval(interval)
   }, [isECN, isAltSupplier, activeStage, npdId])
 
-  // ECN: poll ECN_PP_NEGOTIATION_KEY + ECN_PP_RND_APPROVAL_KEY every 3s while stage 7 is active
-  useEffect(() => {
-    if (!isECN || activeStage !== 7) return
-    const interval = setInterval(() => {
-      const rawNeg = localStorage.getItem(ECN_PP_NEGOTIATION_KEY)
-      if (rawNeg) {
-        const all: Record<string, NegotiationRecord> = JSON.parse(rawNeg)
-        if (all[npdId]) setEcnPpNegotiation(all[npdId])
-      }
-      const rawRnd = localStorage.getItem(ECN_PP_RND_APPROVAL_KEY)
-      if (rawRnd) {
-        const all: Record<string, { approvedBy: string; approvedAt: number; remarks?: string }> = JSON.parse(rawRnd)
-        if (all[npdId]) {
-          setEcnPpRndApproval(all[npdId])
-          // advance stage as soon as R&D approval is detected
-          updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
-          setActiveStage(8)
-        }
-      }
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [isECN, activeStage, npdId])
 
-  // AS stage 7: poll PP pricing submission, sourcing approval, and R&D approval every 3s
-  useEffect(() => {
-    if (!isAltSupplier || activeStage !== 7) return
-    const interval = setInterval(() => {
-      const rawPp = localStorage.getItem(AS_PP_PRICING_KEY)
-      if (rawPp) {
-        const all = JSON.parse(rawPp)
-        if (all[npdId]) setAsPpPricing(all[npdId])
-      }
-      const rawSrc = localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY)
-      if (rawSrc) {
-        const all = JSON.parse(rawSrc)
-        if (all[npdId]) setAsPpSourcingApproved(all[npdId])
-      }
-      const rawRnd = localStorage.getItem(AS_PP_RND_APPROVAL_KEY)
-      if (rawRnd) {
-        const all: Record<string, { approvedBy: string; approvedAt: number; remarks?: string }> = JSON.parse(rawRnd)
-        if (all[npdId]) {
-          setAsPpRndApproval(all[npdId])
-          updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
-          setActiveStage(8)
-        }
-      }
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [isAltSupplier, activeStage, npdId])
 
   const totalStages = (() => {
     const t = npd.typeOfWork
@@ -1397,13 +1311,16 @@ export default function NpdDetailView() {
         localStorage.setItem(ECN_HEAD_APPROVAL_KEY, JSON.stringify(all))
         setEcnHeadApproval(entry)
       }
-      // Stage 7→8: sourcing submits PP Pricing
+      // Stage 7→8: R&D submits plant evaluation
       if (activeStage === 7) {
-        const pp = { ppPrice: "275", currency: "INR", moq: "500", leadTime: "30", submittedBy: currentRole, submittedAt: Date.now() }
-        const allPP: Record<string, typeof pp> = JSON.parse(localStorage.getItem(ECN_PP_PRICING_KEY) ?? "{}")
-        allPP[npdId] = pp
-        localStorage.setItem(ECN_PP_PRICING_KEY, JSON.stringify(allPP))
-        setEcnPpPricing(pp)
+        const tests = getTestsByCategory(npd.itemCategory).length > 0 ? getTestsByCategory(npd.itemCategory) : getTestsByCategory("Others")
+        const autoResults = Object.fromEntries(tests.map(t => [t.testName, t.unit === "Pass/Fail" ? "Pass" : "OK"]))
+        const entry = { results: autoResults, submittedAt: Date.now(), submittedBy: currentRole }
+        const allPE: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_PLANT_EVAL_KEY) ?? "{}")
+        allPE[npdId] = entry
+        localStorage.setItem(ECN_PLANT_EVAL_KEY, JSON.stringify(allPE))
+        setEcnPlantEval(entry)
+        setEcnPlantTestResults(autoResults)
       }
       setActiveStage(next)
       updateNPD(npdId, { stage: next, stageName: getStageName(next, npd.typeOfWork) })
@@ -1412,18 +1329,16 @@ export default function NpdDetailView() {
 
     // AS-specific demo advance
     if (isAltSupplier) {
-      // Stage 7→8: sourcing submits PP pricing + sourcing approves
+      // Stage 7→8: R&D submits plant evaluation
       if (activeStage === 7) {
-        const pp = { ppPrice: "275", currency: "INR", moq: "500", leadTime: "30", submittedBy: currentRole, submittedAt: Date.now() }
-        const allPP: Record<string, typeof pp> = JSON.parse(localStorage.getItem(AS_PP_PRICING_KEY) ?? "{}")
-        allPP[npdId] = pp
-        localStorage.setItem(AS_PP_PRICING_KEY, JSON.stringify(allPP))
-        setAsPpPricing(pp)
-        const srcApproval = { approvedBy: currentRole, approvedAt: Date.now() }
-        const allSrc: Record<string, typeof srcApproval> = JSON.parse(localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY) ?? "{}")
-        allSrc[npdId] = srcApproval
-        localStorage.setItem(AS_PP_SOURCING_APPROVED_KEY, JSON.stringify(allSrc))
-        setAsPpSourcingApproved(srcApproval)
+        const tests = getTestsByCategory(npd.itemCategory).length > 0 ? getTestsByCategory(npd.itemCategory) : getTestsByCategory("Others")
+        const autoResults = Object.fromEntries(tests.map(t => [t.testName, t.unit === "Pass/Fail" ? "Pass" : "OK"]))
+        const entry = { results: autoResults, submittedAt: Date.now(), submittedBy: currentRole }
+        const allPE: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_PLANT_EVAL_KEY) ?? "{}")
+        allPE[npdId] = entry
+        localStorage.setItem(AS_PLANT_EVAL_KEY, JSON.stringify(allPE))
+        setAsPlantEval(entry)
+        setAsPlantTestResults(autoResults)
       }
       setActiveStage(next)
       updateNPD(npdId, { stage: next, stageName: getStageName(next, npd.typeOfWork) })
@@ -1536,21 +1451,15 @@ export default function NpdDetailView() {
         if (rawHA) { const all = JSON.parse(rawHA); delete all[npdId]; localStorage.setItem(ECN_HEAD_APPROVAL_KEY, JSON.stringify(all)) }
       }
       if (activeStage === 8) {
-        setEcnPpPricing(null); setEcnPpPrice(""); setEcnPpMoq(""); setEcnPpLeadTime("")
-        const rawPP = localStorage.getItem(ECN_PP_PRICING_KEY)
-        if (rawPP) { const all = JSON.parse(rawPP); delete all[npdId]; localStorage.setItem(ECN_PP_PRICING_KEY, JSON.stringify(all)) }
+        setEcnPlantEval(null); setEcnPlantTestResults({})
+        const rawPE = localStorage.getItem(ECN_PLANT_EVAL_KEY)
+        if (rawPE) { const all = JSON.parse(rawPE); delete all[npdId]; localStorage.setItem(ECN_PLANT_EVAL_KEY, JSON.stringify(all)) }
       }
       // Clear negotiation key when rolling back from stage 2 or beyond
       if (activeStage >= 2) {
         const rawNeg = localStorage.getItem(ECN_NEGOTIATION_KEY)
         if (rawNeg) { const all = JSON.parse(rawNeg); delete all[npdId]; localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all)) }
         setEcnNegotiation(null)
-      }
-      // Clear PP negotiation key when rolling back from stage 7 or beyond
-      if (activeStage >= 7) {
-        const rawPpNeg = localStorage.getItem(ECN_PP_NEGOTIATION_KEY)
-        if (rawPpNeg) { const all = JSON.parse(rawPpNeg); delete all[npdId]; localStorage.setItem(ECN_PP_NEGOTIATION_KEY, JSON.stringify(all)) }
-        setEcnPpNegotiation(null)
       }
       setActiveStage(prev)
       updateNPD(npdId, { stage: prev, stageName: getStageName(prev, npd.typeOfWork) })
@@ -1603,16 +1512,9 @@ export default function NpdDetailView() {
         if (rawHA) { const all = JSON.parse(rawHA); delete all[npdId]; localStorage.setItem(ECN_HEAD_APPROVAL_KEY, JSON.stringify(all)) }
       }
       if (activeStage === 7) {
-        setAsPpPricing(null); setAsPpSourcingApproved(null); setAsPpPrice(""); setAsPpMoq(""); setAsPpLeadTime("")
-        const rawPP = localStorage.getItem(AS_PP_PRICING_KEY)
-        if (rawPP) { const all = JSON.parse(rawPP); delete all[npdId]; localStorage.setItem(AS_PP_PRICING_KEY, JSON.stringify(all)) }
-        const rawPPSrc = localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY)
-        if (rawPPSrc) { const all = JSON.parse(rawPPSrc); delete all[npdId]; localStorage.setItem(AS_PP_SOURCING_APPROVED_KEY, JSON.stringify(all)) }
-      }
-      if (activeStage === 8) {
-        setAsPpRndApproval(null); setAsPpRndRemarks("")
-        const rawPPRnd = localStorage.getItem(AS_PP_RND_APPROVAL_KEY)
-        if (rawPPRnd) { const all = JSON.parse(rawPPRnd); delete all[npdId]; localStorage.setItem(AS_PP_RND_APPROVAL_KEY, JSON.stringify(all)) }
+        setAsPlantEval(null); setAsPlantTestResults({})
+        const rawPE = localStorage.getItem(AS_PLANT_EVAL_KEY)
+        if (rawPE) { const all = JSON.parse(rawPE); delete all[npdId]; localStorage.setItem(AS_PLANT_EVAL_KEY, JSON.stringify(all)) }
       }
       setActiveStage(prev)
       updateNPD(npdId, { stage: prev, stageName: getStageName(prev, npd.typeOfWork) })
@@ -2561,56 +2463,70 @@ export default function NpdDetailView() {
     )
   }
 
-  // ── AS Stage 7: PP Pricing (R&D view — approval action) ────────────────
+  // ── AS Stage 7: Plant Evaluation & Testing (R&D view) ────────────────────
   if (activeStage >= 7) {
     const isActive = activeStage === 7
     const isDone   = activeStage > 7
-    const ppSymbolRnd = asPpPricing?.currency === "USD" ? "$" : asPpPricing?.currency === "EUR" ? "€" : "₹"
+    const plantTestsList = getTestsByCategory(npd.itemCategory).length > 0
+      ? getTestsByCategory(npd.itemCategory)
+      : getTestsByCategory("Others")
     asCards.push(
-      <div key="as-s7" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+      <div key="as-s7" className={`rounded-xl border p-4 space-y-3 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
         <div className="flex items-center gap-2 mb-2">
           {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-orange-600 shrink-0" />}
-          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing</h4>
-          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
-          {isActive && !asPpSourcingApproved && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting Sourcing</Badge>}
-          {isActive && asPpSourcingApproved && !asPpRndApproval && canApprove && <Badge className="bg-orange-100 text-orange-700 border-none text-xs ml-auto">Action Required</Badge>}
-          {isActive && asPpSourcingApproved && !asPpRndApproval && !canApprove && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Head</Badge>}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — Plant Evaluation &amp; Testing</h4>
+          <div className="ml-auto flex items-center gap-1.5">
+            {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Complete</Badge>}
+            {isActive && !asPlantEval && isRnd && <Badge className="bg-orange-100 text-orange-700 border-none text-xs">Action Required</Badge>}
+            {isActive && !asPlantEval && !isRnd && <Badge className="bg-amber-100 text-amber-700 border-none text-xs flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D</Badge>}
+            {isActive && asPlantEval && <Badge className="bg-blue-100 text-blue-700 border-none text-xs">Submitted</Badge>}
+          </div>
         </div>
-        {!asPpSourcingApproved && isActive && (
-          <p className="text-xs text-slate-400 italic">Sourcing is preparing the PP pricing. You will be notified once submitted and approved by sourcing.</p>
-        )}
-        {asPpPricing && (
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            {[["Price / Unit", `${ppSymbolRnd}${parseFloat(asPpPricing.ppPrice).toLocaleString("en-IN")}`], ["MOQ", `${asPpPricing.moq} units`], ["Lead Time", `${asPpPricing.leadTime} days`], ["Currency", asPpPricing.currency]].map(([label, value]) => (
-              <div key={label} className="bg-white border border-slate-200 rounded-lg px-3 py-2">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-                <p className="text-xs font-semibold text-slate-800 mt-0.5">{value}</p>
+
+        {isActive && !asPlantEval && isRnd && (
+          <div className="space-y-2">
+            {plantTestsList.map(t => (
+              <div key={t.testName} className="flex items-center gap-3">
+                <span className="text-xs text-slate-600 w-44 shrink-0">{t.testName} ({t.unit})</span>
+                <input
+                  type="text"
+                  placeholder="Result"
+                  value={asPlantTestResults[t.testName] ?? ""}
+                  onChange={e => setAsPlantTestResults(prev => ({ ...prev, [t.testName]: e.target.value }))}
+                  className="flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
               </div>
             ))}
-          </div>
-        )}
-        {isActive && asPpSourcingApproved && !asPpRndApproval && canApprove && (
-          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-3">
-            <p className="text-xs font-semibold text-orange-800">Approve PP Pricing to close stage and proceed to summary</p>
-            <textarea rows={2} placeholder="Remarks (optional)…" value={asPpRndRemarks}
-              onChange={e => setAsPpRndRemarks(e.target.value)}
-              className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-slate-400" />
             <button
+              disabled={plantTestsList.some(t => !asPlantTestResults[t.testName]?.trim())}
               onClick={() => {
-                const entry = { approvedBy: currentRole, approvedAt: Date.now(), remarks: asPpRndRemarks || undefined }
-                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_PP_RND_APPROVAL_KEY) ?? "{}")
+                const entry = { results: asPlantTestResults, submittedAt: Date.now(), submittedBy: currentRole }
+                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_PLANT_EVAL_KEY) ?? "{}")
                 all[npdId] = entry
-                localStorage.setItem(AS_PP_RND_APPROVAL_KEY, JSON.stringify(all))
-                setAsPpRndApproval(entry)
+                localStorage.setItem(AS_PLANT_EVAL_KEY, JSON.stringify(all))
+                setAsPlantEval(entry)
                 updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
                 setActiveStage(8)
               }}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
-            ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Close to Stage 8</button>
+              className="mt-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-2 rounded-lg"
+            >Submit Plant Evaluation</button>
           </div>
         )}
-        {asPpRndApproval && (
-          <p className="text-[10px] text-slate-400 mt-1">Approved by {asPpRndApproval.approvedBy} · {new Date(asPpRndApproval.approvedAt).toLocaleString("en-IN")}</p>
+
+        {isActive && !asPlantEval && !isRnd && (
+          <p className="text-xs text-slate-400 italic">Awaiting R&D plant evaluation — R&D will run tests and submit results.</p>
+        )}
+
+        {(isDone || asPlantEval) && asPlantEval && (
+          <div className="space-y-1 mt-1">
+            {Object.entries(asPlantEval.results).map(([name, val]) => (
+              <div key={name} className="flex justify-between text-xs border-b border-slate-100 pb-0.5">
+                <span className="text-slate-500">{name}</span>
+                <span className="font-semibold text-slate-800">{val}</span>
+              </div>
+            ))}
+            <p className="text-[10px] text-slate-400 pt-1">Submitted by {asPlantEval.submittedBy} · {new Date(asPlantEval.submittedAt).toLocaleString("en-IN")}</p>
+          </div>
         )}
       </div>
     )
@@ -2632,8 +2548,6 @@ export default function NpdDetailView() {
             ["Existing Part No.", npd.existingPartNumber ?? "—"],
             ["Priority", npd.priority],
             ["Total TAT", npd.totalTat ? `${npd.totalTat} days` : "—"],
-            ...(asPpPricing ? [["PP Price / Unit", `${asPpPricing.currency === "INR" ? "₹" : asPpPricing.currency === "USD" ? "$" : "€"}${parseFloat(asPpPricing.ppPrice).toLocaleString("en-IN")}`] as [string, string]] : []),
-            ...(asPpPricing ? [["MOQ", `${asPpPricing.moq} units`] as [string, string]] : []),
           ] as [string, string][]).map(([label, value]) => (
             <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
               <span className="text-slate-400 text-xs">{label}</span>
@@ -3055,83 +2969,71 @@ export default function NpdDetailView() {
     )
   }
 
-  // ── Stage 7: PP Pricing — R&D reviews and approves to close ECN ────────────
+  // ── Stage 7: Plant Evaluation & Testing (ECN — R&D view) ─────────────────
   if (activeStage >= 6) {
     const isActive   = activeStage === 7
     const isDone     = activeStage > 7
     const isUpcoming = activeStage === 6
-    const canApprove = currentRole === "rnd_head" || currentRole === "super_admin"
+    const plantTestsList = getTestsByCategory(npd.itemCategory).length > 0
+      ? getTestsByCategory(npd.itemCategory)
+      : getTestsByCategory("Others")
     ecnCards.push(
       <div key="ecn-s7" className={`rounded-xl border p-4 space-y-3 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
-        {/* Header */}
         <div className="flex items-center gap-2">
-          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Clock className="w-4 h-4 text-orange-500 shrink-0" />}
-          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing &amp; R&D Approval</h4>
+          {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-orange-500 shrink-0" />}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — Plant Evaluation &amp; Testing</h4>
           <div className="ml-auto flex items-center gap-1.5">
             {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Complete</Badge>}
             {isUpcoming && <Badge className="bg-slate-100 text-slate-400 border-none text-xs">Upcoming</Badge>}
-            {isActive && !ecnPpPricing && <Badge className="bg-amber-100 text-amber-700 border-none text-xs flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting Sourcing</Badge>}
-            {isActive && ecnPpPricing && !ecnPpRndApproval && canApprove && <Badge className="bg-orange-100 text-orange-700 border-none text-xs">Action Required</Badge>}
-            {isActive && ecnPpPricing && !ecnPpRndApproval && !canApprove && <Badge className="bg-blue-100 text-blue-700 border-none text-xs flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Head</Badge>}
+            {isActive && !ecnPlantEval && isRnd && <Badge className="bg-orange-100 text-orange-700 border-none text-xs">Action Required</Badge>}
+            {isActive && !ecnPlantEval && !isRnd && <Badge className="bg-amber-100 text-amber-700 border-none text-xs flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D</Badge>}
+            {isActive && ecnPlantEval && <Badge className="bg-blue-100 text-blue-700 border-none text-xs">Submitted</Badge>}
           </div>
         </div>
 
-        {/* PP Pricing summary — shown once sourcing submits */}
-        {ecnPpPricing && (
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Sourcing PP Pricing</p>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-              {([
-                ["PP Price / Unit", `${ecnPpPricing.currency === "INR" ? "₹" : ecnPpPricing.currency === "USD" ? "$" : "€"}${parseFloat(ecnPpPricing.ppPrice).toLocaleString("en-IN")}`],
-                ["MOQ", ecnPpPricing.moq ? `${ecnPpPricing.moq} units` : "—"],
-                ["Lead Time", ecnPpPricing.leadTime ? `${ecnPpPricing.leadTime} days` : "—"],
-                ["Submitted By", ecnPpPricing.submittedBy],
-              ] as [string, string][]).map(([label, value]) => (
-                <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
-                  <span className="text-slate-400 text-xs">{label}</span>
-                  <span className="text-slate-800 font-semibold text-xs">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* R&D Approval action */}
-        {isActive && ecnPpPricing && !ecnPpRndApproval && canApprove && (
-          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-3">
-            <p className="text-xs font-semibold text-orange-800">R&D Approval — Confirm Plant Testing Complete</p>
-            <p className="text-[11px] text-slate-500">Approve only after confirming the plant has completed all required testing and the PP pricing is acceptable.</p>
-            <textarea
-              rows={2}
-              placeholder="Remarks (optional)…"
-              value={ecnPpRndRemarks}
-              onChange={e => setEcnPpRndRemarks(e.target.value)}
-              className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-slate-400"
-            />
+        {isActive && !ecnPlantEval && isRnd && (
+          <div className="space-y-2">
+            {plantTestsList.map(t => (
+              <div key={t.testName} className="flex items-center gap-3">
+                <span className="text-xs text-slate-600 w-44 shrink-0">{t.testName} ({t.unit})</span>
+                <input
+                  type="text"
+                  placeholder="Result"
+                  value={ecnPlantTestResults[t.testName] ?? ""}
+                  onChange={e => setEcnPlantTestResults(prev => ({ ...prev, [t.testName]: e.target.value }))}
+                  className="flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+            ))}
             <button
+              disabled={plantTestsList.some(t => !ecnPlantTestResults[t.testName]?.trim())}
               onClick={() => {
-                const entry = { approvedBy: currentRole, approvedAt: Date.now(), remarks: ecnPpRndRemarks || undefined }
-                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_PP_RND_APPROVAL_KEY) ?? "{}")
+                const entry = { results: ecnPlantTestResults, submittedAt: Date.now(), submittedBy: currentRole }
+                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_PLANT_EVAL_KEY) ?? "{}")
                 all[npdId] = entry
-                localStorage.setItem(ECN_PP_RND_APPROVAL_KEY, JSON.stringify(all))
-                setEcnPpRndApproval(entry)
+                localStorage.setItem(ECN_PLANT_EVAL_KEY, JSON.stringify(all))
+                setEcnPlantEval(entry)
                 updateNPD(npdId, { stage: 8, stageName: getStageName(8, npd.typeOfWork) })
                 setActiveStage(8)
               }}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
-            ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Close to Stage 8</button>
+              className="mt-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-2 rounded-lg"
+            >Submit Plant Evaluation</button>
           </div>
         )}
 
-        {/* Approval outcome */}
-        {ecnPpRndApproval && (
-          <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-semibold text-emerald-800">Approved by {ecnPpRndApproval.approvedBy}</p>
-              {ecnPpRndApproval.remarks && <p className="text-[11px] text-slate-600 mt-0.5">"{ecnPpRndApproval.remarks}"</p>}
-              <p className="text-[10px] text-slate-400 mt-0.5">{new Date(ecnPpRndApproval.approvedAt).toLocaleString("en-IN")}</p>
-            </div>
+        {isActive && !ecnPlantEval && !isRnd && (
+          <p className="text-xs text-slate-400 italic">Awaiting R&D plant evaluation — R&D will run tests and submit results.</p>
+        )}
+
+        {(isDone || ecnPlantEval) && ecnPlantEval && (
+          <div className="space-y-1 mt-1">
+            {Object.entries(ecnPlantEval.results).map(([name, val]) => (
+              <div key={name} className="flex justify-between text-xs border-b border-slate-100 pb-0.5">
+                <span className="text-slate-500">{name}</span>
+                <span className="font-semibold text-slate-800">{val}</span>
+              </div>
+            ))}
+            <p className="text-[10px] text-slate-400 pt-1">Submitted by {ecnPlantEval.submittedBy} · {new Date(ecnPlantEval.submittedAt).toLocaleString("en-IN")}</p>
           </div>
         )}
       </div>
@@ -5810,108 +5712,26 @@ export default function NpdDetailView() {
     )
   }
 
-  // ── AS Stage 7: PP Pricing (sourcing primary actor) ───────────────────────
+  // ── AS Stage 7: Plant Evaluation & Testing (sourcing view — read-only) ──────
   if (activeStage >= 7) {
     const isActive = activeStage === 7
     const isDone   = activeStage > 7
-    const ppSymbol = asPpPricing?.currency === "USD" ? "$" : asPpPricing?.currency === "EUR" ? "€" : "₹"
     asSourcingCards.push(
-      <div key="as-src-s7" className={`rounded-xl border p-4 space-y-3 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
+      <div key="as-src-s7" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
         <div className="flex items-center gap-2">
           {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-orange-600 shrink-0" />}
-          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing</h4>
-          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
-          {isActive && !asPpPricing && <Badge className="bg-orange-100 text-orange-700 border-none text-xs ml-auto">Action Required</Badge>}
-          {isActive && asPpPricing && !asPpSourcingApproved && <Badge className="bg-orange-100 text-orange-700 border-none text-xs ml-auto">Approve to Send</Badge>}
-          {isActive && asPpSourcingApproved && !asPpRndApproval && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Approval</Badge>}
-          {asPpRndApproval && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — Plant Evaluation &amp; Testing</h4>
+          <div className="ml-auto">
+            {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Complete</Badge>}
+            {isActive && !asPlantEval && <Badge className="bg-amber-100 text-amber-700 border-none text-xs flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D</Badge>}
+            {isActive && asPlantEval && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Complete</Badge>}
+          </div>
         </div>
-
-        {/* Step 1: Fill PP pricing form */}
-        {isActive && !asPpPricing && (
-          <div className="space-y-3">
-            <div className="flex gap-3">
-              <div className="w-28 shrink-0">
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Currency</label>
-                <select value={asPpCurrency} onChange={e => setAsPpCurrency(e.target.value as "INR" | "USD" | "EUR")}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400">
-                  <option value="INR">INR ₹</option>
-                  <option value="USD">USD $</option>
-                  <option value="EUR">EUR €</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Price / Unit *</label>
-                <input type="number" min="0" step="0.01" placeholder="e.g. 140.00" value={asPpPrice}
-                  onChange={e => setAsPpPrice(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">MOQ (units) *</label>
-                <input type="number" min="1" placeholder="e.g. 500" value={asPpMoq}
-                  onChange={e => setAsPpMoq(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              </div>
-              <div className="flex-1">
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Lead Time (days) *</label>
-                <input type="number" min="1" placeholder="e.g. 21" value={asPpLeadTime}
-                  onChange={e => setAsPpLeadTime(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              </div>
-            </div>
-            <button
-              disabled={!asPpPrice || !asPpMoq || !asPpLeadTime || parseFloat(asPpPrice) <= 0}
-              onClick={() => {
-                const entry = { ppPrice: asPpPrice, currency: asPpCurrency, moq: asPpMoq, leadTime: asPpLeadTime, submittedBy: currentRole, submittedAt: Date.now() }
-                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_PP_PRICING_KEY) ?? "{}")
-                all[npdId] = entry
-                localStorage.setItem(AS_PP_PRICING_KEY, JSON.stringify(all))
-                setAsPpPricing(entry)
-              }}
-              className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
-            ><CheckCircle className="w-3.5 h-3.5" />Submit PP Pricing</button>
-          </div>
+        {isActive && !asPlantEval && (
+          <p className="text-xs text-slate-400 italic mt-2">R&D is running plant evaluation tests. No sourcing action required at this stage.</p>
         )}
-
-        {/* Pricing summary tiles — shown once submitted */}
-        {asPpPricing && (
-          <div className="grid grid-cols-2 gap-2">
-            {[["Price / Unit", `${ppSymbol}${parseFloat(asPpPricing.ppPrice).toLocaleString("en-IN")}`], ["MOQ", `${asPpPricing.moq} units`], ["Lead Time", `${asPpPricing.leadTime} days`], ["Currency", asPpPricing.currency]].map(([label, value]) => (
-              <div key={label} className="bg-white border border-slate-200 rounded-lg px-3 py-2">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-                <p className="text-xs font-semibold text-slate-800 mt-0.5">{value}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Step 2: Sourcing approves and sends to R&D */}
-        {isActive && asPpPricing && !asPpSourcingApproved && (
-          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-2">
-            <p className="text-xs font-semibold text-orange-800">Review the PP pricing above and approve to send for R&D Head approval.</p>
-            <button
-              onClick={() => {
-                const entry = { approvedBy: currentRole, approvedAt: Date.now() }
-                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_PP_SOURCING_APPROVED_KEY) ?? "{}")
-                all[npdId] = entry
-                localStorage.setItem(AS_PP_SOURCING_APPROVED_KEY, JSON.stringify(all))
-                setAsPpSourcingApproved(entry)
-              }}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
-            ><CheckCircle className="w-3.5 h-3.5" />Approve &amp; Send to R&D</button>
-          </div>
-        )}
-
-        {/* After sourcing approves — awaiting R&D */}
-        {isActive && asPpSourcingApproved && !asPpRndApproval && (
-          <p className="text-[10px] text-slate-400">Approved by {asPpSourcingApproved.approvedBy} · {new Date(asPpSourcingApproved.approvedAt).toLocaleString("en-IN")} — Awaiting R&D Head approval</p>
-        )}
-
-        {/* R&D approved */}
-        {asPpRndApproval && (
-          <p className="text-[10px] text-emerald-600 font-medium">R&D Head approved by {asPpRndApproval.approvedBy} · {new Date(asPpRndApproval.approvedAt).toLocaleString("en-IN")}</p>
+        {asPlantEval && (
+          <p className="text-xs text-emerald-700 font-medium mt-2">Plant evaluation submitted by {asPlantEval.submittedBy} · {new Date(asPlantEval.submittedAt).toLocaleString("en-IN")}</p>
         )}
       </div>
     )
@@ -6407,269 +6227,21 @@ export default function NpdDetailView() {
     const isDone   = activeStage > 7
     sourcingCards.push(
       <div key="src-s7" className={`rounded-xl border p-4 ${isDone ? "bg-slate-50 border-slate-200" : isActive ? "border-orange-300 bg-orange-50/30" : "bg-slate-50 border-slate-200 opacity-50"}`}>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2">
           {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-orange-500 shrink-0" />}
-          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — PP Pricing &amp; R&D Approval</h4>
-          {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Complete</Badge>}
-          {!isDone && !isActive && <Badge className="bg-slate-100 text-slate-400 border-none text-xs ml-auto">Upcoming</Badge>}
-          {isActive && !ecnPpPricing && <Badge className="bg-amber-100 text-amber-700 border-none text-xs ml-auto">Action Required</Badge>}
-          {isActive && ecnPpPricing && !ecnPpRndApproval && <Badge className="bg-blue-100 text-blue-700 border-none text-xs ml-auto flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D Approval</Badge>}
-          {isActive && ecnPpPricing && ecnPpRndApproval && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">Approved</Badge>}
+          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — Plant Evaluation &amp; Testing</h4>
+          <div className="ml-auto">
+            {isDone && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Complete</Badge>}
+            {!isDone && !isActive && <Badge className="bg-slate-100 text-slate-400 border-none text-xs">Upcoming</Badge>}
+            {isActive && !ecnPlantEval && <Badge className="bg-amber-100 text-amber-700 border-none text-xs flex items-center gap-1"><Clock className="w-3 h-3" />Awaiting R&D</Badge>}
+            {isActive && ecnPlantEval && <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">Complete</Badge>}
+          </div>
         </div>
-
-        {/* Reference price from supplier dispatch */}
-        {ecnPriceEstimation && (
-          <div className="mb-3 rounded-lg bg-slate-100 border border-slate-200 px-3 py-2 flex items-center gap-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supplier Quote</span>
-            <span className="text-xs font-semibold text-slate-700 ml-auto">
-              {ecnPriceEstimation.currency === "INR" ? "₹" : ecnPriceEstimation.currency === "USD" ? "$" : "€"}{parseFloat(ecnPriceEstimation.pricePerUnit).toLocaleString("en-IN")} / unit
-            </span>
-          </div>
+        {isActive && !ecnPlantEval && (
+          <p className="text-xs text-slate-400 italic mt-2">R&D is running plant evaluation tests. No sourcing action required at this stage.</p>
         )}
-
-        {/* ── Active: PP Pricing form (primary action) ── */}
-        {isActive && !ecnPpPricing && (() => {
-          const neg            = ecnPpNegotiation
-          const latestRound    = neg?.rounds[neg.rounds.length - 1]
-          const pendingResp    = latestRound && !latestRound.supplierResponse
-          const awaitApproval  = latestRound?.supplierResponse && !neg?.approvedAt
-          const negApproved    = !!neg?.approvedAt
-          const currSymbol     = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
-          // Negotiation in-flight: only show negotiation widget, no price form
-          const negInFlight    = neg && !negApproved
-
-          return (
-            <div className="space-y-3">
-              {/* ── Submission form (shown when no negotiation in flight) ── */}
-              {!negInFlight && (
-                <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-4 space-y-3">
-                  <p className="text-xs font-semibold text-orange-800">Submit PP Pricing</p>
-
-                  {/* Negotiated price banner */}
-                  {negApproved && (
-                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="text-xs font-semibold text-emerald-800">
-                        Negotiated price: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}
-                      </span>
-                      {!ecnPpPrice && (
-                        <button
-                          className="ml-auto text-[11px] font-bold text-emerald-700 underline"
-                          onClick={() => { setEcnPpPrice(neg!.finalPrice!); setEcnPpCurrency(neg!.finalCurrency!) }}
-                        >Use this price</button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* One price row */}
-                  <div className="flex gap-2">
-                    <select
-                      value={ecnPpCurrency}
-                      onChange={e => setEcnPpCurrency(e.target.value as "INR" | "USD" | "EUR")}
-                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    >
-                      <option value="INR">INR ₹</option>
-                      <option value="USD">USD $</option>
-                      <option value="EUR">EUR €</option>
-                    </select>
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="PP price / unit *"
-                        value={ecnPpPrice}
-                        onChange={e => setEcnPpPrice(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="MOQ (units)"
-                        value={ecnPpMoq}
-                        onChange={e => setEcnPpMoq(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Lead time (days)"
-                        value={ecnPpLeadTime}
-                        onChange={e => setEcnPpLeadTime(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    disabled={!ecnPpPrice || parseFloat(ecnPpPrice) <= 0}
-                    onClick={() => {
-                      const entry = { ppPrice: ecnPpPrice, currency: ecnPpCurrency, moq: ecnPpMoq, leadTime: ecnPpLeadTime, submittedBy: currentRole, submittedAt: Date.now() }
-                      const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(ECN_PP_PRICING_KEY) ?? "{}")
-                      all[npdId] = entry
-                      localStorage.setItem(ECN_PP_PRICING_KEY, JSON.stringify(all))
-                      setEcnPpPricing(entry)
-                    }}
-                    className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
-                  ><CheckCircle className="w-3.5 h-3.5" />Submit PP Pricing &amp; Close ECN →</button>
-                </div>
-              )}
-
-              {/* ── PP Price Negotiation (secondary; shown below submission OR when in-flight) ── */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">PP Price Negotiation</span>
-                  {negApproved && <span className="ml-auto text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Agreed: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}</span>}
-                  {pendingResp && <span className="ml-auto text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Awaiting Supplier — Round {latestRound!.round}</span>}
-                </div>
-
-                {/* Round history */}
-                {neg && neg.rounds.length > 0 && (
-                  <div className="space-y-1.5">
-                    {neg.rounds.map(r => (
-                      <div key={r.round} className="rounded-lg border border-slate-200 bg-white px-3 py-2 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Round {r.round}</span>
-                          <span className="text-[10px] text-slate-400">{new Date(r.sentAt).toLocaleString("en-IN")}</span>
-                        </div>
-                        <div className="flex gap-4 text-xs">
-                          <span className="text-slate-500">Target: <strong className="text-slate-800">{currSymbol(r.currency)}{parseFloat(r.targetPrice).toLocaleString("en-IN")}</strong></span>
-                          {r.supplierResponse && (
-                            <span className="text-slate-500">Supplier: <strong className="text-slate-800">{currSymbol(r.supplierResponse.currency)}{parseFloat(r.supplierResponse.price).toLocaleString("en-IN")}</strong></span>
-                          )}
-                        </div>
-                        {r.supplierResponse?.docs && r.supplierResponse.docs.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {r.supplierResponse.docs.map(d => (
-                              <span key={d} className="text-[10px] bg-slate-100 text-slate-600 rounded px-2 py-0.5">{d}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Approve / Counter */}
-                {awaitApproval && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        const updated: NegotiationRecord = {
-                          ...neg!,
-                          approvedAt: Date.now(),
-                          approvedBy: currentRole,
-                          finalPrice: latestRound!.supplierResponse!.price,
-                          finalCurrency: latestRound!.supplierResponse!.currency,
-                        }
-                        const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_PP_NEGOTIATION_KEY) ?? "{}")
-                        all[npdId] = updated
-                        localStorage.setItem(ECN_PP_NEGOTIATION_KEY, JSON.stringify(all))
-                        setEcnPpNegotiation(updated)
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
-                    ><CheckCircle className="w-3.5 h-3.5" />Approve Price</button>
-                    <button
-                      onClick={() => setPpNegTargetPrice("")}
-                      className="text-xs font-semibold text-slate-500 hover:text-red-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg"
-                    >Counter ↓</button>
-                  </div>
-                )}
-
-                {/* Send target form — only when no negotiation OR countering */}
-                {!negApproved && !pendingResp && (!neg || awaitApproval) && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                      {!neg ? "Start Price Negotiation (optional)" : `Send Counter Target — Round ${neg.rounds.length + 1}`}
-                    </p>
-                    <div className="flex gap-2">
-                      <select
-                        value={ppNegCurrency}
-                        onChange={e => setPpNegCurrency(e.target.value as "INR" | "USD" | "EUR")}
-                        className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      >
-                        <option value="INR">INR ₹</option>
-                        <option value="USD">USD $</option>
-                        <option value="EUR">EUR €</option>
-                      </select>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="Target price / unit"
-                        value={ppNegTargetPrice}
-                        onChange={e => setPpNegTargetPrice(e.target.value)}
-                        className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      />
-                      <button
-                        disabled={!ppNegTargetPrice || parseFloat(ppNegTargetPrice) <= 0}
-                        onClick={() => {
-                          const existingRounds = neg?.rounds ?? []
-                          const newRound: NegotiationRound = {
-                            round: existingRounds.length + 1,
-                            targetPrice: ppNegTargetPrice,
-                            currency: ppNegCurrency,
-                            sentAt: Date.now(),
-                            sentBy: currentRole,
-                          }
-                          const updated: NegotiationRecord = { rounds: [...existingRounds, newRound] }
-                          const all: Record<string, NegotiationRecord> = JSON.parse(localStorage.getItem(ECN_PP_NEGOTIATION_KEY) ?? "{}")
-                          all[npdId] = updated
-                          localStorage.setItem(ECN_PP_NEGOTIATION_KEY, JSON.stringify(all))
-                          setEcnPpNegotiation(updated)
-                          setPpNegTargetPrice("")
-                        }}
-                        className="bg-slate-700 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap"
-                      >Send to Supplier</button>
-                    </div>
-                    <p className="text-[10px] text-slate-400">Share the supplier portal link — the supplier will see this target price and respond.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Submitted state */}
-        {ecnPpPricing && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-              {([
-                ["PP Price / Unit", `${ecnPpPricing.currency === "INR" ? "₹" : ecnPpPricing.currency === "USD" ? "$" : "€"}${parseFloat(ecnPpPricing.ppPrice).toLocaleString("en-IN")}`],
-                ["MOQ", ecnPpPricing.moq ? `${ecnPpPricing.moq} units` : "—"],
-                ["Lead Time", ecnPpPricing.leadTime ? `${ecnPpPricing.leadTime} days` : "—"],
-                ["Submitted By", ecnPpPricing.submittedBy],
-              ] as [string, string][]).map(([label, value]) => (
-                <div key={label} className="flex justify-between border-b border-slate-100 pb-1">
-                  <span className="text-slate-400 text-xs">{label}</span>
-                  <span className="text-slate-800 font-medium text-xs text-right max-w-[160px] truncate">{value}</span>
-                </div>
-              ))}
-            </div>
-            {/* R&D approval outcome */}
-            {ecnPpRndApproval ? (
-              <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs font-semibold text-emerald-800">R&D Approved — advancing to Stage 8</p>
-                  {ecnPpRndApproval.remarks && <p className="text-[11px] text-slate-600 mt-0.5">"{ecnPpRndApproval.remarks}"</p>}
-                  <p className="text-[10px] text-slate-400 mt-0.5">By {ecnPpRndApproval.approvedBy} · {new Date(ecnPpRndApproval.approvedAt).toLocaleString("en-IN")}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
-                <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                <p className="text-xs text-blue-700 font-medium">Submitted — awaiting R&D approval to close ECN</p>
-              </div>
-            )}
-          </div>
+        {ecnPlantEval && (
+          <p className="text-xs text-emerald-700 font-medium mt-2">Plant evaluation submitted by {ecnPlantEval.submittedBy} · {new Date(ecnPlantEval.submittedAt).toLocaleString("en-IN")}</p>
         )}
       </div>
     )
