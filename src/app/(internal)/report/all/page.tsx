@@ -42,7 +42,7 @@ const GROUPS = [
     pill: "bg-blue-50 text-blue-700 ring-blue-200",
     cols: [
       { idx: 17, name: "Type of Work" },
-      { idx: 19, name: "RFQ Date"     },
+      { idx: 19, name: "Enquiry Date"  },
       { idx: 21, name: "Supplier"     },
       { idx: 24, name: "Confirmed"    },
       { idx: 25, name: "Acceptance"   },
@@ -173,10 +173,11 @@ export default function AllReportsPage() {
   }, [])
 
   const visible = (() => {
-    if (FULL_ACCESS_ROLES.includes(role)) return npds
-    if (role === "rnd_user") return npds.filter(n => (n.raisedBy ?? "rnd_user") === "rnd_user")
-    if (SPOC_NAMES.includes(role)) return npds.filter(n => n.spoc === role && n.stage >= 2)
-    return npds
+    const base = npds.filter(n => !n.parentId) // hide child records from MIS report
+    if (FULL_ACCESS_ROLES.includes(role)) return base
+    if (role === "rnd_user") return base.filter(n => (n.raisedBy ?? "rnd_user") === "rnd_user")
+    if (SPOC_NAMES.includes(role)) return base.filter(n => n.spoc === role && n.stage >= 2)
+    return base
   })()
 
   const filtered = visible.filter(n => {

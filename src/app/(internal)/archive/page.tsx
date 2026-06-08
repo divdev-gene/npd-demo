@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { getStageName } from "@/lib/mockData"
+import { getStageName, NPD_BUNDLE_KEY, getBundleChildren } from "@/lib/mockData"
 import { useNPDs } from "@/lib/npdContext"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Search, AlertTriangle, Star, Activity, Layers, Filter, FileText, BarChart2 } from "lucide-react"
+import { Search, AlertTriangle, Star, Activity, Layers, Filter, FileText, BarChart2, Package } from "lucide-react"
 
 const FULL_ACCESS_ROLES = ["sourcing_head", "super_admin", "rnd_head"]
 const SPOC_NAMES        = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"]
 
-const TYPE_FILTERS = ["All", "NCD", "ECN", "NTD", "Compliance", "Alt Supplier"] as const
+const TYPE_FILTERS = ["All", "NCD", "NPD", "ECN", "NTD", "Compliance", "Alt Supplier"] as const
 type TypeFilter = typeof TYPE_FILTERS[number]
 
 const TAT_ACCENT: Record<string, string> = {
@@ -62,9 +62,12 @@ export default function ArchivePage() {
   const [searchTerm,  setSearchTerm]  = useState("")
   const [typeFilter,  setTypeFilter]  = useState<TypeFilter>("All")
   const [currentRole, setCurrentRole] = useState("rnd_user")
+  const [bundleMap,   setBundleMap]   = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     setCurrentRole(localStorage.getItem("poc_role") || "rnd_user")
+    const raw = localStorage.getItem(NPD_BUNDLE_KEY)
+    if (raw) setBundleMap(JSON.parse(raw))
     const onRoleChange = (e: CustomEvent) => setCurrentRole(e.detail)
     window.addEventListener("rolechange", onRoleChange as EventListener)
     return () => window.removeEventListener("rolechange", onRoleChange as EventListener)
@@ -76,20 +79,30 @@ export default function ArchivePage() {
     return currentRole.startsWith("rnd") || currentRole === "super_admin" || isDqa || n.raisedBy === currentRole
   }
 
+  const isBundleVisibleToSpoc = (n: { id: string; isBundle?: boolean }) => {
+    if (!n.isBundle) return false
+    const childIds = bundleMap[n.id] ?? []
+    return npds.some(c => childIds.includes(c.id) && c.spoc === currentRole)
+  }
+
   const visibleNPDs = (() => {
-    if (FULL_ACCESS_ROLES.includes(currentRole)) return npds.filter(canSeeAltSupplier)
-    if (currentRole === "rnd_user") return npds.filter(n =>
+    // Never show child NCD records directly — they appear inside the bundle detail page
+    const topLevel = npds.filter(n => !n.parentId)
+    if (FULL_ACCESS_ROLES.includes(currentRole)) return topLevel.filter(canSeeAltSupplier)
+    if (currentRole === "rnd_user") return topLevel.filter(n =>
       n.typeOfWork.includes("Alternative Supplier") || (n.raisedBy ?? "rnd_user") === "rnd_user"
     )
-    if (SPOC_NAMES.includes(currentRole)) return npds.filter(n => {
+    if (SPOC_NAMES.includes(currentRole)) return topLevel.filter(n => {
       if (n.typeOfWork.includes("Alternative Supplier")) return n.raisedBy === currentRole
+      if (n.isBundle) return isBundleVisibleToSpoc(n)
       return n.spoc === currentRole && n.stage >= 2
     })
-    return npds.filter(canSeeAltSupplier)
+    return topLevel.filter(canSeeAltSupplier)
   })()
 
   const typeFiltered = typeFilter === "All" ? visibleNPDs : visibleNPDs.filter(n => {
-    if (typeFilter === "NCD")          return n.typeOfWork.includes("NCD") || n.typeOfWork.includes("New Component")
+    if (typeFilter === "NCD")          return (n.typeOfWork.includes("NCD") || n.typeOfWork.includes("New Component")) && !n.isBundle
+    if (typeFilter === "NPD")          return !!n.isBundle || n.typeOfWork.includes("New Product Development")
     if (typeFilter === "ECN")          return n.typeOfWork.includes("ECN") || n.typeOfWork.includes("Engineering Change")
     if (typeFilter === "NTD")          return n.typeOfWork.includes("NTD") || n.typeOfWork.includes("New Tool")
     if (typeFilter === "Compliance")   return n.typeOfWork.includes("Compliance")
@@ -225,6 +238,8 @@ export default function ArchivePage() {
               ) : (
                 filteredNPDs.map(npd => {
                   const accent = TAT_ACCENT[npd.tatHealth] ?? "#10B981"
+                  const children = npd.isBundle ? getBundleChildren(npd.id, npds) : []
+                  const doneCount = children.filter(c => c.stage >= 8).length
                   return (
                     <TableRow
                       key={npd.id}
@@ -237,7 +252,12 @@ export default function ArchivePage() {
                             <Link href={`/npd/${npd.id}`} className="font-mono text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline block">
                               {npd.id}
                             </Link>
-                            {npd.gradeA && (
+                            {npd.isBundle && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full mt-0.5">
+                                <Package className="w-2 h-2" /> Bundle
+                              </span>
+                            )}
+                            {!npd.isBundle && npd.gradeA && (
                               <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full mt-0.5">
                                 <Star className="w-2 h-2" /> Grade A
                               </span>
@@ -251,12 +271,14 @@ export default function ArchivePage() {
                       </TableCell>
                       <TableCell className="py-3.5">
                         <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-                          {npd.typeOfWork.split(' (')[0].split(' ').slice(0, 2).join(' ')}
+                          {npd.isBundle ? "NPD Bundle" : npd.typeOfWork.split(' (')[0].split(' ').slice(0, 2).join(' ')}
                         </span>
-                        <p className="text-[10px] text-slate-400 mt-1 max-w-[140px] truncate">{npd.itemCategory}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 max-w-[140px] truncate">{npd.isBundle ? `${children.length} NCD items` : npd.itemCategory}</p>
                       </TableCell>
                       <TableCell className="py-3.5">
-                        {npd.supplier === "Pending Assignment" ? (
+                        {npd.isBundle ? (
+                          <span className="text-[11px] text-slate-500 italic">Multiple</span>
+                        ) : npd.supplier === "Pending Assignment" ? (
                           <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                             Pending
@@ -266,10 +288,22 @@ export default function ArchivePage() {
                         )}
                       </TableCell>
                       <TableCell className="py-3.5">
-                        <p className="text-[11px] text-slate-500 font-medium mb-1.5 truncate max-w-[160px]">
-                          {getStageName(npd.stage, npd.typeOfWork)}
-                        </p>
-                        <StageProgress stage={npd.stage} />
+                        {npd.isBundle ? (
+                          <div className="space-y-1">
+                            <p className="text-[11px] font-semibold text-slate-700">{doneCount}/{children.length} complete</p>
+                            <div className="h-1 rounded-full bg-slate-100 overflow-hidden w-28">
+                              <div className="h-full rounded-full bg-blue-700 transition-all"
+                                style={{ width: children.length ? `${Math.round((doneCount / children.length) * 100)}%` : "0%" }} />
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-[11px] text-slate-500 font-medium mb-1.5 truncate max-w-[160px]">
+                              {getStageName(npd.stage, npd.typeOfWork)}
+                            </p>
+                            <StageProgress stage={npd.stage} />
+                          </>
+                        )}
                       </TableCell>
                       <TableCell className="py-3.5">
                         <span

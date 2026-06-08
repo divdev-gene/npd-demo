@@ -230,6 +230,7 @@ export default function LeadDashboard() {
 
   const filtered = useMemo(() => {
     let base = npds.filter(n => {
+      if (n.parentId) return false // hide child records from all views
       if (!n.typeOfWork.includes("Alternative Supplier")) return true
       const isDqa = currentRole === "dqa_engineer" || currentRole === "dqa_lead"
       return currentRole.startsWith("rnd") || currentRole === "super_admin" || isDqa || n.raisedBy === currentRole

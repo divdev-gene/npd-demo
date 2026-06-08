@@ -29,6 +29,12 @@ export type NPDRecord = {
   ecnPartNumber?: string;
   ecnPartName?: string;
   ecnChangeDescription?: string;
+  // NPD bundle fields
+  isBundle?: boolean;
+  parentId?: string;
+  bundleItemName?: string;
+  revisionNumber?: string;
+  cplSheetLink?: string;
 };
 
 export const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi", "Rohan Desai"];
@@ -385,6 +391,7 @@ export const AS_RND_APPROVAL_KEY           = "as_rnd_approval_v1"
 export const AS_PP_PRICING_KEY             = "as_pp_pricing_v1"
 export const AS_PP_SOURCING_APPROVED_KEY   = "as_pp_sourcing_approved_v1"
 export const AS_PP_RND_APPROVAL_KEY        = "as_pp_rnd_approval_v1"
+export const NPD_BUNDLE_KEY                = "npd_bundle_v1"
 export const AICM_FETCH_KEY = "aicm_fetch_v1"
 export const SOURCING_APPROVAL_KEY    = "sourcing_approval_v1"
 export const TAT_EXTENSION_REQ_KEY   = "tat_extension_request_v1"
@@ -681,3 +688,7 @@ export const getStageName = (stage: number, type: string) => {
 
   return NPD_STAGES[stage - 1] ?? "Unknown";
 };
+
+export const getBundleChildren = (parentId: string, npds: NPDRecord[]): NPDRecord[] =>
+  npds.filter(n => n.parentId === parentId)
+    .sort((a, b) => a.id.localeCompare(b.id));

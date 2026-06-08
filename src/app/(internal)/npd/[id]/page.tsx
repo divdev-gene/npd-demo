@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import {
-  getStageName, VENDOR_CATALOG, SPOC_NAMES, SPOC_CONTACTS, NPD_STAGES, TOTAL_NPD_STAGES,
+  getStageName, getBundleChildren, NPD_BUNDLE_KEY, VENDOR_CATALOG, SPOC_NAMES, SPOC_CONTACTS, NPD_STAGES, TOTAL_NPD_STAGES,
   MOCK_SUPPLIER_DOCS, SUPPLIER_DOCS_KEY,
   MOCK_VENDOR_QUOTATIONS, VENDOR_QUOTE_APPROVALS_KEY,
   LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY, VENDOR_RFQ_TEMPLATE_KEY, DEFAULT_RFQ_TEMPLATE, VENDOR_EMAIL, COMPOSED_EMAILS_KEY,
@@ -1852,8 +1852,122 @@ export default function NpdDetailView() {
     )
   }
 
+  // ── NPD Bundle overview ───────────────────────────────────────────────────
+  if (npd.isBundle) {
+    const children = getBundleChildren(npd.id, npds)
+    const doneCount = children.filter(c => c.stage >= 8).length
+    const allDone = children.length > 0 && doneCount === children.length
+    const TAT_COLOR: Record<string, string> = { green: "#10b981", amber: "#f59e0b", red: "#ef4444", black: "#dc2626" }
+    const isSpoc = SPOC_NAMES.includes(currentRole)
+
+    return (
+      <div className="space-y-6 max-w-[1200px] mx-auto animate-in fade-in duration-300">
+        {/* Header */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full font-mono">{npd.id}</span>
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[11px] font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                  <Package className="w-3 h-3" /> NPD Bundle
+                </span>
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900">{npd.itemName}</h1>
+              <p className="text-slate-500 text-sm">{npd.productLine} · Raised by {npd.raisedBy ?? "—"}</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Progress</p>
+                <p className="text-2xl font-bold text-slate-800">{doneCount}<span className="text-slate-400 text-base">/{children.length}</span></p>
+                <p className="text-[11px] text-slate-400">sub-requests complete</p>
+              </div>
+              <div className="w-16 h-16">
+                <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f1f5f9" strokeWidth="3.2" />
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke={allDone ? "#10b981" : "#2563eb"} strokeWidth="3.2"
+                    strokeDasharray={`${children.length ? (doneCount / children.length) * 100 : 0} 100`}
+                    strokeLinecap="round" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          {allDone && (
+            <div className="mt-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <p className="text-sm font-semibold text-emerald-800">All sub-requests complete — NPD closed.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Sub-request grid */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em]">Sub-Requests</span>
+            <span className="text-[11px] text-slate-400">{children.length} NCD items</span>
+          </div>
+          {children.length === 0 ? (
+            <div className="flex items-center justify-center py-16 text-sm text-slate-400 italic">No sub-requests found.</div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {children.map(child => {
+                const isDone = child.stage >= 8
+                const isOwned = child.spoc === currentRole
+                const dimmed = isSpoc && !isOwned
+                return (
+                  <div key={child.id} className={`flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors ${dimmed ? "opacity-40" : ""}`}>
+                    <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: TAT_COLOR[child.tatHealth] ?? "#cbd5e1" }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-xs font-bold text-blue-700">{child.id}</p>
+                      <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{child.bundleItemName ?? child.itemName}</p>
+                    </div>
+                    <div className="hidden sm:block w-36 shrink-0">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Commodity</p>
+                      <p className="text-xs text-slate-600 truncate">{child.itemCategory || "—"}</p>
+                    </div>
+                    <div className="hidden md:block w-32 shrink-0">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">SPOC</p>
+                      <p className="text-xs text-slate-600 truncate">{child.spoc}</p>
+                    </div>
+                    <div className="w-36 shrink-0">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Stage</p>
+                      <p className="text-xs text-slate-600 truncate">{getStageName(child.stage, child.typeOfWork)}</p>
+                    </div>
+                    <div className="shrink-0">
+                      {isDone ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                          <CheckCircle2 className="w-3 h-3" /> Done
+                        </span>
+                      ) : dimmed ? (
+                        <span className="text-[11px] text-slate-300 italic px-3">—</span>
+                      ) : (
+                        <Link href={`/npd/${child.id}`}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full hover:bg-blue-100 transition-colors">
+                          Open →
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto animate-in fade-in duration-300">
+
+      {/* Bundle back-link for child records */}
+      {npd.parentId && (
+        <Link href={`/npd/${npd.parentId}`}
+          className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 hover:text-blue-900 transition-colors">
+          <Package className="w-3.5 h-3.5" />
+          ← Back to NPD Bundle {npd.parentId}
+        </Link>
+      )}
 
       {/* NPD Header Card */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
