@@ -459,9 +459,39 @@ Specifically for ECN:
 - Stage 7 card: pushed when `activeStage >= 6`
 - All earlier stages: pushed when `activeStage >= N` (no upcoming treatment needed since they're always done before the next)
 
+---
+
+## NPD Bundle Flow
+
+`typeOfWork === "New Product Development (NPD)"`. A bundle is a parent record containing multiple parallel NCD sub-requests. The parent is created with `isBundle: true`; each child is a full `NPDRecord` with `parentId` set to the parent ID. All child records follow the standard NCD 9-stage workflow independently.
+
+**Child ID format:** `${parentId}-NCD-01`, `${parentId}-NCD-02`, etc.
+
+**Bundle map:** `NPD_BUNDLE_KEY` → `Record<parentId, string[]>` (child IDs). Written at creation, read in list views and the detail page.
+
+**Creation wizard (step 2 for NPD type):**
+- **Shared fields** (top section): Product Line, Manufacturing Location, Priority, TAT Development + TAT Production, Raised By, Remarks — applied to all children identically.
+- **Item grid**: expandable row per NCD sub-request (min 1, max 5). Each row: Item Name, Commodity (auto-shows SPOC via `SPOC_NAME_MAP`), Drawing Link, Sample Qty, Revision No., per-item Remarks. Toggle arrow expands full fields; collapsed shows name + commodity only.
+- On submit: parent record created with `isBundle: true, stage: 2`; N child records created with `typeOfWork: "NCD"`, commodity-routed `spoc`, `parentId`, `bundleItemName`.
+
+**`SPOC_NAME_MAP`** (in `npd/new/page.tsx`): maps commodity → SPOC name. Plastics → Rahul Sharma, Sheet Metal → Karan Mehta, Electronics & Electrical → Priya Rajan, Compressors & Motors → Amit Kumar, Packaging & Others → Varun Joshi, Others → Rohan Desai.
+
+**List view behavior (archive, dashboard, report/all):**
+- Child records (`n.parentId != null`) are **always filtered out** — never shown directly.
+- Parent row shows "NPD Bundle" type label, `X/N complete` progress bar (based on children at stage 8), and "Multiple" in the supplier column.
+- SPOC filter for bundles: a SPOC sees the parent if any child has `spoc === currentRole`.
+
+**Bundle detail page (`/npd/[id]` when `npd.isBundle`):** Renders a bundle overview instead of the stage workflow — header card with donut progress ring, sub-request grid (one row per child: TAT health dot, child ID, item name, commodity, SPOC, current stage name, "Open →" link). SPOC-scoped dimming: rows for other SPOCs are `opacity-40` with no "Open" link. Completion banner shown when all children reach stage 8.
+
+**Child page back-link:** Child NCD pages show a "← Back to NPD Bundle {parentId}" link at the top when `npd.parentId` is set.
+
+**Phase 5 (completion rollup) — not yet implemented:** When a child advances to stage 8, check if all siblings are at stage 8 and update the parent `stage` to 8.
+
+---
+
 ### Key Types (`src/lib/mockData.ts`)
 
-**`NPDRecord`** — core fields include `typeOfWork`, `stage`, `tatHealth`, `tatDaysRemaining`, `totalTat`, `spoc`, `supplier` (the locked final vendor), `priority`. Optional: `manufacturingLocation`, `remarks`, `tatDevelopment`, `tatProduction`. ECN-only optional fields: `ecnPartNumber`, `ecnPartName`, `ecnChangeDescription`.
+**`NPDRecord`** — core fields include `typeOfWork`, `stage`, `tatHealth`, `tatDaysRemaining`, `totalTat`, `spoc`, `supplier` (the locked final vendor), `priority`. Optional: `manufacturingLocation`, `remarks`, `tatDevelopment`, `tatProduction`. ECN-only optional fields: `ecnPartNumber`, `ecnPartName`, `ecnChangeDescription`. Bundle fields: `isBundle?: boolean` (true on parent), `parentId?: string` (set on children), `bundleItemName?: string` (per-child item name shown in bundle grid).
 
 **`VendorRecord`** — `tier: "Tier 1" | "Tier 2" | "Tier 3" | "New"`, `status: "verified" | "audit_overdue" | "new"`, optional `isRequested?: boolean` (set on vendors added via the "Add New Vendor" form, not in the catalog).
 
@@ -503,12 +533,13 @@ All keys exported from `mockData.ts`. Grouping by concern:
 | `AS_PP_SOURCING_APPROVED_KEY` | `Record<npdId, {approvedBy, approvedAt}>` — AS Stage 7 sourcing explicit approval (step 2; gates R&D action) |
 | `AS_PP_RND_APPROVAL_KEY` | `Record<npdId, {approvedBy, approvedAt, remarks?}>` — AS Stage 7 R&D Head final approval; gates stage 8 |
 | `AICM_FETCH_KEY` | `Record<npdId, {...}>` — AICM data fetch cache |
+| `NPD_BUNDLE_KEY` | `Record<parentNpdId, string[]>` — maps parent bundle ID → list of child NCD IDs |
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/lib/mockData.ts` | All types, seed data, constants, localStorage keys |
+| `src/lib/mockData.ts` | All types, seed data, constants, localStorage keys, `getBundleChildren(parentId, npds)` helper |
 | `src/lib/npdContext.tsx` | Global NPD state (Context + localStorage) |
 | `src/lib/reportGenerator.ts` | Excel MIS export via ExcelJS (`@ts-nocheck` due to type conflicts) |
 | `src/app/(internal)/npd/[id]/page.tsx` | Main NPD detail/workflow page — all stage logic (~7900 lines) |
@@ -533,10 +564,11 @@ All keys exported from `mockData.ts`. Grouping by concern:
 
 ### NPD Creation Wizard (`/npd/new`)
 
-Step 1 selects work type (NCD, ECN, Compliance, Cost Innovation). Step 2 layout differs by type:
+Step 1 selects work type (NCD, NPD, ECN, NTD, Compliance, Alternative Supplier). Step 2 layout differs by type:
 
+- **NPD (bundle):** Shared fields section (Product Line, Manufacturing Location, Priority, TAT Dev + TAT Production, Raised By, Remarks) + expandable item grid (1–5 rows, each row = one NCD sub-request). See NPD Bundle Flow section for full details.
 - **ECN**: dedicated two-column form — left "Part Details" (Part Number, Part Name, Existing Supplier from `VENDOR_CATALOG`, Manufacturing Plant, Priority) + right "Change Parameters" (TAT as a single field, Drawing/Spec Sheet Link, Remarks). ECN starts at **stage 1**; `totalTat` is set directly from the single TAT field; `supplier` is set at creation.
-- **NCD/NPD**: left column — Product Line, Item Name, Commodity (auto-routes to SPOC; "Others" reveals custom input), Manufacturing Location, Priority, TAT Development + TAT Production (summed to `totalTat`). Right column — Drawing link, Drawing upload, Remarks, Sample Quantity, optional Revision Number with CPL sheet.
+- **NCD**: left column — Product Line, Item Name, Commodity (auto-routes to SPOC; "Others" reveals custom input), Manufacturing Location, Priority, TAT Development + TAT Production (summed to `totalTat`). Right column — Drawing link, Drawing upload, Remarks, Sample Quantity, optional Revision Number with CPL sheet.
 - **Alt Supplier**: left column has Product Line, Item Name, Manufacturing Location, Priority, TAT fields — **no commodity selection**. Right column has Drawing link, Remarks, and an Existing Part Number field. Starts at **stage 1**.
 - **Compliance/NTD/Cost Innovation**: similar left column plus type-specific right column fields. Compliance starts at stage 3; NTD and Cost Innovation start at stage 2.
 
