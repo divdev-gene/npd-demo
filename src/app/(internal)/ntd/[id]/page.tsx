@@ -4,7 +4,13 @@ import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { CheckCircle2, ArrowLeft, Wrench, Package, ArrowRight } from "lucide-react"
-import { getNTDRecord, getNTDSubStage8Status, getDFMProgress } from "@/lib/ntd"
+import {
+  getNTDRecord,
+  getNTDSubStage8Status,
+  getDFMProgress,
+  getMouldDesignProgress,
+  getTrialProgress,
+} from "@/lib/ntd"
 import type { NTDRecord, NTDStage } from "@/types/ntd"
 import Stage1 from "./stages/Stage1"
 import Stage2 from "./stages/Stage2"
@@ -12,6 +18,7 @@ import Stage3 from "./stages/Stage3"
 import Stage4 from "./stages/Stage4"
 import Stage5 from "./stages/Stage5"
 import Stage6 from "./stages/Stage6"
+import Stage8B from "./stages/Stage8B"
 
 const STAGE_NAMES: Record<NTDStage, string> = {
   1: "Tool Initiation & R&D Brief",
@@ -228,7 +235,159 @@ export default function NTDDetailPage() {
           </div>
         )
       }
-      case 8:
+      case 8: {
+        const mouldProgress = getMouldDesignProgress(id)
+        const trialProgress = getTrialProgress(id)
+        const sub8 = subStage8
+
+        return (
+          <div className="space-y-3">
+            {/* Stage 8 header */}
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                  <span className="text-[12px] font-bold text-blue-700">8</span>
+                </div>
+                <div>
+                  <h2 className="text-[14px] font-bold text-slate-800">{STAGE_NAMES[8]}</h2>
+                  <p className="text-[13px] text-slate-500">{STAGE_DESCRIPTIONS[8]}</p>
+                </div>
+              </div>
+
+              {/* Sub-stage indicator strip */}
+              <div className="flex items-center gap-0">
+                {(["8A", "8B", "8C"] as const).map((ss, idx) => {
+                  const isDone =
+                    (ss === "8A" && (sub8 === "8B" || sub8 === "8C")) ||
+                    (ss === "8B" && sub8 === "8C")
+                  const isCurrent = sub8 === ss
+                  return (
+                    <div key={ss} className="flex items-center flex-1">
+                      <div
+                        className={[
+                          "flex items-center justify-center px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all flex-1",
+                          isDone
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                            : isCurrent
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "bg-slate-50 border-slate-200 text-slate-400",
+                        ].join(" ")}
+                      >
+                        {isDone && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                        {ss}
+                      </div>
+                      {idx < 2 && (
+                        <ArrowRight className="w-4 h-4 text-slate-300 mx-1 shrink-0" />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* 8A — Mould Design card */}
+            <div
+              className={[
+                "rounded-xl border shadow-sm overflow-hidden",
+                sub8 === "8A" ? "border-blue-100" : "border-slate-100",
+              ].join(" ")}
+            >
+              <div className="bg-white px-5 py-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={[
+                      "w-6 h-6 rounded-md flex items-center justify-center shrink-0",
+                      sub8 === "8A"
+                        ? "bg-blue-50 border border-blue-100"
+                        : "bg-emerald-50 border border-emerald-100",
+                    ].join(" ")}
+                  >
+                    {sub8 !== "8A" ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <span className="text-[10px] font-bold text-blue-700">8A</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-800">Mould Design Review</p>
+                    <p className="text-[11px] text-slate-400">
+                      {mouldProgress.approved} / {mouldProgress.total} components approved
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/ntd/${id}/mould-design`}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                >
+                  Open Mould Design
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* 8B — Manufacturing (inline component) */}
+            <Stage8B
+              ntdId={id}
+              currentRole={currentRole}
+              onStageAdvance={handleStageAdvance}
+            />
+
+            {/* 8C — Trials card */}
+            <div
+              className={[
+                "rounded-xl border shadow-sm overflow-hidden",
+                sub8 === "8C" ? "border-blue-100" : "border-slate-100",
+              ].join(" ")}
+            >
+              <div
+                className={[
+                  "bg-white px-5 py-4 flex items-center justify-between flex-wrap gap-3",
+                  sub8 !== "8C" ? "opacity-60" : "",
+                ].join(" ")}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={[
+                      "w-6 h-6 rounded-md flex items-center justify-center shrink-0",
+                      sub8 === "8C"
+                        ? "bg-blue-50 border border-blue-100"
+                        : "bg-slate-100 border border-slate-200",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "text-[10px] font-bold",
+                        sub8 === "8C" ? "text-blue-700" : "text-slate-400",
+                      ].join(" ")}
+                    >
+                      8C
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-800">Trial Samples &amp; Testing</p>
+                    <p className="text-[11px] text-slate-400">
+                      {trialProgress.passed} / {trialProgress.total} components passed across all trials
+                    </p>
+                  </div>
+                </div>
+                {sub8 === "8C" ? (
+                  <Link
+                    href={`/ntd/${id}/trials`}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                  >
+                    Open Trials
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                ) : (
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    Locked — complete 8B first
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      }
       case 9:
         return (
           <ComingSoonCard
