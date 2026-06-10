@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from "react"
 import {
   FilePlus, Archive, CheckCircle, BarChart3, Settings,
-  ChevronLeft, ChevronRight, LogOut, Database,
+  ChevronLeft, ChevronRight, LogOut, Database, Wrench,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -16,6 +16,9 @@ const ROLE_META: Record<string, { name: string; label: string; colorClass: strin
   "Priya Rajan":  { name: "Priya Rajan",      label: "Electronics SPOC",    colorClass: "bg-teal-600",   dot: "bg-teal-500"   },
   "Amit Kumar":   { name: "Amit Kumar",       label: "Compressors SPOC",    colorClass: "bg-teal-600",   dot: "bg-teal-500"   },
   "Varun Joshi":  { name: "Varun Joshi",      label: "Packaging SPOC",      colorClass: "bg-teal-600",   dot: "bg-teal-500"   },
+  "Rohan Desai":  { name: "Rohan Desai",      label: "Others SPOC",         colorClass: "bg-teal-600",   dot: "bg-teal-500"   },
+  dqa_engineer:   { name: "Arjun Mehta",      label: "DQA Engineer",        colorClass: "bg-cyan-600",   dot: "bg-cyan-500"   },
+  dqa_lead:       { name: "Seema Pillai",     label: "DQA Lead",            colorClass: "bg-cyan-700",   dot: "bg-cyan-600"   },
   sourcing_head:  { name: "Sourcing Head",    label: "Sourcing Leadership", colorClass: "bg-blue-800",   dot: "bg-blue-700"   },
   super_admin:    { name: "Super Admin",      label: "Full Access",         colorClass: "bg-slate-700",  dot: "bg-slate-500"  },
 }
@@ -31,15 +34,16 @@ type NavLink = {
   roles?: string[]  // if set, only shown to these roles; omit for all roles
 }
 
-const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi"]
-const ALL_ROLES  = ["rnd_user", "rnd_head", ...SPOC_NAMES, "sourcing_head", "super_admin"]
+const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi", "Rohan Desai"]
+const DQA_ROLES  = ["dqa_engineer", "dqa_lead"]
+const ALL_ROLES  = ["rnd_user", "rnd_head", ...SPOC_NAMES, ...DQA_ROLES, "sourcing_head", "super_admin"]
 
 const NAV: NavLink[] = [
   {
     href: '/npd/new',
     label: 'New Request',
     icon: FilePlus,
-    roles: ['rnd_user', 'rnd_head', 'super_admin'],
+    roles: ['rnd_user', 'rnd_head', ...SPOC_NAMES, 'sourcing_head', 'super_admin'],
   },
   {
     href: '/dashboard/lead',
@@ -48,14 +52,19 @@ const NAV: NavLink[] = [
   },
   {
     href: '/archive',
-    label: 'All NPDs',
+    label: 'All Requests',
     icon: Archive,
+  },
+  {
+    href: '/ntd',
+    label: 'Tool Development',
+    icon: Wrench,
   },
   {
     href: '/approvals',
     label: 'Approvals',
     icon: CheckCircle,
-    roles: ['rnd_head', ...SPOC_NAMES, 'sourcing_head', 'super_admin'],
+    roles: ['rnd_head', ...SPOC_NAMES, ...DQA_ROLES, 'sourcing_head', 'super_admin'],
   },
   {
     href: '/mdm',
