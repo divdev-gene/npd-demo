@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { CheckCircle2, ArrowLeft, Wrench, Package } from "lucide-react"
-import { getNTDRecord, getNTDSubStage8Status } from "@/lib/ntd"
+import { CheckCircle2, ArrowLeft, Wrench, Package, ArrowRight } from "lucide-react"
+import { getNTDRecord, getNTDSubStage8Status, getDFMProgress } from "@/lib/ntd"
 import type { NTDRecord, NTDStage } from "@/types/ntd"
 import Stage1 from "./stages/Stage1"
 import Stage2 from "./stages/Stage2"
@@ -198,7 +198,36 @@ export default function NTDDetailPage() {
         return <Stage5 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
       case 6:
         return <Stage6 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
-      case 7:
+      case 7: {
+        const dfmProgress = getDFMProgress(id)
+        return (
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                <span className="text-[12px] font-bold text-blue-700">7</span>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-[14px] font-bold text-slate-800 mb-1">
+                  {STAGE_NAMES[7]}
+                </h2>
+                <p className="text-[13px] text-slate-500 mb-4">
+                  {STAGE_DESCRIPTIONS[7]}
+                </p>
+                <Link
+                  href={`/ntd/${id}/dfm`}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                >
+                  Open DFM Review
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Progress: {dfmProgress.approved} / {dfmProgress.total} components approved
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      }
       case 8:
       case 9:
         return (
