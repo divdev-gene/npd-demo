@@ -3,9 +3,15 @@
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { CheckCircle2, Circle, ArrowLeft, Wrench, Package } from "lucide-react"
-import { getNTDRecord, getNTDInitiation, getNTDSubStage8Status } from "@/lib/ntd"
+import { CheckCircle2, ArrowLeft, Wrench, Package } from "lucide-react"
+import { getNTDRecord, getNTDSubStage8Status } from "@/lib/ntd"
 import type { NTDRecord, NTDStage } from "@/types/ntd"
+import Stage1 from "./stages/Stage1"
+import Stage2 from "./stages/Stage2"
+import Stage3 from "./stages/Stage3"
+import Stage4 from "./stages/Stage4"
+import Stage5 from "./stages/Stage5"
+import Stage6 from "./stages/Stage6"
 
 const STAGE_NAMES: Record<NTDStage, string> = {
   1: "Tool Initiation & R&D Brief",
@@ -119,6 +125,38 @@ function StageStepper({
   )
 }
 
+function ComingSoonCard({ stage, name, description }: { stage: NTDStage; name: string; description: string }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+          <span className="text-[12px] font-bold text-blue-700">{stage}</span>
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <h2 className="text-[14px] font-bold text-slate-800">{name}</h2>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-100">
+              Implementation coming soon
+            </span>
+          </div>
+          <p className="text-[13px] text-slate-500">{description}</p>
+
+          {/* Placeholder content */}
+          <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+            <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-[13px] font-semibold text-slate-400">
+              Stage {stage} — {name}
+            </p>
+            <p className="text-[12px] text-slate-300 mt-1">
+              Stage UI will be available in a future phase.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function NTDDetailPage() {
   const params = useParams()
   const id = typeof params.id === "string" ? params.id : ""
@@ -137,6 +175,43 @@ export default function NTDDetailPage() {
     window.addEventListener("rolechange", onRoleChange as EventListener)
     return () => window.removeEventListener("rolechange", onRoleChange as EventListener)
   }, [id])
+
+  function handleStageAdvance() {
+    const r = getNTDRecord(id)
+    if (r) {
+      setRecord(r)
+      setSubStage8(getNTDSubStage8Status(id))
+    }
+  }
+
+  function renderCurrentStage(stage: NTDStage) {
+    switch (stage) {
+      case 1:
+        return <Stage1 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
+      case 2:
+        return <Stage2 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
+      case 3:
+        return <Stage3 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
+      case 4:
+        return <Stage4 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
+      case 5:
+        return <Stage5 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
+      case 6:
+        return <Stage6 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
+      case 7:
+      case 8:
+      case 9:
+        return (
+          <ComingSoonCard
+            stage={stage}
+            name={STAGE_NAMES[stage]}
+            description={STAGE_DESCRIPTIONS[stage]}
+          />
+        )
+      default:
+        return null
+    }
+  }
 
   // Loading
   if (record === undefined) {
@@ -170,8 +245,6 @@ export default function NTDDetailPage() {
   }
 
   const currentStage = record.current_stage
-  const stageName = STAGE_NAMES[currentStage]
-  const stageDesc = STAGE_DESCRIPTIONS[currentStage]
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
@@ -231,34 +304,8 @@ export default function NTDDetailPage() {
           <StageStepper currentStage={currentStage} subStage8={subStage8} />
         </div>
 
-        {/* Current stage placeholder card */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
-              <span className="text-[12px] font-bold text-blue-700">{currentStage}</span>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <h2 className="text-[14px] font-bold text-slate-800">{stageName}</h2>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-100">
-                  Implementation coming soon
-                </span>
-              </div>
-              <p className="text-[13px] text-slate-500">{stageDesc}</p>
-
-              {/* Placeholder content */}
-              <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-                <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-[13px] font-semibold text-slate-400">
-                  Stage {currentStage} — {stageName}
-                </p>
-                <p className="text-[12px] text-slate-300 mt-1">
-                  Stage UI will be available in a future phase.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Current stage */}
+        {renderCurrentStage(currentStage)}
 
       </div>
     </div>
