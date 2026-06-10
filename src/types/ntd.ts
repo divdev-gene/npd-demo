@@ -282,6 +282,7 @@ export type NTDRecord = {
   current_stage: NTDStage
   supplier?: string              // set at Stage 5
   component_count: number        // set at Stage 1, immutable
+  spoc?: string                  // optional SPOC name (e.g. "Rohan Desai")
 }
 
 export type NTDStage = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
