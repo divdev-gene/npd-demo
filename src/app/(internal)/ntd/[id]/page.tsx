@@ -35,6 +35,8 @@ const STAGE_NAMES: Record<NTDStage, string> = {
   9: "Tool Commissioning & Dispatch",
 }
 
+const STAGE_NAMES_ARRAY = ([1, 2, 3, 4, 5, 6, 7, 8, 9] as NTDStage[]).map(s => STAGE_NAMES[s])
+
 // Card accent colours per stage
 const STAGE_ACCENT = {
   1: { border: "border-violet-300",  bg: "bg-violet-50/30",  icon: "text-violet-600",  badge: "bg-violet-100 text-violet-700" },
@@ -491,103 +493,123 @@ export default function NTDDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      {/* Page header */}
-      <div className="bg-white border-b border-slate-100 px-6 py-4">
-        <Link
-          href="/ntd"
-          className="inline-flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-800 mb-3 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          NTD List
-        </Link>
+    <div className="space-y-6 max-w-[1400px] mx-auto animate-in fade-in duration-300 px-6 py-6">
 
-        {/* NTD header card */}
-        <div className="flex items-start justify-between flex-wrap gap-3">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
-              <Wrench className="w-4.5 h-4.5 text-white" />
+      {/* Back link */}
+      <Link
+        href="/ntd"
+        className="inline-flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-800 transition-colors"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" />
+        NTD List
+      </Link>
+
+      {/* NTD Complete banner */}
+      {ntdComplete && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <div>
+            <p className="text-[14px] font-bold text-emerald-800">NTD Complete</p>
+            <p className="text-[12px] text-emerald-600">
+              All 9 stages are done. This NTD has been fully commissioned and closed.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* NTD Header Card */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col lg:flex-row justify-between items-start gap-6">
+          {/* Left column */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">{record.id}</span>
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] font-mono font-bold text-slate-400">{record.id}</span>
-                {currentStage >= 9 ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                    <CheckCircle2 className="w-3 h-3" /> Complete
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
-                    Stage {currentStage} / 9
-                  </span>
-                )}
-              </div>
-              <h1 className="text-[16px] font-bold text-slate-900 mt-0.5 leading-tight">{record.title}</h1>
-              <div className="flex items-center gap-3 mt-1 flex-wrap">
-                <span className="text-[11px] text-slate-400">
-                  <span className="font-medium text-slate-600">{record.component_count}</span> component{record.component_count !== 1 ? "s" : ""}
-                </span>
-                {record.supplier && (
-                  <span className="text-[11px] text-slate-400">
-                    Supplier: <span className="font-medium text-slate-600">{record.supplier}</span>
-                  </span>
-                )}
-                <span className="text-[11px] text-slate-400">
-                  Created by: <span className="font-medium text-slate-600">{record.created_by}</span>
-                </span>
-              </div>
+            <h1 className="text-2xl font-bold text-slate-900">{record.title}</h1>
+            <p className="text-slate-500 text-sm">New Tool Development · {record.component_count} Components</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-slate-100 text-slate-700 border-none text-xs font-semibold px-2 py-0.5 rounded-full">New Tool Development (NTD)</span>
             </div>
+          </div>
+          {/* Right column: 2×2 info chips */}
+          <div className="grid grid-cols-2 gap-3 shrink-0">
+            {/* Created By (used as SPOC equivalent) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Created By</p>
+              <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{record.created_by}</p>
+            </div>
+            {/* Locked Supplier */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Locked Supplier</p>
+              <p className="text-sm font-semibold text-slate-800 mt-0.5 leading-tight line-clamp-2">
+                {record.supplier
+                  ? record.supplier
+                  : <span className="text-slate-400 italic font-normal text-xs">Pending Assignment</span>}
+              </p>
+            </div>
+            {/* Components chip */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Components</p>
+              <p className="text-sm font-bold text-slate-800 mt-0.5">{record.component_count}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">in this tool</p>
+            </div>
+            {/* Current Stage chip */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
+              <p className="text-sm font-semibold text-blue-900 mt-0.5 leading-tight line-clamp-2">
+                {currentStage}. {STAGE_NAMES[currentStage]}
+              </p>
+            </div>
+          </div>
+        </div>
+        {/* Demo Controls strip */}
+        <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Demo Controls</span>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={currentStage <= 1}
+              onClick={() => { updateNTDStage(id, (currentStage - 1) as NTDStage); handleStageAdvance() }}
+              className="text-xs h-7 px-3 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              ← Previous Stage
+            </button>
+            <button
+              disabled={currentStage >= 9}
+              onClick={() => { updateNTDStage(id, (currentStage + 1) as NTDStage); handleStageAdvance() }}
+              className="text-xs h-7 px-3 rounded-md bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Demo: Next Stage →
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto px-6 py-6 pb-24 space-y-3">
-        {/* NTD Complete banner */}
-        {ntdComplete && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <div>
-              <p className="text-[14px] font-bold text-emerald-800">NTD Complete</p>
-              <p className="text-[12px] text-emerald-600">
-                All 9 stages are done. This NTD has been fully commissioned and closed.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {[...cards].reverse()}
+      {/* Stage Progress — horizontal pill stepper */}
+      <div className="bg-white px-6 py-4 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+        <div className="flex min-w-[700px] gap-1">
+          {STAGE_NAMES_ARRAY.map((name, idx) => {
+            const step = idx + 1
+            const status = step < currentStage ? "complete" : step === currentStage ? "current" : "upcoming"
+            const chipBg = status === "complete" ? "bg-blue-900"
+              : status === "current" ? "bg-blue-700 ring-2 ring-blue-400 ring-offset-1"
+              : "bg-slate-100"
+            const labelColor = (status === "complete" || status === "current") ? "text-blue-200" : "text-slate-400"
+            const nameColor = status === "complete" ? "text-white"
+              : status === "current" ? "text-white"
+              : "text-slate-400"
+            return (
+              <div key={step} className={`flex-1 rounded-md px-2 py-2.5 flex flex-col gap-1 transition-all duration-300 ${chipBg}`}>
+                <span className={`text-[9px] font-bold uppercase tracking-wider ${labelColor}`}>Step {step}</span>
+                <span className={`text-[11px] font-semibold leading-tight ${nameColor}`}>{name}</span>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Demo toolbar — fixed bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900 border-t border-slate-700 px-6 py-2.5 flex items-center gap-4">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Demo</span>
-        <button
-          disabled={currentStage <= 1}
-          onClick={() => { updateNTDStage(id, (currentStage - 1) as NTDStage); handleStageAdvance() }}
-          className="px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
-        >
-          ← Prev
-        </button>
-        <span className="text-[12px] font-bold text-white tabular-nums">Stage {currentStage} / 9</span>
-        <button
-          disabled={currentStage >= 9}
-          onClick={() => { updateNTDStage(id, (currentStage + 1) as NTDStage); handleStageAdvance() }}
-          className="px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
-        >
-          Next →
-        </button>
-        <span className="text-slate-600 text-sm">|</span>
-        <span className="text-[11px] text-slate-400">Jump:</span>
-        <select
-          value={currentStage}
-          onChange={e => { updateNTDStage(id, Number(e.target.value) as NTDStage); handleStageAdvance() }}
-          className="bg-slate-700 border border-slate-600 text-slate-200 text-[12px] rounded-lg px-2 py-1 focus:outline-none"
-        >
-          {([1, 2, 3, 4, 5, 6, 7, 8, 9] as NTDStage[]).map(s => (
-            <option key={s} value={s}>Stage {s}</option>
-          ))}
-        </select>
-        <span className="ml-auto text-[10px] text-slate-600 italic">Demo Mode</span>
+      {/* Card stack */}
+      <div className="space-y-3">
+        {[...cards].reverse()}
       </div>
     </div>
   )
