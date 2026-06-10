@@ -10,6 +10,7 @@ import {
   getDFMProgress,
   getMouldDesignProgress,
   getTrialProgress,
+  isNTDComplete,
 } from "@/lib/ntd"
 import type { NTDRecord, NTDStage } from "@/types/ntd"
 import Stage1 from "./stages/Stage1"
@@ -19,6 +20,7 @@ import Stage4 from "./stages/Stage4"
 import Stage5 from "./stages/Stage5"
 import Stage6 from "./stages/Stage6"
 import Stage8B from "./stages/Stage8B"
+import Stage9 from "./stages/Stage9"
 
 const STAGE_NAMES: Record<NTDStage, string> = {
   1: "Tool Initiation & R&D Brief",
@@ -171,12 +173,14 @@ export default function NTDDetailPage() {
   const [record, setRecord] = useState<NTDRecord | null | undefined>(undefined)
   const [subStage8, setSubStage8] = useState<"8A" | "8B" | "8C">("8A")
   const [currentRole, setCurrentRole] = useState("rnd_user")
+  const [ntdComplete, setNtdComplete] = useState(false)
 
   useEffect(() => {
     setCurrentRole(localStorage.getItem("poc_role") || "rnd_user")
     const r = getNTDRecord(id)
     setRecord(r ?? null)
     setSubStage8(getNTDSubStage8Status(id))
+    setNtdComplete(isNTDComplete(id))
 
     const onRoleChange = (e: CustomEvent) => setCurrentRole(e.detail)
     window.addEventListener("rolechange", onRoleChange as EventListener)
@@ -188,6 +192,7 @@ export default function NTDDetailPage() {
     if (r) {
       setRecord(r)
       setSubStage8(getNTDSubStage8Status(id))
+      setNtdComplete(isNTDComplete(id))
     }
   }
 
@@ -390,10 +395,10 @@ export default function NTDDetailPage() {
       }
       case 9:
         return (
-          <ComingSoonCard
-            stage={stage}
-            name={STAGE_NAMES[stage]}
-            description={STAGE_DESCRIPTIONS[stage]}
+          <Stage9
+            ntdId={id}
+            currentRole={currentRole}
+            onStageAdvance={handleStageAdvance}
           />
         )
       default:
@@ -486,6 +491,19 @@ export default function NTDDetailPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 py-6 space-y-6">
+
+        {/* NTD Complete banner (stage 9 fully closed) */}
+        {ntdComplete && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <div>
+              <p className="text-[14px] font-bold text-emerald-800">NTD Complete</p>
+              <p className="text-[12px] text-emerald-600">
+                All 9 stages are done. This NTD has been fully commissioned and closed.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Stage stepper */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm px-5 py-4">

@@ -21,7 +21,8 @@ import {
   setNTDMfgStatus,
   getNTDTrials,
   setNTDTrials,
-  getNextTrialNo,
+  getNTDInspection,
+  setNTDInspection,
 } from "@/lib/ntd"
 import type {
   NTDRecord,
@@ -30,6 +31,7 @@ import type {
   NTDMouldComponent,
   NTDMouldIteration,
   NTDMfgStatusData,
+  NTDInspectionData,
 } from "@/types/ntd"
 
 // ─── DFM Helpers ──────────────────────────────────────────────
@@ -618,6 +620,81 @@ function Stage8CSupplierView({ ntdId, onDispatched }: { ntdId: string; onDispatc
   )
 }
 
+// ─── Stage 9 — Final Inspection Report (supplier) ────────────
+
+function Stage9InspectionView({ ntdId }: { ntdId: string }) {
+  const [reportDoc, setReportDoc] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [inspection, setInspectionState] = useState<NTDInspectionData | null>(null)
+
+  useEffect(() => {
+    setInspectionState(getNTDInspection(ntdId))
+  }, [ntdId])
+
+  if (inspection) {
+    return (
+      <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-4 py-4 flex items-center gap-3">
+        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div>
+          <p className="text-[13px] font-bold text-emerald-800">Report Submitted</p>
+          <p className="text-[11px] text-emerald-600">
+            Submitted at {new Date(inspection.submitted_at).toLocaleString()}
+          </p>
+          <a
+            href={inspection.report_doc}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-emerald-700 underline mt-0.5 inline-block"
+          >
+            View Report
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  function handleSubmit() {
+    if (!reportDoc.trim()) return
+    setSubmitting(true)
+    const data: NTDInspectionData = {
+      report_doc: reportDoc.trim(),
+      submitted_by: "supplier",
+      submitted_at: new Date().toISOString(),
+    }
+    setNTDInspection(ntdId, data)
+    setInspectionState(data)
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-100 bg-white shadow-sm p-4 space-y-3">
+      <p className="text-[13px] font-bold text-slate-800">Submit Final Inspection Report</p>
+      <p className="text-[12px] text-slate-500">
+        Upload a link to the final inspection report confirming tool quality before commissioning.
+      </p>
+      <div>
+        <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+          Report Document Link <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-300"
+          placeholder="https://drive.google.com/…"
+          value={reportDoc}
+          onChange={(e) => setReportDoc(e.target.value)}
+        />
+      </div>
+      <button
+        onClick={handleSubmit}
+        disabled={submitting || !reportDoc.trim()}
+        className="px-4 py-2 rounded-lg text-[12px] font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {submitting ? "Submitting…" : "Submit Final Inspection Report"}
+      </button>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────
 
 export default function SupplierNTDPage() {
@@ -695,19 +772,38 @@ export default function SupplierNTDPage() {
   }
 
   const currentStage = record.current_stage
+  const safeRecord = record
 
-  // Not yet at DFM stage
+  // ── Shared page header ────────────────────────────────────────
+
+  function PageHeader({ subtitle }: { subtitle: string }) {
+    return (
+      <div className="bg-white border-b border-slate-100 px-6 py-4">
+        <div className="max-w-2xl mx-auto">
+          <p className="text-[11px] font-mono text-slate-400 mb-0.5">{safeRecord.id}</p>
+          <h1 className="text-[16px] font-bold text-slate-900">{safeRecord.title}</h1>
+          <p className="text-[12px] text-slate-500 mt-0.5">{subtitle}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Stages 1–6: no supplier action ───────────────────────────
+
   if (currentStage < 7) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-center px-4">
-        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-          <Clock className="w-6 h-6 text-slate-400" />
+      <div className="min-h-screen bg-slate-50">
+        <PageHeader subtitle={`Stage ${currentStage} — No Supplier Action Required`} />
+        <div className="max-w-2xl mx-auto px-6 py-12 flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+            <Clock className="w-6 h-6 text-slate-400" />
+          </div>
+          <p className="text-[15px] font-bold text-slate-800">Stage {currentStage} In Progress</p>
+          <p className="text-[12px] text-slate-400 mt-1">
+            DFM file submission will be available when Stage 7 begins. No supplier action required at
+            this time.
+          </p>
         </div>
-        <p className="text-[15px] font-bold text-slate-800">Stage {currentStage} In Progress</p>
-        <p className="text-[12px] text-slate-400 mt-1">
-          DFM file submission will be available when Stage 7 begins. No supplier action required at
-          this time.
-        </p>
       </div>
     )
   }
@@ -717,16 +813,19 @@ export default function SupplierNTDPage() {
   if (currentStage === 7) {
     if (dfmAllApproved) {
       return (
-        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-center px-4">
-          <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mb-3">
-            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+        <div className="min-h-screen bg-slate-50">
+          <PageHeader subtitle="DFM File Submission — Stage 7" />
+          <div className="max-w-2xl mx-auto px-6 py-12 flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mb-3">
+              <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            </div>
+            <p className="text-[15px] font-bold text-slate-800">
+              All Components Approved — DFM Complete
+            </p>
+            <p className="text-[12px] text-slate-500 mt-1">
+              All {totalCount} components have been approved. The NTD is proceeding to Stage 8.
+            </p>
           </div>
-          <p className="text-[15px] font-bold text-slate-800">
-            All Components Approved — DFM Complete
-          </p>
-          <p className="text-[12px] text-slate-500 mt-1">
-            All {totalCount} components have been approved. The NTD is proceeding to Stage 8.
-          </p>
         </div>
       )
     }
@@ -805,100 +904,136 @@ export default function SupplierNTDPage() {
 
   // ── Stage 8 ──────────────────────────────────────────────────
 
-  return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-100 px-6 py-4">
-        <div className="max-w-2xl mx-auto">
-          <p className="text-[11px] font-mono text-slate-400 mb-0.5">{record.id}</p>
-          <h1 className="text-[16px] font-bold text-slate-900">{record.title}</h1>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-[12px] text-slate-500">Stage 8 —</span>
-            <span className="text-[12px] font-semibold text-blue-700">
-              {subStage8 === "8A"
-                ? "Mould Design Review"
-                : subStage8 === "8B"
-                ? "Manufacturing"
-                : "Trial Samples & Testing"}
-            </span>
+  if (currentStage === 8) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {/* Header */}
+        <div className="bg-white border-b border-slate-100 px-6 py-4">
+          <div className="max-w-2xl mx-auto">
+            <p className="text-[11px] font-mono text-slate-400 mb-0.5">{record.id}</p>
+            <h1 className="text-[16px] font-bold text-slate-900">{record.title}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[12px] text-slate-500">Stage 8 —</span>
+              <span className="text-[12px] font-semibold text-blue-700">
+                {subStage8 === "8A"
+                  ? "Mould Design Review"
+                  : subStage8 === "8B"
+                  ? "Manufacturing"
+                  : "Trial Samples & Testing"}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-2xl mx-auto px-6 py-6 space-y-6">
-        {/* 8A — Mould Design */}
-        {subStage8 === "8A" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h2 className="text-[14px] font-bold text-slate-800">8A — Mould Design Submission</h2>
-              <div className="text-right">
-                <p className="text-[12px] font-semibold text-slate-600">
-                  {mouldApprovedCount} / {mouldTotal} Approved
-                </p>
-                <div className="w-28 h-2 rounded-full bg-slate-100 overflow-hidden mt-1 ml-auto">
-                  <div
-                    className="h-full rounded-full bg-emerald-500 transition-all"
-                    style={{
-                      width: mouldTotal > 0 ? `${Math.round((mouldApprovedCount / mouldTotal) * 100)}%` : "0%",
-                    }}
-                  />
+        <div className="max-w-2xl mx-auto px-6 py-6 space-y-6">
+          {/* 8A — Mould Design */}
+          {subStage8 === "8A" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h2 className="text-[14px] font-bold text-slate-800">8A — Mould Design Submission</h2>
+                <div className="text-right">
+                  <p className="text-[12px] font-semibold text-slate-600">
+                    {mouldApprovedCount} / {mouldTotal} Approved
+                  </p>
+                  <div className="w-28 h-2 rounded-full bg-slate-100 overflow-hidden mt-1 ml-auto">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      style={{
+                        width: mouldTotal > 0 ? `${Math.round((mouldApprovedCount / mouldTotal) * 100)}%` : "0%",
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
+
+              <p className="text-[12px] text-slate-500">
+                Submit Mould Design 3D file and MFA PPT for each component. Both R&amp;D and Sourcing
+                will review within 24 hours.
+              </p>
+
+              {mouldActionable.length === 0 ? (
+                <div className="rounded-xl border border-yellow-100 bg-yellow-50/50 px-4 py-6 text-center">
+                  <Clock className="w-6 h-6 text-yellow-500 mx-auto mb-2" />
+                  <p className="text-[13px] font-semibold text-yellow-800">
+                    All submitted files are under review
+                  </p>
+                  <p className="text-[11px] text-yellow-600 mt-1">
+                    Awaiting R&amp;D and Sourcing review.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {mouldActionable.map((comp) => (
+                    <MouldSubmitCard
+                      key={comp.componentId}
+                      component={comp}
+                      ntdId={id}
+                      onSubmitted={refresh}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
+          )}
 
-            <p className="text-[12px] text-slate-500">
-              Submit Mould Design 3D file and MFA PPT for each component. Both R&amp;D and Sourcing
-              will review within 24 hours.
-            </p>
+          {/* 8B — Manufacturing */}
+          {subStage8 === "8B" && (
+            <div className="space-y-4">
+              <h2 className="text-[14px] font-bold text-slate-800">8B — Manufacturing</h2>
+              <p className="text-[12px] text-slate-500">
+                Confirm manufacturing start, post status updates, and mark complete when the sample
+                batch is ready.
+              </p>
+              <Stage8BSupplierView ntdId={id} />
+            </div>
+          )}
 
-            {mouldActionable.length === 0 ? (
-              <div className="rounded-xl border border-yellow-100 bg-yellow-50/50 px-4 py-6 text-center">
-                <Clock className="w-6 h-6 text-yellow-500 mx-auto mb-2" />
-                <p className="text-[13px] font-semibold text-yellow-800">
-                  All submitted files are under review
-                </p>
-                <p className="text-[11px] text-yellow-600 mt-1">
-                  Awaiting R&amp;D and Sourcing review.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {mouldActionable.map((comp) => (
-                  <MouldSubmitCard
-                    key={comp.componentId}
-                    component={comp}
-                    ntdId={id}
-                    onSubmitted={refresh}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+          {/* 8C — Sample dispatch */}
+          {subStage8 === "8C" && (
+            <div className="space-y-4">
+              <h2 className="text-[14px] font-bold text-slate-800">8C — Trial Sample Dispatch</h2>
+              <p className="text-[12px] text-slate-500">
+                When the sourcing team initiates a new trial, dispatch the sample batch and confirm
+                below.
+              </p>
+              <Stage8CSupplierView ntdId={id} onDispatched={refresh} />
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
-        {/* 8B — Manufacturing */}
-        {subStage8 === "8B" && (
-          <div className="space-y-4">
-            <h2 className="text-[14px] font-bold text-slate-800">8B — Manufacturing</h2>
-            <p className="text-[12px] text-slate-500">
-              Confirm manufacturing start, post status updates, and mark complete when the sample
-              batch is ready.
-            </p>
-            <Stage8BSupplierView ntdId={id} />
-          </div>
-        )}
+  // ── Stage 9 — Final Inspection Report ────────────────────────
 
-        {/* 8C — Sample dispatch */}
-        {subStage8 === "8C" && (
-          <div className="space-y-4">
-            <h2 className="text-[14px] font-bold text-slate-800">8C — Trial Sample Dispatch</h2>
-            <p className="text-[12px] text-slate-500">
-              When the sourcing team initiates a new trial, dispatch the sample batch and confirm
-              below.
-            </p>
-            <Stage8CSupplierView ntdId={id} onDispatched={refresh} />
-          </div>
-        )}
+  if (currentStage === 9) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <PageHeader subtitle="Final Inspection Report — Stage 9" />
+        <div className="max-w-2xl mx-auto px-6 py-6 space-y-4">
+          <p className="text-[12px] text-slate-500">
+            Submit the final inspection report to confirm tool quality before commissioning and
+            dispatch.
+          </p>
+          <Stage9InspectionView ntdId={id} />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Fallback for any unexpected stage ────────────────────────
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <PageHeader subtitle={`Stage ${currentStage} In Progress`} />
+      <div className="max-w-2xl mx-auto px-6 py-12 flex flex-col items-center text-center">
+        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+          <Clock className="w-6 h-6 text-slate-400" />
+        </div>
+        <p className="text-[15px] font-bold text-slate-800">Stage {currentStage} In Progress</p>
+        <p className="text-[12px] text-slate-400 mt-1">
+          No supplier action required at this stage.
+        </p>
       </div>
     </div>
   )
