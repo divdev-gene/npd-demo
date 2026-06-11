@@ -873,3 +873,94 @@ Supplier tracking view (their own history only):
 10. Supplier portal never shows approved components — only actionable ones
 11. New trial cannot start until failed components complete Stage 8A redesign loop
 12. EXIM role can only act in Stage 11 sub-step 4 — no access elsewhere
+
+---
+
+## ADDENDUM — Per-Commodity Multi-Supplier Model (v2.1+)
+
+NTD now supports **multiple suppliers per tool** via commodity-based routing. One supplier per commodity selected at Stage 5; subsequent stages (6–11) are tracked per commodity.
+
+### Commodities
+
+**`NTD_COMMODITIES`** constant:
+```ts
+["Sheet Metal", "Plastics", "EPS"]
+```
+
+### NTDComponent Structure (Stage 6)
+
+Components now include a commodity field:
+```ts
+type NTDComponent = {
+  componentId: string      // "C01", "C02" etc.
+  name: string
+  commodity: string        // "Sheet Metal" | "Plastics" | "EPS"
+}
+```
+
+### Stage-by-Stage Changes
+
+**Stage 1:** Component rows include commodity dropdown selector (required).
+
+**Stage 3 (RFQ Dispatch):** Vendors tagged by commodity in `ntd_rfq_{ntdId}`. Sourcing pools & filters vendors per commodity when dispatching.
+
+**Stage 5 (Supplier Selection):** `ntd_selection_{ntdId}` now uses:
+```ts
+selections: Record<commodity, {
+  selected_vendor_id: string,
+  selected_vendor_name: string,
+  sourcing_approved_at: string,
+  rnd_acknowledged_at: string
+}>
+```
+On R&D acknowledgement, `NTDRecord.selectedSuppliers` is set (keyed by commodity).
+
+**Stage 6 (Final Design Handoff):** `supplier_acknowledged_by_commodity` tracks ack per commodity. Portal URLs become `/supplier/ntd/[id]?commodity=X` (supplier scoped to commodity).
+
+**Stage 8B (Mould Design Joint Review):** New localStorage key `ntd_mould_8b_{ntdId}`:
+```ts
+Record<commodity, {
+  feedback: string,
+  feedback_by: string,
+  feedback_at: string,
+  supplier_deadline: string,
+  supplier_files: VersionedFile[],
+  supplier_uploaded_at: string,
+  approved: boolean,
+  approved_by: string,
+  approved_at: string
+}>
+```
+
+**Stage 9 (Manufacturing):** New localStorage key `ntd_mfg_v2_{ntdId}`:
+```ts
+Record<commodity, {
+  mfg_start_date: string,
+  eta_date: string,
+  updates: UpdateEntry[],
+  status: "not_started" | "in_progress" | "complete",
+  completed_by: string,
+  completed_at: string
+}>
+```
+
+**Stage 11 (Commissioning & Dispatch):** `inspection` field becomes:
+```ts
+inspection: Record<commodity, {
+  report: VersionedFile,
+  submitted_by: string,
+  submitted_at: string
+}>
+```
+
+### Supplier Portals
+
+- **Design & Manufacturing:** `/supplier/ntd/[id]?commodity=X` — scopes all stages (6–11) to that supplier's commodity; hides other commodities.
+- **Redesign Portal:** `/supplier/ntd/redesign/[id]?commodity=X` — for post-trial mould resubmission after Stage 8A failure.
+
+### New localStorage Keys
+
+| Key                  | Purpose                                  |
+|----------------------|------------------------------------------|
+| `ntd_mould_8b_{id}`  | Stage 8B per-commodity joint review data |
+| `ntd_mfg_v2_{id}`    | Stage 9 per-commodity manufacturing data |
