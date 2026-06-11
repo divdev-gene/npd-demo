@@ -118,6 +118,11 @@ export const VENDOR_CATALOG: Record<string, VendorRecord[]> = {
     { name: "GD Midea Compressor Co.",      tier: "Tier 2", commodityMatch: 88,  auditScore: 81, certifications: ["CE Mark"],                             status: "verified",      spocName: "Li Wei",           spocEmail: "li.wei@gdmidea.com",          spocPhone: "+86 139 0013 9000" },
     { name: "Kirloskar Electric Ltd",       tier: "Tier 2", commodityMatch: 83,  auditScore: 76, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Santosh Hegde",    spocEmail: "s.hegde@kirloskar.in",        spocPhone: "+91 98201 90019" },
   ],
+  "EPS": [
+    { name: "Nirlon Foam Industries",  tier: "Tier 1", commodityMatch: 95, auditScore: 88, certifications: ["ISO 9001:2015"],               status: "verified",      spocName: "Ramesh Pillai",  spocEmail: "r.pillai@nirlon.in",         spocPhone: "+91 98201 11201" },
+    { name: "Supreme EPS Solutions",   tier: "Tier 2", commodityMatch: 82, auditScore: 76, certifications: ["ISO 9001:2015"],               status: "verified",      spocName: "Lata Nair",      spocEmail: "l.nair@supremeeps.in",       spocPhone: "+91 98201 11202" },
+    { name: "Aerofoam India Pvt Ltd",  tier: "Tier 2", commodityMatch: 73, auditScore: 65, certifications: [],                              status: "new",           spocName: "Vikram Joshi",   spocEmail: "v.joshi@aerofoam.in",        spocPhone: "+91 98201 11203" },
+  ],
   "Packaging & Others": [
     { name: "Packwell Solutions",           tier: "Tier 1", commodityMatch: 96,  auditScore: 88, certifications: ["ISO 9001:2015", "FSC Certified"],       status: "verified",      spocName: "Divya Nair",       spocEmail: "d.nair@packwell.in",          spocPhone: "+91 98201 10120" },
     { name: "PrintPack Industries",         tier: "Tier 2", commodityMatch: 84,  auditScore: 75, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Rakesh Singhania", spocEmail: "r.singhania@printpack.in",    spocPhone: "+91 98201 10221" },
@@ -388,6 +393,33 @@ export const ECN_PP_NEGOTIATION_KEY = "ecn_pp_negotiation_v1"
 export const ECN_INITIAL_QUOTE_KEY  = "ecn_initial_quote_v1"
 export const AS_STAGE1_KEY                 = "as_stage1_v1"
 export const AS_RND_APPROVAL_KEY           = "as_rnd_approval_v1"
+
+export type ASCostChecklistItem = {
+  label: string
+  oldPrice: number
+  newPrice: number
+}
+
+export type ASStage1Data = {
+  supplierName: string
+  reason: string
+  docsLink?: string
+  submittedBy: string
+  submittedAt: number
+  changeObjective: string
+  objectiveDetails?: {
+    checklist?: ASCostChecklistItem[]
+    location?: string
+    newBusinessOrder?: string
+    pasQcoReference?: string
+    dmNotification?: string
+    newSupplyDetails?: string
+  }
+  customerSpecific?: {
+    enabled: boolean
+    grade?: string
+  }
+}
 export const AS_PP_PRICING_KEY             = "as_pp_pricing_v1"
 export const AS_PP_SOURCING_APPROVED_KEY   = "as_pp_sourcing_approved_v1"
 export const AS_PP_RND_APPROVAL_KEY        = "as_pp_rnd_approval_v1"
