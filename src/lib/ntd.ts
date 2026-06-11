@@ -1,48 +1,51 @@
 // ============================================================
 // lib/ntd.ts
-// NTD localStorage helpers | Amber Enterprises NPD Platform
+// NTD localStorage helpers v2 | Amber Enterprises NPD Platform
 // ============================================================
 
+import { nanoid } from "nanoid"
 import type {
   NTDRecord,
   NTDStage,
+  NTDActivityLog,
+  ActivityEntry,
+  NTDActionType,
+  NTDRole,
+  VersionedFile,
+  FileVersion,
+  FileComment,
   NTDInitiationData,
   NTDSpecData,
   NTDRFQData,
   NTDQuotationData,
-  NTDFinalVendorData,
-  NTDFinalDataSubmission,
+  NTDSelectionData,
+  NTDHandoffData,
   NTDDFMData,
-  NTDMouldDesignData,
-  NTDMfgStatusData,
+  NTDMouldData,
+  NTDMfgData,
   NTDTrialsData,
   NTDRedesignData,
-  NTDInspectionData,
-  NTDCommissioningData,
-  NTDShipmentData,
-  NTDArrivalData,
+  NTDStage11Data,
 } from "@/types/ntd"
 
 // ─── Key Builders ─────────────────────────────────────────────
 
 export const NTD_KEYS = {
-  records:       ()          => `ntd_records`,
-  record:        (id: string) => `ntd_record_${id}`,
-  initiation:    (id: string) => `ntd_initiation_${id}`,
-  spec:          (id: string) => `ntd_spec_${id}`,
-  rfq:           (id: string) => `ntd_rfq_${id}`,
-  quotation:     (id: string) => `ntd_quotation_${id}`,
-  finalVendor:   (id: string) => `ntd_final_vendor_${id}`,
-  finalData:     (id: string) => `ntd_final_data_${id}`,
-  dfm:           (id: string) => `ntd_dfm_${id}`,
-  mouldDesign:   (id: string) => `ntd_mould_design_${id}`,
-  mfgStatus:     (id: string) => `ntd_mfg_status_${id}`,
-  trials:        (id: string) => `ntd_trials_${id}`,
-  redesign:      (id: string) => `ntd_redesign_${id}`,
-  inspection:    (id: string) => `ntd_inspection_${id}`,
-  commissioning: (id: string) => `ntd_commissioning_${id}`,
-  shipment:      (id: string) => `ntd_shipment_${id}`,
-  arrival:       (id: string) => `ntd_arrival_${id}`,
+  records:     ()          => `ntd_records`,
+  record:      (id: string) => `ntd_record_${id}`,
+  activity:    (id: string) => `ntd_activity_${id}`,
+  initiation:  (id: string) => `ntd_initiation_${id}`,
+  spec:        (id: string) => `ntd_spec_${id}`,
+  rfq:         (id: string) => `ntd_rfq_${id}`,
+  quotation:   (id: string) => `ntd_quotation_${id}`,
+  selection:   (id: string) => `ntd_selection_${id}`,
+  handoff:     (id: string) => `ntd_handoff_${id}`,
+  dfm:         (id: string) => `ntd_dfm_${id}`,
+  mould:       (id: string) => `ntd_mould_${id}`,
+  mfg:         (id: string) => `ntd_mfg_${id}`,
+  trials:      (id: string) => `ntd_trials_${id}`,
+  redesign:    (id: string) => `ntd_redesign_${id}`,
+  stage11:     (id: string) => `ntd_stage11_${id}`,
 } as const
 
 // ─── Generic Helpers ──────────────────────────────────────────
@@ -62,7 +65,156 @@ function lsSet<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-// ─── NTD Record List ──────────────────────────────────────────
+// ─── ID & Token Generators ────────────────────────────────────
+
+export function generateNTDId(): string {
+  return `NTD-${Date.now()}-${nanoid(5).toUpperCase()}`
+}
+
+export function generateVendorToken(): string {
+  return nanoid(8).toUpperCase()
+}
+
+export function generateFileId(): string {
+  return `file_${nanoid(8)}`
+}
+
+export function generateCommentId(): string {
+  return `comment_${nanoid(8)}`
+}
+
+export function generateActivityId(): string {
+  return `act_${nanoid(10)}`
+}
+
+// ─── VersionedFile Helpers ────────────────────────────────────
+
+export function createVersionedFile(slotName: string, link: string, uploadedBy: string): VersionedFile {
+  return {
+    file_id: generateFileId(),
+    slot_name: slotName,
+    versions: [
+      {
+        version_no: 1,
+        link,
+        uploaded_by: uploadedBy,
+        uploaded_at: new Date().toISOString(),
+      },
+    ],
+    current_version: 1,
+    comments: [],
+    approved: false,
+  }
+}
+
+export function addFileVersion(
+  file: VersionedFile,
+  link: string,
+  uploadedBy: string,
+  uploadNote?: string,
+  triggeredByCommentId?: string
+): VersionedFile {
+  const newVersion: FileVersion = {
+    version_no: file.current_version + 1,
+    link,
+    uploaded_by: uploadedBy,
+    uploaded_at: new Date().toISOString(),
+    upload_note: uploadNote,
+    triggered_by_comment_id: triggeredByCommentId,
+  }
+  return {
+    ...file,
+    versions: [...file.versions, newVersion],
+    current_version: newVersion.version_no,
+    approved: false,        // revision resets approval
+    approved_by: undefined,
+    approved_at: undefined,
+  }
+}
+
+export function approveFile(file: VersionedFile, approvedBy: string): VersionedFile {
+  return {
+    ...file,
+    approved: true,
+    approved_by: approvedBy,
+    approved_at: new Date().toISOString(),
+  }
+}
+
+export function addFileComment(
+  file: VersionedFile,
+  author: string,
+  authorRole: NTDRole,
+  text: string,
+  requiresRevision: boolean
+): VersionedFile {
+  const comment: FileComment = {
+    comment_id: generateCommentId(),
+    author,
+    author_role: authorRole,
+    text,
+    created_at: new Date().toISOString(),
+    requires_revision: requiresRevision,
+    resolved: false,
+  }
+  return {
+    ...file,
+    comments: [...file.comments, comment],
+  }
+}
+
+export function resolveComment(file: VersionedFile, commentId: string, resolvedBy: string): VersionedFile {
+  return {
+    ...file,
+    comments: file.comments.map((c) =>
+      c.comment_id === commentId
+        ? { ...c, resolved: true, resolved_by: resolvedBy, resolved_at: new Date().toISOString() }
+        : c
+    ),
+  }
+}
+
+export function getLatestFileLink(file: VersionedFile): string {
+  const v = file.versions.find((v) => v.version_no === file.current_version)
+  return v?.link ?? ""
+}
+
+export function hasUnresolvedRevisionComments(file: VersionedFile): boolean {
+  return file.comments.some((c) => c.requires_revision && !c.resolved)
+}
+
+// ─── Activity Log ─────────────────────────────────────────────
+
+export function getActivityLog(ntdId: string): NTDActivityLog {
+  return lsGet<NTDActivityLog>(NTD_KEYS.activity(ntdId)) ?? { entries: [] }
+}
+
+export function appendActivity(
+  ntdId: string,
+  actor: string,
+  actorRole: NTDRole,
+  stage: number,
+  actionType: NTDActionType,
+  description: string,
+  payload?: ActivityEntry["payload"],
+  substage?: "8A" | "8B"
+): void {
+  const log = getActivityLog(ntdId)
+  const entry: ActivityEntry = {
+    id: generateActivityId(),
+    timestamp: new Date().toISOString(),
+    actor,
+    actor_role: actorRole,
+    stage,
+    substage,
+    action_type: actionType,
+    description,
+    payload,
+  }
+  lsSet(NTD_KEYS.activity(ntdId), { entries: [...log.entries, entry] })
+}
+
+// ─── NTD Record CRUD ──────────────────────────────────────────
 
 export function getAllNTDRecords(): NTDRecord[] {
   return lsGet<NTDRecord[]>(NTD_KEYS.records()) ?? []
@@ -81,58 +233,50 @@ export function saveNTDRecord(record: NTDRecord): void {
   lsSet(NTD_KEYS.records(), all)
 }
 
-export function updateNTDStage(id: string, stage: NTDStage): void {
+export function advanceNTDStage(id: string, toStage: NTDStage, actor: string, actorRole: NTDRole): void {
   const record = getNTDRecord(id)
   if (!record) return
-  saveNTDRecord({ ...record, current_stage: stage })
+  saveNTDRecord({ ...record, current_stage: toStage })
+  appendActivity(id, actor, actorRole, toStage, "stage_advanced", `Advanced to Stage ${toStage}`)
 }
 
 // ─── Stage Data Getters & Setters ─────────────────────────────
 
-export const getNTDInitiation    = (id: string) => lsGet<NTDInitiationData>(NTD_KEYS.initiation(id))
-export const setNTDInitiation    = (id: string, data: NTDInitiationData) => lsSet(NTD_KEYS.initiation(id), data)
+export const getNTDInitiation  = (id: string) => lsGet<NTDInitiationData>(NTD_KEYS.initiation(id))
+export const setNTDInitiation  = (id: string, d: NTDInitiationData) => lsSet(NTD_KEYS.initiation(id), d)
 
-export const getNTDSpec          = (id: string) => lsGet<NTDSpecData>(NTD_KEYS.spec(id))
-export const setNTDSpec          = (id: string, data: NTDSpecData) => lsSet(NTD_KEYS.spec(id), data)
+export const getNTDSpec        = (id: string) => lsGet<NTDSpecData>(NTD_KEYS.spec(id))
+export const setNTDSpec        = (id: string, d: NTDSpecData) => lsSet(NTD_KEYS.spec(id), d)
 
-export const getNTDRFQ           = (id: string) => lsGet<NTDRFQData>(NTD_KEYS.rfq(id))
-export const setNTDRFQ           = (id: string, data: NTDRFQData) => lsSet(NTD_KEYS.rfq(id), data)
+export const getNTDRFQ         = (id: string) => lsGet<NTDRFQData>(NTD_KEYS.rfq(id))
+export const setNTDRFQ         = (id: string, d: NTDRFQData) => lsSet(NTD_KEYS.rfq(id), d)
 
-export const getNTDQuotation     = (id: string) => lsGet<NTDQuotationData>(NTD_KEYS.quotation(id))
-export const setNTDQuotation     = (id: string, data: NTDQuotationData) => lsSet(NTD_KEYS.quotation(id), data)
+export const getNTDQuotation   = (id: string) => lsGet<NTDQuotationData>(NTD_KEYS.quotation(id))
+export const setNTDQuotation   = (id: string, d: NTDQuotationData) => lsSet(NTD_KEYS.quotation(id), d)
 
-export const getNTDFinalVendor   = (id: string) => lsGet<NTDFinalVendorData>(NTD_KEYS.finalVendor(id))
-export const setNTDFinalVendor   = (id: string, data: NTDFinalVendorData) => lsSet(NTD_KEYS.finalVendor(id), data)
+export const getNTDSelection   = (id: string) => lsGet<NTDSelectionData>(NTD_KEYS.selection(id))
+export const setNTDSelection   = (id: string, d: NTDSelectionData) => lsSet(NTD_KEYS.selection(id), d)
 
-export const getNTDFinalData     = (id: string) => lsGet<NTDFinalDataSubmission>(NTD_KEYS.finalData(id))
-export const setNTDFinalData     = (id: string, data: NTDFinalDataSubmission) => lsSet(NTD_KEYS.finalData(id), data)
+export const getNTDHandoff     = (id: string) => lsGet<NTDHandoffData>(NTD_KEYS.handoff(id))
+export const setNTDHandoff     = (id: string, d: NTDHandoffData) => lsSet(NTD_KEYS.handoff(id), d)
 
-export const getNTDDFM           = (id: string) => lsGet<NTDDFMData>(NTD_KEYS.dfm(id))
-export const setNTDDFM           = (id: string, data: NTDDFMData) => lsSet(NTD_KEYS.dfm(id), data)
+export const getNTDDFM         = (id: string) => lsGet<NTDDFMData>(NTD_KEYS.dfm(id))
+export const setNTDDFM         = (id: string, d: NTDDFMData) => lsSet(NTD_KEYS.dfm(id), d)
 
-export const getNTDMouldDesign   = (id: string) => lsGet<NTDMouldDesignData>(NTD_KEYS.mouldDesign(id))
-export const setNTDMouldDesign   = (id: string, data: NTDMouldDesignData) => lsSet(NTD_KEYS.mouldDesign(id), data)
+export const getNTDMould       = (id: string) => lsGet<NTDMouldData>(NTD_KEYS.mould(id))
+export const setNTDMould       = (id: string, d: NTDMouldData) => lsSet(NTD_KEYS.mould(id), d)
 
-export const getNTDMfgStatus     = (id: string) => lsGet<NTDMfgStatusData>(NTD_KEYS.mfgStatus(id))
-export const setNTDMfgStatus     = (id: string, data: NTDMfgStatusData) => lsSet(NTD_KEYS.mfgStatus(id), data)
+export const getNTDMfg         = (id: string) => lsGet<NTDMfgData>(NTD_KEYS.mfg(id))
+export const setNTDMfg         = (id: string, d: NTDMfgData) => lsSet(NTD_KEYS.mfg(id), d)
 
-export const getNTDTrials        = (id: string) => lsGet<NTDTrialsData>(NTD_KEYS.trials(id))
-export const setNTDTrials        = (id: string, data: NTDTrialsData) => lsSet(NTD_KEYS.trials(id), data)
+export const getNTDTrials      = (id: string) => lsGet<NTDTrialsData>(NTD_KEYS.trials(id))
+export const setNTDTrials      = (id: string, d: NTDTrialsData) => lsSet(NTD_KEYS.trials(id), d)
 
-export const getNTDRedesign      = (id: string) => lsGet<NTDRedesignData>(NTD_KEYS.redesign(id))
-export const setNTDRedesign      = (id: string, data: NTDRedesignData) => lsSet(NTD_KEYS.redesign(id), data)
+export const getNTDRedesign    = (id: string) => lsGet<NTDRedesignData>(NTD_KEYS.redesign(id))
+export const setNTDRedesign    = (id: string, d: NTDRedesignData) => lsSet(NTD_KEYS.redesign(id), d)
 
-export const getNTDInspection    = (id: string) => lsGet<NTDInspectionData>(NTD_KEYS.inspection(id))
-export const setNTDInspection    = (id: string, data: NTDInspectionData) => lsSet(NTD_KEYS.inspection(id), data)
-
-export const getNTDCommissioning = (id: string) => lsGet<NTDCommissioningData>(NTD_KEYS.commissioning(id))
-export const setNTDCommissioning = (id: string, data: NTDCommissioningData) => lsSet(NTD_KEYS.commissioning(id), data)
-
-export const getNTDShipment      = (id: string) => lsGet<NTDShipmentData>(NTD_KEYS.shipment(id))
-export const setNTDShipment      = (id: string, data: NTDShipmentData) => lsSet(NTD_KEYS.shipment(id), data)
-
-export const getNTDArrival       = (id: string) => lsGet<NTDArrivalData>(NTD_KEYS.arrival(id))
-export const setNTDArrival       = (id: string, data: NTDArrivalData) => lsSet(NTD_KEYS.arrival(id), data)
+export const getNTDStage11     = (id: string) => lsGet<NTDStage11Data>(NTD_KEYS.stage11(id))
+export const setNTDStage11     = (id: string, d: NTDStage11Data) => lsSet(NTD_KEYS.stage11(id), d)
 
 // ─── Stage Gate Logic ─────────────────────────────────────────
 
@@ -143,34 +287,34 @@ export function isNTDStageUnlocked(id: string, stage: NTDStage): boolean {
 
     case 2: {
       const init = getNTDInitiation(id)
-      return init?.status === "approved"
+      return !!init?.submitted_at
     }
 
     case 3: {
       const spec = getNTDSpec(id)
-      return !!(spec?.sourcing_approved && spec?.rnd_approved)
+      return !!(spec?.sourcing_signed && spec?.rnd_signed)
     }
 
     case 4: {
       const rfq = getNTDRFQ(id)
       if (!rfq) return false
-      return Object.values(rfq).some((v) => v.sent)
+      return Object.values(rfq.vendors).some((v) => v.sent)
     }
 
     case 5: {
-      const quotation = getNTDQuotation(id)
-      if (!quotation) return false
-      return Object.values(quotation).some((v) => v.status === "finalized")
+      const q = getNTDQuotation(id)
+      if (!q) return false
+      return Object.values(q).some((v) => v.status === "finalized")
     }
 
     case 6: {
-      const vendor = getNTDFinalVendor(id)
-      return !!(vendor?.sourcing_approved && vendor?.rnd_acknowledged)
+      const sel = getNTDSelection(id)
+      return !!(sel?.sourcing_approved && sel?.rnd_acknowledged)
     }
 
     case 7: {
-      const finalData = getNTDFinalData(id)
-      return !!(finalData?.supplier_acknowledged)
+      const handoff = getNTDHandoff(id)
+      return !!(handoff?.supplier_acknowledged)
     }
 
     case 8: {
@@ -179,6 +323,16 @@ export function isNTDStageUnlocked(id: string, stage: NTDStage): boolean {
     }
 
     case 9: {
+      const mould = getNTDMould(id)
+      return !!(mould?.stage_complete && mould?.joint_review?.approved)
+    }
+
+    case 10: {
+      const mfg = getNTDMfg(id)
+      return mfg?.status === "complete"
+    }
+
+    case 11: {
       const trials = getNTDTrials(id)
       return trials?.stage_complete === true
     }
@@ -189,85 +343,81 @@ export function isNTDStageUnlocked(id: string, stage: NTDStage): boolean {
 }
 
 export function getCurrentNTDStage(id: string): NTDStage {
-  const record = getNTDRecord(id)
-  return record?.current_stage ?? 1
+  return getNTDRecord(id)?.current_stage ?? 1
 }
 
-// ─── Stage 8 Sub-Stage Logic ──────────────────────────────────
+// ─── Stage 8 Sub-Stage ────────────────────────────────────────
 
-export function getNTDSubStage8Status(id: string): "8A" | "8B" | "8C" {
-  const mould = getNTDMouldDesign(id)
-  if (!mould?.substage_complete) return "8A"
-
-  const mfg = getNTDMfgStatus(id)
-  if (mfg?.status !== "complete") return "8B"
-
-  return "8C"
+export function getMouldSubStage(id: string): "8A" | "8B" {
+  const mould = getNTDMould(id)
+  if (!mould) return "8A"
+  const allApproved = mould.components.every((c) => c.final_status === "approved")
+  if (!allApproved) return "8A"
+  return "8B"
 }
 
-// ─── DFM Helpers ──────────────────────────────────────────────
+// ─── DFM Progress ─────────────────────────────────────────────
 
 export function getDFMProgress(id: string): { approved: number; total: number } {
   const dfm = getNTDDFM(id)
   if (!dfm) return { approved: 0, total: 0 }
-  const approved = dfm.components.filter((c) => c.final_status === "approved").length
-  return { approved, total: dfm.components.length }
+  return {
+    approved: dfm.components.filter((c) => c.final_status === "approved").length,
+    total: dfm.components.length,
+  }
 }
 
 export function getDFMComponentsForSupplier(id: string) {
   const dfm = getNTDDFM(id)
   if (!dfm) return []
-  return dfm.components.filter(
-    (c) => c.final_status === "pending" || c.final_status === "revision_required"
-  )
+  // Supplier sees ONLY non-approved components
+  return dfm.components.filter((c) => c.final_status !== "approved")
 }
 
-// ─── Mould Design Helpers ─────────────────────────────────────
+// ─── Mould Progress ───────────────────────────────────────────
 
-export function getMouldDesignProgress(id: string): { approved: number; total: number } {
-  const mould = getNTDMouldDesign(id)
+export function getMouldProgress(id: string): { approved: number; total: number } {
+  const mould = getNTDMould(id)
   if (!mould) return { approved: 0, total: 0 }
-  const approved = mould.components.filter((c) => c.final_status === "approved").length
-  return { approved, total: mould.components.length }
+  return {
+    approved: mould.components.filter((c) => c.final_status === "approved").length,
+    total: mould.components.length,
+  }
 }
 
 export function getSLAStatus(slaDeadline: string): "ok" | "warning" | "overdue" {
-  const now = Date.now()
-  const deadline = new Date(slaDeadline).getTime()
-  const diff = deadline - now
+  const diff = new Date(slaDeadline).getTime() - Date.now()
   if (diff < 0) return "overdue"
   if (diff < 4 * 60 * 60 * 1000) return "warning"
   return "ok"
 }
 
-// ─── Trial Helpers ────────────────────────────────────────────
+export function getSLADeadline(submittedAt: string): string {
+  return new Date(new Date(submittedAt).getTime() + 24 * 60 * 60 * 1000).toISOString()
+}
+
+// ─── Trials ───────────────────────────────────────────────────
 
 export function getTrialProgress(id: string): { passed: number; total: number } {
   const trials = getNTDTrials(id)
-  if (!trials || trials.trials.length === 0) return { passed: 0, total: 0 }
-
-  const allTrials = trials.trials
   const record = getNTDRecord(id)
-  const total = record?.component_count ?? 0
+  if (!trials || !record) return { passed: 0, total: 0 }
 
   const passedIds = new Set<string>()
-  for (const trial of allTrials) {
+  for (const trial of trials.trials) {
     for (const comp of trial.components) {
       if (comp.overall_verdict === "pass") passedIds.add(comp.componentId)
     }
   }
-
-  return { passed: passedIds.size, total }
+  return { passed: passedIds.size, total: record.component_count ?? 0 }
 }
 
-export function getFailedComponentIdsFromTrial(id: string, trialNo: number): string[] {
+export function getFailedComponentsFromTrial(id: string, trialNo: number): string[] {
   const trials = getNTDTrials(id)
   if (!trials) return []
   const trial = trials.trials.find((t) => t.trial_no === trialNo)
   if (!trial) return []
-  return trial.components
-    .filter((c) => c.overall_verdict === "fail")
-    .map((c) => c.componentId)
+  return trial.components.filter((c) => c.overall_verdict === "fail").map((c) => c.componentId)
 }
 
 export function getNextTrialNo(id: string): number {
@@ -276,15 +426,48 @@ export function getNextTrialNo(id: string): number {
   return Math.max(...trials.trials.map((t) => t.trial_no)) + 1
 }
 
-// ─── Stage 9 Completion Check ─────────────────────────────────
+export function canInitiateNewTrial(id: string): boolean {
+  const trials = getNTDTrials(id)
+  if (!trials || trials.trials.length === 0) return true
 
-export function isNTDComplete(id: string): boolean {
-  const arrival = getNTDArrival(id)
-  return arrival?.ntd_complete === true
+  const lastTrial = trials.trials[trials.trials.length - 1]
+  if (lastTrial.result !== "partial_fail") return false
+
+  // Check all failed components have completed Stage 8A redesign loop
+  const redesign = getNTDRedesign(id)
+  if (!redesign) return false
+
+  const latestRound = redesign.redesign_rounds[redesign.redesign_rounds.length - 1]
+  if (!latestRound) return false
+
+  return !!latestRound.resolved_at
 }
 
-// ─── ID Generator ─────────────────────────────────────────────
+// ─── Stage 11 Sub-step Progress ───────────────────────────────
 
-export function generateNTDId(): string {
-  return `NTD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
+export function getStage11CurrentSubstep(id: string): 1 | 2 | 3 | 4 | 5 | 6 {
+  const s11 = getNTDStage11(id)
+  if (!s11) return 1
+  if (!s11.inspection) return 1
+  if (!s11.commissioning) return 2
+  if (!s11.shipment) return 3
+  if (!s11.exim?.cleared) return 4
+  if (!s11.arrival) return 5
+  return 6
+}
+
+// ─── Completion ───────────────────────────────────────────────
+
+export function isNTDComplete(id: string): boolean {
+  return getNTDStage11(id)?.final_approval?.ntd_complete === true
+}
+
+// ─── Vendor Token Lookup ──────────────────────────────────────
+
+export function getVendorByToken(ntdId: string, token: string) {
+  const rfq = getNTDRFQ(ntdId)
+  if (!rfq) return null
+  const entry = Object.entries(rfq.vendors).find(([, v]) => v.token === token)
+  if (!entry) return null
+  return { vendorId: entry[0], ...entry[1] }
 }
