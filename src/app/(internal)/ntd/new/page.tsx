@@ -56,6 +56,7 @@ export default function NTDNewPage() {
 
     const ntdRole = currentRole === "rnd_head" ? "rnd_head" : currentRole === "super_admin" ? "super_admin" : "rnd"
 
+    // Stage 1 is auto-submitted at creation — no approval gate, advance immediately to Stage 2
     saveNTDRecord({
       id,
       typeOfWork: "NTD",
@@ -63,7 +64,7 @@ export default function NTDNewPage() {
       spoc: "Rohan Desai",
       created_by: currentRole,
       created_at: now,
-      current_stage: 1,
+      current_stage: 2,
       status: "active",
     })
 
@@ -79,6 +80,7 @@ export default function NTDNewPage() {
     })
 
     appendActivity(id, currentRole, ntdRole, 1, "ntd_created", `NTD created: ${title.trim()}`)
+    appendActivity(id, currentRole, ntdRole, 2, "stage_advanced", "Stage 1 auto-submitted — advanced to Stage 2 (Spec & Sign-off)")
     router.push(`/ntd/${id}`)
   }
 
