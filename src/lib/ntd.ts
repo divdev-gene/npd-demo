@@ -4,6 +4,7 @@
 // ============================================================
 
 import { nanoid } from "nanoid"
+import { NTD_COMMODITIES } from "@/types/ntd"
 import type {
   NTDRecord,
   NTDStage,
@@ -26,6 +27,7 @@ import type {
   NTDTrialsData,
   NTDRedesignData,
   NTDStage11Data,
+  NTDCommoditySelection,
 } from "@/types/ntd"
 
 // ─── Key Builders ─────────────────────────────────────────────
@@ -296,25 +298,19 @@ export function isNTDStageUnlocked(id: string, stage: NTDStage): boolean {
     }
 
     case 4: {
-      const rfq = getNTDRFQ(id)
-      if (!rfq) return false
-      return Object.values(rfq.vendors).some((v) => v.sent)
+      return allCommoditiesHaveRFQ(id)
     }
 
     case 5: {
-      const q = getNTDQuotation(id)
-      if (!q) return false
-      return Object.values(q).some((v) => v.status === "finalized")
+      return allCommoditiesHaveFinalized(id)
     }
 
     case 6: {
-      const sel = getNTDSelection(id)
-      return !!(sel?.sourcing_approved && sel?.rnd_acknowledged)
+      return allCommoditiesSelected(id)
     }
 
     case 7: {
-      const handoff = getNTDHandoff(id)
-      return !!(handoff?.supplier_acknowledged)
+      return allCommoditiesAcknowledged(id)
     }
 
     case 8: {
@@ -344,6 +340,70 @@ export function isNTDStageUnlocked(id: string, stage: NTDStage): boolean {
 
 export function getCurrentNTDStage(id: string): NTDStage {
   return getNTDRecord(id)?.current_stage ?? 1
+}
+
+// ─── Per-Commodity Helpers ────────────────────────────────────
+
+// Returns the unique commodities present in this NTD's component list.
+// Derived from initiation data — set at Stage 1, locked at Stage 6.
+export function getActiveCommodities(ntdId: string): string[] {
+  const init = getNTDInitiation(ntdId)
+  if (!init?.components?.length) return []
+  return [...new Set(init.components.map(c => c.commodity))]
+}
+
+// Stage 3 → 4: at least one RFQ sent per active commodity
+export function allCommoditiesHaveRFQ(ntdId: string): boolean {
+  const commodities = getActiveCommodities(ntdId)
+  if (commodities.length === 0) return false
+  const rfq = getNTDRFQ(ntdId)
+  if (!rfq) return false
+  return commodities.every(commodity =>
+    Object.values(rfq.vendors).some(v => v.commodity === commodity && v.sent)
+  )
+}
+
+// Stage 4 → 5: at least one finalized vendor per active commodity
+export function allCommoditiesHaveFinalized(ntdId: string): boolean {
+  const commodities = getActiveCommodities(ntdId)
+  if (commodities.length === 0) return false
+  const q = getNTDQuotation(ntdId)
+  if (!q) return false
+  const rfq = getNTDRFQ(ntdId)
+  if (!rfq) return false
+  return commodities.every(commodity => {
+    const vendorIdsForCommodity = Object.entries(rfq.vendors)
+      .filter(([, v]) => v.commodity === commodity)
+      .map(([id]) => id)
+    return vendorIdsForCommodity.some(vid => q[vid]?.status === "finalized")
+  })
+}
+
+// Stage 5 → 6: one supplier selected per active commodity + both approvals
+export function allCommoditiesSelected(ntdId: string): boolean {
+  const commodities = getActiveCommodities(ntdId)
+  if (commodities.length === 0) return false
+  const sel = getNTDSelection(ntdId)
+  if (!sel?.sourcing_approved || !sel?.rnd_acknowledged) return false
+  return commodities.every(c => !!sel.selections?.[c]?.vendor_name)
+}
+
+// Stage 6 → 7: every active commodity-supplier has acknowledged handoff
+export function allCommoditiesAcknowledged(ntdId: string): boolean {
+  const commodities = getActiveCommodities(ntdId)
+  if (commodities.length === 0) return false
+  const handoff = getNTDHandoff(ntdId)
+  if (!handoff) return false
+  return commodities.every(c => handoff.supplier_acknowledged_by_commodity?.[c] === true)
+}
+
+// Stage 11 sub-step 1: all commodity-suppliers submitted inspection report
+export function allInspectionsSubmitted(ntdId: string): boolean {
+  const commodities = getActiveCommodities(ntdId)
+  if (commodities.length === 0) return false
+  const s11 = getNTDStage11(ntdId)
+  if (!s11?.inspection) return false
+  return commodities.every(c => !!s11.inspection![c]?.submitted_at)
 }
 
 // ─── Stage 8 Sub-Stage ────────────────────────────────────────
@@ -431,16 +491,40 @@ export function canInitiateNewTrial(id: string): boolean {
   if (!trials || trials.trials.length === 0) return true
 
   const lastTrial = trials.trials[trials.trials.length - 1]
+  // If last trial hasn't completed with partial_fail, can't start another
+  if (lastTrial.result === "all_pass") return false
   if (lastTrial.result !== "partial_fail") return false
 
-  // Check all failed components have completed Stage 8A redesign loop
   const redesign = getNTDRedesign(id)
-  if (!redesign) return false
+  if (!redesign || redesign.redesign_rounds.length === 0) return false
 
   const latestRound = redesign.redesign_rounds[redesign.redesign_rounds.length - 1]
   if (!latestRound) return false
 
-  return !!latestRound.resolved_at
+  // Fast path: resolved_at already written
+  if (latestRound.resolved_at) return true
+
+  // Fallback: check if all failed components are actually approved in mould data
+  // (handles cases where resolved_at wasn't written due to earlier code)
+  const mould = getNTDMould(id)
+  if (!mould) return false
+
+  const allApproved = latestRound.failed_component_ids.every(cid =>
+    mould.components.find(c => c.componentId === cid)?.final_status === "approved"
+  )
+  if (allApproved) {
+    // Self-heal: write resolved_at so future calls take the fast path
+    setNTDRedesign(id, {
+      redesign_rounds: redesign.redesign_rounds.map(r =>
+        r.round_no === latestRound.round_no
+          ? { ...r, resolved_at: new Date().toISOString() }
+          : r
+      )
+    })
+    return true
+  }
+
+  return false
 }
 
 // ─── Stage 11 Sub-step Progress ───────────────────────────────
@@ -448,7 +532,7 @@ export function canInitiateNewTrial(id: string): boolean {
 export function getStage11CurrentSubstep(id: string): 1 | 2 | 3 | 4 | 5 | 6 {
   const s11 = getNTDStage11(id)
   if (!s11) return 1
-  if (!s11.inspection) return 1
+  if (!allInspectionsSubmitted(id)) return 1
   if (!s11.commissioning) return 2
   if (!s11.shipment) return 3
   if (!s11.exim?.cleared) return 4
