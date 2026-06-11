@@ -3,6 +3,10 @@
 // NTD — New Tool Development v2 | Amber Enterprises NPD Platform
 // ============================================================
 
+// ─── Commodity ────────────────────────────────────────────────
+export const NTD_COMMODITIES = ["Sheet Metal", "Plastics", "EPS"] as const
+export type NTDCommodity = typeof NTD_COMMODITIES[number]
+
 // ─── Roles ───────────────────────────────────────────────────
 
 export type NTDRole =
@@ -117,6 +121,7 @@ export type NTDActivityLog = {
 export type NTDComponent = {
   componentId: string    // "C01", "C02"...
   name: string
+  commodity: NTDCommodity
 }
 
 // ─── Master NTD Record ────────────────────────────────────────
@@ -130,6 +135,7 @@ export type NTDRecord = {
   created_at: string
   current_stage: NTDStage
   supplier?: string           // set at Stage 5
+  selectedSuppliers?: Record<string, string>   // commodity → vendor_name, set at Stage 5
   component_count?: number    // set at Stage 6
   status: "active" | "complete"
 }
@@ -142,6 +148,7 @@ export type NTDInitiationData = {
   title: string
   spoc: "Rohan Desai"
   notes: string
+  components: NTDComponent[]          // captured at creation; commodity-tagged
   part_specs: VersionedFile[]
   submitted_by: string
   submitted_at: string
@@ -187,6 +194,7 @@ export type NTDRFQVendor = {
   sent: boolean
   sent_at: string
   sent_by: string
+  commodity: string                    // which commodity pool this vendor belongs to
 }
 
 export type NTDRFQData = {
@@ -226,9 +234,13 @@ export type NTDQuotationData = {
 
 // ─── Stage 5 — Supplier Selection ─────────────────────────────
 
+export type NTDCommoditySelection = {
+  vendor_id: string
+  vendor_name: string
+}
+
 export type NTDSelectionData = {
-  selected_vendor_id: string
-  selected_vendor_name: string
+  selections: Record<string, NTDCommoditySelection>   // key = commodity
   sourcing_approved: boolean
   sourcing_approved_by: string
   sourcing_approved_at: string
@@ -247,6 +259,7 @@ export type NTDHandoffData = {
   submitted_at: string
   supplier_acknowledged: boolean
   supplier_acknowledged_at: string
+  supplier_acknowledged_by_commodity?: Record<string, boolean>  // commodity → acked
 }
 
 // ─── Stage 7 — DFM Loop ───────────────────────────────────────
@@ -256,6 +269,7 @@ export type NTDDFMComponent = {
   name: string
   ppt: VersionedFile
   design_3d: VersionedFile
+  rnd_docs: VersionedFile[]          // R&D feedback / reference docs shared back to supplier
   iteration_no: number
   final_status: "pending" | "under_review" | "revision_required" | "approved"
   approved_by?: string
@@ -395,11 +409,11 @@ export type EximUpdate = {
 }
 
 export type NTDStage11Data = {
-  inspection: {
+  inspection: Record<string, {          // key = commodity
     report: VersionedFile
     submitted_by: string
     submitted_at: string
-  } | null
+  }> | null
   commissioning: {
     checklist_items: { label: string; checked: boolean }[]
     pack_list: VersionedFile
