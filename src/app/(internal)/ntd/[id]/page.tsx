@@ -16,7 +16,7 @@ import {
   appendActivity, getMouldSubStage, getDFMProgress, getMouldProgress,
   getTrialProgress, getStage11CurrentSubstep, isNTDComplete,
   createVersionedFile, addFileVersion, generateVendorToken,
-  getActiveCommodities, allCommoditiesHaveRFQ,
+  getActiveCommodities, allCommoditiesHaveRFQ, allCommoditiesAcknowledged,
 } from "@/lib/ntd"
 import { VENDOR_CATALOG } from "@/lib/mockData"
 import type { NTDRecord, NTDStage, NTDRole, NTDRFQData, NTDMfgData, NTDStage2Query } from "@/types/ntd"
@@ -151,6 +151,22 @@ export default function NTDDetailPage() {
     window.addEventListener("rolechange", onRole)
     return () => { clearInterval(t); window.removeEventListener("rolechange", onRole) }
   }, [reload])
+
+  // Stage 6 — poll for all-commodity acknowledgement → advance to Stage 7
+  const activeStageForS6 = record?.current_stage
+  useEffect(() => {
+    if (activeStageForS6 !== 6) return
+    const handoff = getNTDHandoff(id)
+    if (!handoff?.submitted_at) return
+    const interval = setInterval(() => {
+      if (allCommoditiesAcknowledged(id)) {
+        clearInterval(interval)
+        advanceNTDStage(id, 7, "system", "rnd")
+        reload()
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [activeStageForS6, id, reload])
 
   if (!record) {
     return (
@@ -402,9 +418,22 @@ export default function NTDDetailPage() {
 
   // ── Stage 6 handoff ──
   const handleSubmitHandoff = () => {
-    const comps = components.filter(c => c.name.trim()).map(c => ({ componentId: c.id, name: c.name }))
+    // Use components from initiation data (already have commodity field)
+    const initComps = initData?.components ?? []
+    // Merge with any name overrides from local state
+    const comps = initComps.length > 0
+      ? initComps
+      : components.filter(c => c.name.trim()).map(c => ({
+          componentId: c.id,
+          name: c.name,
+          commodity: "Sheet Metal" as import("@/types/ntd").NTDCommodity,
+        }))
     if (comps.length === 0) return
     const finalFiles = finalDesignSlots.filter(s => s.slotName.trim() && s.link.trim()).map(s => createVersionedFile(s.slotName, s.link, currentRole))
+    // Initialize per-commodity acknowledgement map
+    const activeCommodities = getActiveCommodities(id)
+    const ackByCommodity: Record<string, boolean> = {}
+    activeCommodities.forEach(c => { ackByCommodity[c] = false })
     setNTDHandoff(id, {
       components: comps,
       component_count: comps.length,
@@ -413,6 +442,7 @@ export default function NTDDetailPage() {
       submitted_at: new Date().toISOString(),
       supplier_acknowledged: false,
       supplier_acknowledged_at: "",
+      supplier_acknowledged_by_commodity: ackByCommodity,
     })
     const r = getNTDRecord(id)
     if (r) saveNTDRecord({ ...r, component_count: comps.length })
@@ -422,9 +452,19 @@ export default function NTDDetailPage() {
 
   const handleSimulateSupplierAck = () => {
     if (!handoffData) return
-    setNTDHandoff(id, { ...handoffData, supplier_acknowledged: true, supplier_acknowledged_at: new Date().toISOString() })
+    // Acknowledge all commodities
+    const activeCommodities = getActiveCommodities(id)
+    const ackByCommodity: Record<string, boolean> = {}
+    activeCommodities.forEach(c => { ackByCommodity[c] = true })
+    const updated = {
+      ...handoffData,
+      supplier_acknowledged: true,
+      supplier_acknowledged_at: new Date().toISOString(),
+      supplier_acknowledged_by_commodity: ackByCommodity,
+    }
+    setNTDHandoff(id, updated)
     advanceNTDStage(id, 7, currentRole, ntdRole)
-    appendActivity(id, currentRole, ntdRole, 6, "supplier_acknowledged", "Supplier acknowledged design handoff")
+    appendActivity(id, currentRole, ntdRole, 6, "supplier_acknowledged", "All commodity suppliers acknowledged design handoff")
     reload()
   }
 
@@ -1088,100 +1128,167 @@ export default function NTDDetailPage() {
   )
 
   // Stage 6 — Design Handoff
-  if (stage >= 5) cards.push(
-    <StageCard key="s6" stageNum={6} stage={stage} colorClass="border-emerald-500" title="Final Design Handoff"
-      doneLabel={handoffData?.supplier_acknowledged ? `${handoffData.component_count} components · Supplier acknowledged` : undefined}>
-      <div className="space-y-4">
-        {!handoffData?.submitted_by ? isRnd ? (
-          <div className="space-y-4">
-            {/* Component builder */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Components ({components.length})</p>
-                <button onClick={() => {
-                  const nextNum = String(components.length + 1).padStart(2, "0")
-                  setComponents(prev => [...prev, { id: `C${nextNum}`, name: "" }])
-                }}
-                  className="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-1">
-                  <Plus className="w-3.5 h-3.5" /> Add Component
-                </button>
-              </div>
-              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-800">Component list cannot be changed after submission.</p>
-              </div>
-              {components.map(c => (
-                <div key={c.id} className="flex gap-2 items-center">
-                  <span className="text-xs font-bold text-slate-400 w-10">{c.id}</span>
-                  <input type="text" placeholder="Component name" value={c.name}
-                    onChange={e => setComponents(prev => prev.map(x => x.id === c.id ? { ...x, name: e.target.value } : x))}
-                    className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-                  <button onClick={() => components.length > 1 && setComponents(prev => prev.filter(x => x.id !== c.id))}
-                    disabled={components.length === 1}
-                    className="p-1.5 text-slate-300 hover:text-red-400 disabled:opacity-30 transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+  if (stage >= 5) {
+    const s6Commodities = getActiveCommodities(id)
+    const s6Suppliers = record.selectedSuppliers ?? {}
+    const s6AckMap = handoffData?.supplier_acknowledged_by_commodity ?? {}
+    const s6AllAcked = handoffData?.supplier_acknowledged === true
+    const s6DoneLabel = s6AllAcked
+      ? `${handoffData?.component_count ?? 0} components · All suppliers acknowledged`
+      : undefined
+    cards.push(
+      <StageCard key="s6" stageNum={6} stage={stage} colorClass="border-emerald-500" title="Final Design Handoff"
+        doneLabel={s6DoneLabel}>
+        <div className="space-y-4">
+          {!handoffData?.submitted_by ? isRnd ? (
+            <div className="space-y-4">
+              {/* Component preview from initiation data */}
+              {initData?.components && initData.components.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Components ({initData.components.length})</p>
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-800">Component list is locked from Stage 1 and cannot be changed.</p>
+                  </div>
+                  {initData.components.map(c => (
+                    <div key={c.componentId} className="flex gap-2 items-center text-xs text-slate-700">
+                      <span className="font-bold text-slate-400 w-10">{c.componentId}</span>
+                      <span className="flex-1">{c.name}</span>
+                      <span className="text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{c.commodity}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-
-            {/* Final design files */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Final Design Files</p>
-                <button onClick={() => setFinalDesignSlots(prev => [...prev, { id: String(Date.now()), slotName: "", link: "" }])}
-                  className="text-xs text-emerald-700 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Slot</button>
-              </div>
-              {finalDesignSlots.map(slot => (
-                <div key={slot.id} className="flex gap-2 bg-slate-50 rounded-lg p-2">
-                  <input type="text" placeholder="File name" value={slot.slotName}
-                    onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, slotName: e.target.value } : s))}
-                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
-                  <input type="text" autoComplete="off" placeholder="Drive link" value={slot.link}
-                    onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, link: e.target.value } : s))}
-                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Components ({components.length})</p>
+                    <button onClick={() => {
+                      const nextNum = String(components.length + 1).padStart(2, "0")
+                      setComponents(prev => [...prev, { id: `C${nextNum}`, name: "" }])
+                    }}
+                      className="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5" /> Add Component
+                    </button>
+                  </div>
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-800">Component list cannot be changed after submission.</p>
+                  </div>
+                  {components.map(c => (
+                    <div key={c.id} className="flex gap-2 items-center">
+                      <span className="text-xs font-bold text-slate-400 w-10">{c.id}</span>
+                      <input type="text" placeholder="Component name" value={c.name}
+                        onChange={e => setComponents(prev => prev.map(x => x.id === c.id ? { ...x, name: e.target.value } : x))}
+                        className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                      <button onClick={() => components.length > 1 && setComponents(prev => prev.filter(x => x.id !== c.id))}
+                        disabled={components.length === 1}
+                        className="p-1.5 text-slate-300 hover:text-red-400 disabled:opacity-30 transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
 
-            <button onClick={handleSubmitHandoff}
-              disabled={components.every(c => !c.name.trim())}
-              className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
-              Submit & Notify Supplier
-            </button>
-          </div>
-        ) : <p className="text-sm text-slate-400 italic">Awaiting R&D to submit design handoff...</p>
-        : (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">{handoffData.component_count} components submitted by {handoffData.submitted_by}</p>
-            {!handoffData.supplier_acknowledged ? (
+              {/* Final design files */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <Clock className="w-4 h-4 text-amber-600" />
-                  <p className="text-xs text-amber-800">Awaiting supplier acknowledgement</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Final Design Files</p>
+                  <button onClick={() => setFinalDesignSlots(prev => [...prev, { id: String(Date.now()), slotName: "", link: "" }])}
+                    className="text-xs text-emerald-700 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Slot</button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <p className="text-xs text-slate-500">Supplier portal:</p>
-                  <code className="text-xs bg-slate-100 px-2 py-1 rounded">/supplier/ntd/{id}</code>
-                  <CopyButton text={`${typeof window !== "undefined" ? window.location.origin : ""}/supplier/ntd/${id}`} />
+                {finalDesignSlots.map(slot => (
+                  <div key={slot.id} className="flex gap-2 bg-slate-50 rounded-lg p-2">
+                    <input type="text" placeholder="File name" value={slot.slotName}
+                      onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, slotName: e.target.value } : s))}
+                      className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                    <input type="text" autoComplete="off" placeholder="Drive link" value={slot.link}
+                      onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, link: e.target.value } : s))}
+                      className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={handleSubmitHandoff}
+                disabled={!initData?.components?.length && components.every(c => !c.name.trim())}
+                className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+                Submit & Notify Suppliers
+              </button>
+            </div>
+          ) : <p className="text-sm text-slate-400 italic">Awaiting R&D to submit design handoff...</p>
+          : (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600">{handoffData.component_count} components submitted by {handoffData.submitted_by}</p>
+
+              {/* Per-commodity acknowledgement tracker */}
+              {s6Commodities.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Supplier Acknowledgement</p>
+                  {s6Commodities.map(commodity => {
+                    const supplierName = s6Suppliers[commodity] ?? "—"
+                    const acked = s6AckMap[commodity] === true
+                    const portalUrl = `/supplier/ntd/${id}?commodity=${encodeURIComponent(commodity)}`
+                    const fullUrl = `${typeof window !== "undefined" ? window.location.origin : ""}${portalUrl}`
+                    return (
+                      <div key={commodity} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${acked ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700">{commodity}</p>
+                          <p className="text-[11px] text-slate-500 truncate">{supplierName}</p>
+                        </div>
+                        {acked ? (
+                          <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-semibold shrink-0">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Acknowledged
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-1.5 text-amber-700 text-xs font-medium">
+                              <Clock className="w-3.5 h-3.5" /> Awaiting
+                            </div>
+                            <code className="text-[10px] bg-white border border-amber-200 px-1.5 py-0.5 rounded hidden sm:block">{portalUrl}</code>
+                            <CopyButton text={fullUrl} />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-                {isRnd && (
-                  <button onClick={handleSimulateSupplierAck}
-                    className="text-xs font-semibold border border-dashed border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 px-3 py-1.5 rounded-lg transition-colors">
-                    ⚡ Simulate Supplier Acknowledgement (demo)
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-xs text-emerald-700">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Supplier acknowledged handoff
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </StageCard>
-  )
+              ) : (
+                /* Fallback: single supplier portal (no commodity data) */
+                <div className="space-y-2">
+                  {!s6AllAcked && (
+                    <>
+                      <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <Clock className="w-4 h-4 text-amber-600" />
+                        <p className="text-xs text-amber-800">Awaiting supplier acknowledgement</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-slate-500">Supplier portal:</p>
+                        <code className="text-xs bg-slate-100 px-2 py-1 rounded">/supplier/ntd/{id}</code>
+                        <CopyButton text={`${typeof window !== "undefined" ? window.location.origin : ""}/supplier/ntd/${id}`} />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {!s6AllAcked && isRnd && (
+                <button onClick={handleSimulateSupplierAck}
+                  className="text-xs font-semibold border border-dashed border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 px-3 py-1.5 rounded-lg transition-colors">
+                  ⚡ Simulate All Suppliers Acknowledged (demo)
+                </button>
+              )}
+
+              {s6AllAcked && (
+                <div className="flex items-center gap-2 text-xs text-emerald-700 font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> All suppliers acknowledged — proceeding to DFM
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </StageCard>
+    )
+  }
 
   // Stage 7 — DFM
   if (stage >= 6) cards.push(
