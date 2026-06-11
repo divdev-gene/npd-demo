@@ -32,13 +32,16 @@ const VENDOR_CATALOG = [
   "TechForm Industries", "Meridian Manufacturing", "Elite Tooling", "ProMould Solutions",
 ]
 
+// Sourcing SPOCs use their name as the poc_role value
+const SOURCING_SPOC_ROLES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi", "Rohan Desai"]
+
 function toNTDRole(pocRole: string): NTDRole {
   if (pocRole === "rnd_head") return "rnd_head"
   if (pocRole === "sourcing_head") return "sourcing_head"
   if (pocRole === "super_admin") return "super_admin"
   if (pocRole === "exim") return "exim"
   if (pocRole.startsWith("rnd")) return "rnd"
-  if (pocRole.startsWith("sourcing")) return "sourcing"
+  if (pocRole.startsWith("sourcing") || SOURCING_SPOC_ROLES.includes(pocRole)) return "sourcing"
   return "rnd"
 }
 
@@ -112,7 +115,7 @@ export default function NTDDetailPage() {
   const stage = record.current_stage
   const ntdRole = toNTDRole(currentRole)
   const isRnd = currentRole.startsWith("rnd") || currentRole === "super_admin"
-  const isSourcing = currentRole.startsWith("sourcing") || currentRole === "super_admin"
+  const isSourcing = currentRole.startsWith("sourcing") || SOURCING_SPOC_ROLES.includes(currentRole) || currentRole === "super_admin"
   const canApprove = currentRole === "rnd_head" || currentRole === "super_admin"
   const isExim = currentRole === "exim" || currentRole === "super_admin"
 

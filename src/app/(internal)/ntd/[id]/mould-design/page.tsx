@@ -17,7 +17,7 @@ function toNTDRole(pocRole: string): NTDRole {
   if (pocRole === "sourcing_head") return "sourcing_head"
   if (pocRole === "super_admin") return "super_admin"
   if (pocRole.startsWith("rnd")) return "rnd"
-  if (pocRole.startsWith("sourcing")) return "sourcing"
+  if (pocRole.startsWith("sourcing") || ["Rahul Sharma","Karan Mehta","Priya Rajan","Amit Kumar","Varun Joshi","Rohan Desai"].includes(pocRole)) return "sourcing"
   return "rnd"
 }
 
@@ -75,7 +75,8 @@ export default function MouldDesignPage() {
 
   const ntdRole = toNTDRole(currentRole)
   const isRnd = currentRole.startsWith("rnd") || currentRole === "super_admin"
-  const isSourcing = currentRole.startsWith("sourcing") || currentRole === "super_admin"
+  const SOURCING_SPOC_ROLES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi", "Rohan Desai"]
+  const isSourcing = currentRole.startsWith("sourcing") || SOURCING_SPOC_ROLES.includes(currentRole) || currentRole === "super_admin"
   const { approved, total } = getMouldProgress(id)
   const allComponentsApproved = approved === total && total > 0
 
