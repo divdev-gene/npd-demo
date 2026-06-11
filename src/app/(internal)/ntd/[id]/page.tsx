@@ -355,27 +355,48 @@ export default function NTDDetailPage() {
   }
 
   // ── Stage 5 selection ──
-  const handleSelectSupplier = (vendorId: string, vendorName: string) => {
+  const handleSelectCommoditySupplier = (commodity: string, vendorId: string, vendorName: string) => {
     const existing = selectionData ?? {
-      selected_vendor_id: "", selected_vendor_name: "",
+      selections: {},
       sourcing_approved: false, sourcing_approved_by: "", sourcing_approved_at: "",
       rnd_acknowledged: false, rnd_acknowledged_by: "", rnd_acknowledged_at: "",
     }
-    setNTDSelection(id, { ...existing, selected_vendor_id: vendorId, selected_vendor_name: vendorName, sourcing_approved: true, sourcing_approved_by: currentRole, sourcing_approved_at: new Date().toISOString() })
-    const r = getNTDRecord(id)
-    if (r) saveNTDRecord({ ...r, supplier: vendorName })
-    appendActivity(id, currentRole, ntdRole, 5, "supplier_selected", `Supplier selected: ${vendorName}`, { vendor_id: vendorId })
+    const updatedSelections = { ...existing.selections, [commodity]: { vendor_id: vendorId, vendor_name: vendorName } }
+    const activeCommodities = getActiveCommodities(id)
+    const allSelected = activeCommodities.every(c => updatedSelections[c]?.vendor_name)
+
+    const updated = {
+      ...existing,
+      selections: updatedSelections,
+      ...(allSelected ? { sourcing_approved: true, sourcing_approved_by: currentRole, sourcing_approved_at: new Date().toISOString() } : {}),
+    }
+    setNTDSelection(id, updated)
+    appendActivity(id, currentRole, ntdRole, 5, "supplier_selected", `${commodity} supplier selected: ${vendorName}`, { vendor_id: vendorId })
     reload()
   }
 
   const handleRndAcknowledge = () => {
     if (!selectionData) return
-    const updated = { ...selectionData, rnd_acknowledged: true, rnd_acknowledged_by: currentRole, rnd_acknowledged_at: new Date().toISOString() }
+    const updated = {
+      ...selectionData,
+      rnd_acknowledged: true,
+      rnd_acknowledged_by: currentRole,
+      rnd_acknowledged_at: new Date().toISOString(),
+    }
     setNTDSelection(id, updated)
+    // Write selectedSuppliers to the master NTD record
+    const r = getNTDRecord(id)
+    if (r) {
+      const suppliersMap: Record<string, string> = {}
+      Object.entries(selectionData.selections ?? {}).forEach(([commodity, sel]) => {
+        suppliersMap[commodity] = sel.vendor_name
+      })
+      saveNTDRecord({ ...r, selectedSuppliers: suppliersMap })
+    }
     if (updated.sourcing_approved && updated.rnd_acknowledged) {
       advanceNTDStage(id, 6, currentRole, ntdRole)
     }
-    appendActivity(id, currentRole, ntdRole, 5, "supplier_selected", "R&D acknowledged supplier selection")
+    appendActivity(id, currentRole, ntdRole, 5, "supplier_acknowledged", "R&D acknowledged all supplier selections")
     reload()
   }
 
@@ -970,53 +991,99 @@ export default function NTDDetailPage() {
   // Stage 5 — Supplier Selection
   if (stage >= 4) cards.push(
     <StageCard key="s5" stageNum={5} stage={stage} colorClass="border-blue-500" title="Supplier Selection"
-      doneLabel={selectionData?.sourcing_approved ? `${selectionData.selected_vendor_name} selected` : undefined}>
-      <div className="space-y-4">
-        {!selectionData?.sourcing_approved ? (
-          <div className="space-y-2">
-            <p className="text-sm text-slate-600">Select the final supplier from finalized quotations:</p>
-            {quotationData && Object.entries(rfqData?.vendors ?? {}).filter(([vid]) => quotationData[vid]?.status === "finalized").map(([vid, vendor]) => (
-              <div key={vid} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-3">
-                <div>
-                  <p className="font-semibold text-slate-800">{vendor.vendor_name}</p>
-                  <p className="text-xs text-slate-500">{quotationData[vid]?.quotation?.currency} {quotationData[vid]?.quotation?.amount?.toLocaleString()}</p>
+      doneLabel={selectionData?.sourcing_approved ? `${Object.keys(selectionData.selections ?? {}).length} supplier(s) selected` : undefined}>
+      {(() => {
+        const activeCommodities = getActiveCommodities(id)
+        const vendors = rfqData?.vendors ?? {}
+        const quotations = quotationData ?? {}
+        const currentSelections = selectionData?.selections ?? {}
+
+        return (
+          <div className="space-y-5">
+            {activeCommodities.map(commodity => {
+              const finalizedVendorIds = Object.entries(vendors)
+                .filter(([, v]) => v.commodity === commodity)
+                .filter(([vid]) => quotations[vid]?.status === "finalized")
+                .map(([vid, v]) => ({ vendorId: vid, vendorName: v.vendor_name }))
+
+              const selected = currentSelections[commodity]
+
+              return (
+                <div key={commodity} className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">{commodity}</span>
+                    {selected && (
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+                        <CheckCircle2 className="w-3 h-3" /> {selected.vendor_name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    {finalizedVendorIds.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">No finalized vendors for this commodity yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {finalizedVendorIds.map(({ vendorId, vendorName }) => {
+                          const q = quotations[vendorId]?.quotation
+                          const isSelected = selected?.vendor_id === vendorId
+                          return (
+                            <div key={vendorId}
+                              className={`flex items-center justify-between rounded-lg border px-3 py-2.5 ${isSelected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800">{vendorName}</p>
+                                {q && (
+                                  <p className="text-[10px] text-slate-400">
+                                    {q.currency} {q.amount.toLocaleString()} · {q.lead_time_days}d lead time
+                                  </p>
+                                )}
+                              </div>
+                              {isSourcing && !selected && (
+                                <button onClick={() => handleSelectCommoditySupplier(commodity, vendorId, vendorName)}
+                                  className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-lg transition-colors">
+                                  Select
+                                </button>
+                              )}
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {isSourcing && (
-                  <button onClick={() => handleSelectSupplier(vid, vendor.vendor_name)}
-                    className="text-xs font-semibold bg-blue-900 hover:bg-blue-800 text-white px-3 py-2 rounded-lg transition-colors">
-                    Select as Supplier
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
-              <CheckCircle2 className="w-5 h-5 text-blue-600" />
-              <div>
-                <p className="font-semibold text-blue-900">{selectionData.selected_vendor_name}</p>
-                <p className="text-xs text-blue-600">Selected by {selectionData.sourcing_approved_by}</p>
-              </div>
-            </div>
-            {!selectionData.rnd_acknowledged ? (
-              isRnd ? (
-                <button onClick={handleRndAcknowledge}
-                  className="text-sm font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg transition-colors">
-                  R&D Acknowledge Selection
-                </button>
-              ) : (
-                <p className="text-xs text-slate-400 italic">Awaiting R&D acknowledgement...</p>
               )
-            ) : (
-              <div className="flex items-center gap-2 text-xs text-emerald-700">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                R&D acknowledged by {selectionData.rnd_acknowledged_by}
+            })}
+
+            {selectionData?.sourcing_approved && !selectionData.rnd_acknowledged && isRnd && (
+              <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-4 space-y-3">
+                <p className="text-sm font-semibold text-indigo-800">Acknowledge Supplier Selections</p>
+                <div className="space-y-1">
+                  {Object.entries(selectionData.selections ?? {}).map(([commodity, sel]) => (
+                    <p key={commodity} className="text-xs text-slate-700">
+                      <span className="font-semibold text-slate-500">{commodity}:</span> {sel.vendor_name}
+                    </p>
+                  ))}
+                </div>
+                <button onClick={handleRndAcknowledge}
+                  className="w-full py-2 rounded-lg text-sm font-semibold bg-indigo-700 hover:bg-indigo-800 text-white transition-colors">
+                  Acknowledge All Selections
+                </button>
+              </div>
+            )}
+
+            {selectionData?.sourcing_approved && !selectionData.rnd_acknowledged && !isRnd && (
+              <p className="text-xs text-slate-400 italic">Awaiting R&D acknowledgement...</p>
+            )}
+
+            {selectionData?.rnd_acknowledged && (
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <p className="text-sm text-emerald-800">Supplier selections acknowledged by {selectionData.rnd_acknowledged_by}</p>
               </div>
             )}
           </div>
-        )}
-      </div>
+        )
+      })()}
     </StageCard>
   )
 
