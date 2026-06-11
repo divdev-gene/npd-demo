@@ -116,6 +116,8 @@ export default function NTDDetailPage() {
   const [mfgUpdate, setMfgUpdate] = useState("")
   const [mfgStartDate, setMfgStartDate] = useState("")
   const [mfgEta, setMfgEta] = useState("")
+  // Per-commodity mfg update text (commodity → update note)
+  const [mfgV2Updates, setMfgV2Updates] = useState<Record<string, string>>({})
 
   // Stage 2 query
   const [queryText, setQueryText] = useState("")
@@ -192,6 +194,9 @@ export default function NTDDetailPage() {
   const dfmData = getNTDDFM(id)
   const mouldData = getNTDMould(id)
   const mfgData = getNTDMfg(id)
+  const mfgV2Data: Record<string, NTDMfgData> = typeof window !== "undefined"
+    ? JSON.parse(localStorage.getItem(`ntd_mfg_v2_${id}`) ?? "{}")
+    : {}
   const trialsData = getNTDTrials(id)
   const s11Data = getNTDStage11(id)
 
@@ -499,6 +504,51 @@ export default function NTDDetailPage() {
     setNTDMfg(id, { ...mfgData, status: "complete", completed_by: currentRole, completed_at: new Date().toISOString() })
     advanceNTDStage(id, 10, currentRole, ntdRole)
     appendActivity(id, currentRole, ntdRole, 9, "manufacturing_complete", "Manufacturing marked complete")
+    reload()
+  }
+
+  // ── Stage 9 Per-commodity Manufacturing (v2) ──
+  const defaultMfgRecord = (): NTDMfgData => ({
+    mfg_start_date: "", eta_date: "", updates: [], status: "not_started", completed_by: "", completed_at: "",
+  })
+
+  const getMfgV2Data = (): Record<string, NTDMfgData> => {
+    if (typeof window === "undefined") return {}
+    return JSON.parse(localStorage.getItem(`ntd_mfg_v2_${id}`) ?? "{}")
+  }
+
+  const handleMarkMfgComplete = (commodity: string) => {
+    const mfgV2Data = getMfgV2Data()
+    const current = mfgV2Data[commodity] ?? defaultMfgRecord()
+    const updated = { ...current, status: "complete" as const, completed_by: currentRole, completed_at: new Date().toISOString() }
+    const newV2 = { ...mfgV2Data, [commodity]: updated }
+    localStorage.setItem(`ntd_mfg_v2_${id}`, JSON.stringify(newV2))
+    appendActivity(id, currentRole, ntdRole, 9, "manufacturing_complete", `${commodity} manufacturing marked complete`)
+    const activeCommodities = getActiveCommodities(id)
+    const allComplete = activeCommodities.every(c => newV2[c]?.status === "complete")
+    if (allComplete) {
+      advanceNTDStage(id, 10, currentRole, ntdRole)
+    }
+    reload()
+  }
+
+  const handlePostMfgUpdate = (commodity: string, note: string) => {
+    const mfgV2Data = getMfgV2Data()
+    const current = mfgV2Data[commodity] ?? defaultMfgRecord()
+    const update = {
+      update_id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      note,
+      posted_by: currentRole,
+      posted_by_role: ntdRole,
+    }
+    const updated = {
+      ...current,
+      status: current.status === "not_started" ? "in_progress" as const : current.status,
+      updates: [...(current.updates ?? []), update],
+    }
+    localStorage.setItem(`ntd_mfg_v2_${id}`, JSON.stringify({ ...mfgV2Data, [commodity]: updated }))
+    setMfgV2Updates(prev => ({ ...prev, [commodity]: "" }))
     reload()
   }
 
@@ -1338,74 +1388,109 @@ export default function NTDDetailPage() {
     </StageCard>
   )
 
-  // Stage 9 — Manufacturing
+  // Stage 9 — Manufacturing (per-commodity dashboard)
+  const activeCommodities9 = getActiveCommodities(id)
+  const allMfgComplete = activeCommodities9.length > 0 &&
+    activeCommodities9.every(c => mfgV2Data[c]?.status === "complete")
+
   if (stage >= 8) cards.push(
     <StageCard key="s9" stageNum={9} stage={stage} colorClass="border-blue-500" title="Manufacturing"
-      doneLabel={mfgData?.status === "complete" ? `Completed · ETA was ${mfgData.eta_date}` : undefined}>
-      <div className="space-y-3">
-        {!mfgData ? (isSourcing ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-500 uppercase">Start Date</label>
-                <input type="date" value={mfgStartDate} onChange={e => setMfgStartDate(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-500 uppercase">ETA Date</label>
-                <input type="date" value={mfgEta} onChange={e => setMfgEta(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-              </div>
+      doneLabel={allMfgComplete ? `All ${activeCommodities9.length} commodity supplier(s) complete` : undefined}>
+      <div className="space-y-4">
+        {activeCommodities9.length === 0 ? (
+          <p className="text-sm text-slate-400 italic">No active commodities found. Complete Stage 5 supplier selection first.</p>
+        ) : (
+          <>
+            {/* Per-commodity progress overview */}
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span className="font-semibold">
+                {activeCommodities9.filter(c => mfgV2Data[c]?.status === "complete").length} / {activeCommodities9.length} suppliers complete
+              </span>
             </div>
-            <button onClick={handleMfgStart}
-              className="text-sm font-semibold bg-blue-900 hover:bg-blue-800 text-white px-4 py-2 rounded-lg transition-colors">
-              Confirm Manufacturing Start
-            </button>
-          </div>
-        ) : <p className="text-sm text-slate-400 italic">Awaiting manufacturing start confirmation...</p>)
-        : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-slate-50 rounded-lg px-3 py-2">
-                <p className="text-[10px] text-slate-400 uppercase">Start Date</p>
-                <p className="text-sm font-bold text-slate-800">{mfgData.mfg_start_date}</p>
-              </div>
-              <div className="bg-slate-50 rounded-lg px-3 py-2">
-                <p className="text-[10px] text-slate-400 uppercase">ETA</p>
-                <p className="text-sm font-bold text-slate-800">{mfgData.eta_date || "—"}</p>
-              </div>
-              <div className="bg-slate-50 rounded-lg px-3 py-2">
-                <p className="text-[10px] text-slate-400 uppercase">Status</p>
-                <span className={`text-xs font-bold ${mfgData.status === "complete" ? "text-emerald-700" : "text-blue-700"}`}>
-                  {mfgData.status === "complete" ? "Complete" : "In Progress"}
-                </span>
-              </div>
-            </div>
-            {/* Updates feed */}
-            {mfgData.updates.length > 0 && (
-              <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                {[...mfgData.updates].reverse().map(u => (
-                  <div key={u.update_id} className="text-xs bg-slate-50 rounded-lg px-3 py-2">
-                    <span className="text-slate-400">{u.date}</span> — {u.note}
+            {/* Per-commodity cards */}
+            <div className="space-y-3">
+              {activeCommodities9.map(commodity => {
+                const supplierName = record?.selectedSuppliers?.[commodity] ?? "—"
+                const commData = mfgV2Data[commodity]
+                const commStatus = commData?.status ?? "not_started"
+                const commUpdates = commData?.updates ?? []
+                const updateNote = mfgV2Updates[commodity] ?? ""
+
+                return (
+                  <div key={commodity} className={`rounded-xl border p-4 space-y-3 ${
+                    commStatus === "complete" ? "border-emerald-200 bg-emerald-50" :
+                    commStatus === "in_progress" ? "border-amber-200 bg-amber-50" :
+                    "border-slate-200 bg-slate-50"
+                  }`}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{commodity}</p>
+                        <p className="text-xs text-slate-500">Supplier: <span className="font-medium text-slate-700">{supplierName}</span></p>
+                      </div>
+                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                        commStatus === "complete" ? "bg-emerald-100 text-emerald-700" :
+                        commStatus === "in_progress" ? "bg-amber-100 text-amber-700" :
+                        "bg-slate-200 text-slate-500"
+                      }`}>
+                        {commStatus === "complete" ? "Complete" : commStatus === "in_progress" ? "In Progress" : "Not Started"}
+                      </span>
+                    </div>
+
+                    {/* Completion strip */}
+                    {commStatus === "complete" && commData && (
+                      <div className="flex items-center gap-2 text-xs text-emerald-700">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Completed by <span className="font-semibold">{commData.completed_by}</span> · {new Date(commData.completed_at).toLocaleDateString()}</span>
+                      </div>
+                    )}
+
+                    {/* Updates feed */}
+                    {commUpdates.length > 0 && (
+                      <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                        {[...commUpdates].reverse().map(u => (
+                          <div key={u.update_id} className="text-xs bg-white rounded-lg px-3 py-2 border border-slate-100">
+                            <span className="text-slate-400">{new Date(u.date).toLocaleDateString()}</span>
+                            <span className="text-slate-500 mx-1">·</span>
+                            <span className="font-medium text-slate-500 mr-1">{u.posted_by}</span>
+                            {u.note}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Actions (Sourcing only, not complete) */}
+                    {commStatus !== "complete" && isSourcing && (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Post a status update..."
+                          value={updateNote}
+                          onFocus={pausePolling}
+                          onBlur={resumePolling}
+                          onChange={e => setMfgV2Updates(prev => ({ ...prev, [commodity]: e.target.value }))}
+                          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        />
+                        <button
+                          onClick={() => { if (updateNote.trim()) handlePostMfgUpdate(commodity, updateNote.trim()) }}
+                          disabled={!updateNote.trim()}
+                          className="text-xs font-semibold bg-slate-700 hover:bg-slate-800 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          Post
+                        </button>
+                        <button
+                          onClick={() => handleMarkMfgComplete(commodity)}
+                          className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                        >
+                          Mark Complete
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-            {mfgData.status !== "complete" && isSourcing && (
-              <div className="flex gap-2">
-                <input type="text" placeholder="Post a status update..." value={mfgUpdate} onChange={e => setMfgUpdate(e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                <button onClick={handleMfgUpdate} disabled={!mfgUpdate.trim()}
-                  className="text-xs font-semibold bg-slate-700 hover:bg-slate-800 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg transition-colors">
-                  Post
-                </button>
-                <button onClick={handleMfgComplete}
-                  className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors">
-                  Mark Complete
-                </button>
-              </div>
-            )}
-          </div>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
     </StageCard>
