@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -16,7 +16,9 @@ import {
   appendActivity, getMouldSubStage, getDFMProgress, getMouldProgress,
   getTrialProgress, getStage11CurrentSubstep, isNTDComplete,
   createVersionedFile, addFileVersion, generateVendorToken,
+  getActiveCommodities, allCommoditiesHaveRFQ,
 } from "@/lib/ntd"
+import { VENDOR_CATALOG } from "@/lib/mockData"
 import type { NTDRecord, NTDStage, NTDRole, NTDRFQData, NTDMfgData, NTDStage2Query } from "@/types/ntd"
 import { ActivityFeed } from "@/components/ntd/ActivityFeed"
 import { VersionedFileInput } from "@/components/ntd/VersionedFileInput"
@@ -26,11 +28,6 @@ const STAGE_NAMES: Record<number, string> = {
   5: "Supplier Selection", 6: "Design Handoff", 7: "DFM", 8: "Mould Design",
   9: "Manufacturing", 10: "Trials", 11: "Commissioning",
 }
-
-const VENDOR_CATALOG = [
-  "Precision Tools Ltd", "Global Mould Co", "Apex Engineering", "MasterCraft Tools",
-  "TechForm Industries", "Meridian Manufacturing", "Elite Tooling", "ProMould Solutions",
-]
 
 // Sourcing SPOCs use their name as the poc_role value
 const SOURCING_SPOC_ROLES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi", "Rohan Desai"]
@@ -43,6 +40,48 @@ function toNTDRole(pocRole: string): NTDRole {
   if (pocRole.startsWith("rnd")) return "rnd"
   if (pocRole.startsWith("sourcing") || SOURCING_SPOC_ROLES.includes(pocRole)) return "sourcing"
   return "rnd"
+}
+
+function StageCard({
+  stageNum, colorClass, title, children, doneLabel, stage,
+}: {
+  stageNum: number; colorClass: string; title: string; children: React.ReactNode; doneLabel?: string; stage: number
+}) {
+  const isDone = stage > stageNum
+  const isActive = stage === stageNum
+  const isUpcoming = stage === stageNum - 1
+
+  if (isDone) return (
+    <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3">
+      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+      <div>
+        <p className="text-xs font-semibold text-slate-700">Stage {stageNum} — {STAGE_NAMES[stageNum]}</p>
+        {doneLabel && <p className="text-[11px] text-slate-400">{doneLabel}</p>}
+      </div>
+    </div>
+  )
+
+  if (isUpcoming) return (
+    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 opacity-50">
+      <Circle className="w-4 h-4 text-slate-400 shrink-0" />
+      <div>
+        <p className="text-xs font-semibold text-slate-500">Stage {stageNum} — {STAGE_NAMES[stageNum]}</p>
+        <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Upcoming</span>
+      </div>
+    </div>
+  )
+
+  if (!isActive) return null
+
+  return (
+    <div className={`bg-white border-l-4 ${colorClass} border border-t-0 border-b-0 border-r-0 rounded-xl shadow-sm`}>
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${colorClass.replace("border-l-4 ", "").replace("border-", "bg-")}`} />
+        <h3 className="font-semibold text-slate-800 text-sm">Stage {stageNum} — {title}</h3>
+      </div>
+      <div className="px-5 py-4">{children}</div>
+    </div>
+  )
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -93,6 +132,11 @@ export default function NTDDetailPage() {
   // Stage 11
   const [s11Step, setS11Step] = useState<1 | 2 | 3 | 4 | 5 | 6>(1)
 
+  // Pause polling while user is typing in any input to prevent focus loss
+  const isEditingRef = React.useRef(false)
+  const pausePolling = () => { isEditingRef.current = true }
+  const resumePolling = () => { isEditingRef.current = false }
+
   const reload = useCallback(() => {
     const r = getNTDRecord(id)
     if (r) setRecord(r)
@@ -102,7 +146,7 @@ export default function NTDDetailPage() {
   useEffect(() => {
     setCurrentRole(localStorage.getItem("poc_role") ?? "rnd_engineer")
     reload()
-    const t = setInterval(reload, 3000)
+    const t = setInterval(() => { if (!isEditingRef.current) reload() }, 3000)
     const onRole = () => setCurrentRole(localStorage.getItem("poc_role") ?? "")
     window.addEventListener("rolechange", onRole)
     return () => { clearInterval(t); window.removeEventListener("rolechange", onRole) }
@@ -240,15 +284,16 @@ export default function NTDDetailPage() {
     reload()
   }
 
-  const handleAddVendorToRFQ = (vendorName: string, isCatalog: boolean) => {
+  const handleAddVendorToRFQ = (vendorName: string, isCatalog: boolean, commodity: string) => {
     const existing = rfqData ?? { vendors: {} }
-    const vendorId = `vendor_${Date.now()}`
+    const vendorId = `vendor_${commodity.replace(/\s+/g, "_")}_${Date.now()}`
     setNTDRFQ(id, {
       vendors: {
         ...existing.vendors,
         [vendorId]: {
           vendor_name: vendorName,
           is_catalog: isCatalog,
+          commodity: commodity as import("@/types/ntd").NTDCommodity,
           token: generateVendorToken(),
           nda_required: !isCatalog,
           nda_signed: isCatalog,
@@ -262,6 +307,8 @@ export default function NTDDetailPage() {
   }
 
   const handleAdvanceFromRFQ = () => {
+    if (!allCommoditiesHaveRFQ(id)) return
+    appendActivity(id, currentRole, ntdRole, 3, "stage_complete", "RFQs dispatched to all commodity vendor pools")
     advanceNTDStage(id, 4, currentRole, ntdRole)
     reload()
   }
@@ -394,49 +441,6 @@ export default function NTDDetailPage() {
     reload()
   }
 
-  // ── Card helpers ──
-  function StageCard({
-    stageNum, colorClass, title, children, doneLabel,
-  }: {
-    stageNum: number; colorClass: string; title: string; children: React.ReactNode; doneLabel?: string
-  }) {
-    const isDone = stage > stageNum
-    const isActive = stage === stageNum
-    const isUpcoming = stage === stageNum - 1
-
-    if (isDone) return (
-      <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3">
-        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-        <div>
-          <p className="text-xs font-semibold text-slate-700">Stage {stageNum} — {STAGE_NAMES[stageNum]}</p>
-          {doneLabel && <p className="text-[11px] text-slate-400">{doneLabel}</p>}
-        </div>
-      </div>
-    )
-
-    if (isUpcoming) return (
-      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 opacity-50">
-        <Circle className="w-4 h-4 text-slate-400 shrink-0" />
-        <div>
-          <p className="text-xs font-semibold text-slate-500">Stage {stageNum} — {STAGE_NAMES[stageNum]}</p>
-          <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Upcoming</span>
-        </div>
-      </div>
-    )
-
-    if (!isActive) return null
-
-    return (
-      <div className={`bg-white border-l-4 ${colorClass} border border-t-0 border-b-0 border-r-0 rounded-xl shadow-sm`}>
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${colorClass.replace("border-l-4 ", "").replace("border-", "bg-")}`} />
-          <h3 className="font-semibold text-slate-800 text-sm">Stage {stageNum} — {title}</h3>
-        </div>
-        <div className="px-5 py-4">{children}</div>
-      </div>
-    )
-  }
-
   // ── Build card stack ──
   const cards: React.ReactNode[] = []
 
@@ -486,7 +490,7 @@ export default function NTDDetailPage() {
     const s2Queries = specData?.queries ?? []
     const hasOpenQuery = s2Queries.some(q => !q.resolved)
     cards.push(
-      <StageCard key="s2" stageNum={2} colorClass="border-teal-500" title="Spec Sheet & Sign-off"
+      <StageCard key="s2" stageNum={2} stage={stage} colorClass="border-teal-500" title="Spec Sheet & Sign-off"
         doneLabel={specData?.sourcing_signed ? `Approved by ${specData.sourcing_signed_by}` : undefined}>
         <div className="space-y-5">
 
@@ -498,7 +502,7 @@ export default function NTDDetailPage() {
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     Spec Sheet Link <span className="text-red-500">*</span>
                   </label>
-                  <input type="url" value={specSheet} onChange={e => setSpecSheet(e.target.value)}
+                  <input type="text" autoComplete="off" value={specSheet} onChange={e => setSpecSheet(e.target.value)}
                     placeholder="Drive / SharePoint link"
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
                 </div>
@@ -516,13 +520,13 @@ export default function NTDDetailPage() {
                   )}
                   {comparisons.map(c => (
                     <div key={c.id} className="flex gap-2 items-start bg-slate-50 rounded-lg p-2">
-                      <input type="text" placeholder="Vendor name" value={c.vendor_name}
+                      <input type="text" autoComplete="off" placeholder="Vendor name" value={c.vendor_name}
                         onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, vendor_name: e.target.value } : x))}
                         className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
-                      <input type="url" placeholder="Spec doc link" value={c.spec_doc_link}
+                      <input type="text" autoComplete="off" placeholder="Spec doc link" value={c.spec_doc_link}
                         onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, spec_doc_link: e.target.value } : x))}
                         className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
-                      <input type="text" placeholder="Notes" value={c.notes}
+                      <input type="text" autoComplete="off" placeholder="Notes" value={c.notes}
                         onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, notes: e.target.value } : x))}
                         className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
                       <button onClick={() => setComparisons(prev => prev.filter(x => x.id !== c.id))}
@@ -681,81 +685,116 @@ export default function NTDDetailPage() {
 
   // Stage 3 — RFQ Dispatch
   if (stage >= 2) cards.push(
-    <StageCard key="s3" stageNum={3} colorClass="border-indigo-500" title="RFQ Dispatch"
+    <StageCard key="s3" stageNum={3} stage={stage} colorClass="border-indigo-500" title="RFQ Dispatch"
       doneLabel={rfqData ? `${Object.values(rfqData.vendors).filter(v => v.sent).length} RFQs sent` : undefined}>
-      <div className="space-y-4">
-        {/* Catalog vendor select */}
-        {isSourcing && (
-          <div className="space-y-2">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Select Vendors</p>
-            <div className="flex flex-wrap gap-2">
-              {VENDOR_CATALOG.filter(v => !Object.values(rfqData?.vendors ?? {}).some(rv => rv.vendor_name === v)).map(v => (
-                <button key={v} onClick={() => handleAddVendorToRFQ(v, true)}
-                  className="text-xs border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors">
-                  + {v}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input type="text" placeholder="Custom vendor name" value={customVendorName} onChange={e => setCustomVendorName(e.target.value)}
-                className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              <button onClick={() => { if (customVendorName.trim()) { handleAddVendorToRFQ(customVendorName.trim(), false); setCustomVendorName("") } }}
-                disabled={!customVendorName.trim()}
-                className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg transition-colors">
-                Add Custom
-              </button>
-            </div>
-          </div>
-        )}
+      {(() => {
+        const activeCommodities = getActiveCommodities(id)
+        const vendors = rfqData?.vendors ?? {}
+        const baseUrl = typeof window !== "undefined" ? window.location.origin : ""
+        const allSent = allCommoditiesHaveRFQ(id)
 
-        {/* Vendor list */}
-        {rfqData && Object.entries(rfqData.vendors).length > 0 && (
-          <div className="space-y-2">
-            {Object.entries(rfqData.vendors).map(([vid, v]) => {
-              const rfqUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/rfq/ntd/${id}/${v.token}`
+        return (
+          <div className="space-y-5">
+            {activeCommodities.map(commodity => {
+              const catalogVendors = (VENDOR_CATALOG as Record<string, { name: string; tier: string; spocName?: string }[]>)[commodity] ?? []
+
               return (
-                <div key={vid} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{v.vendor_name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {v.nda_required && (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${v.nda_signed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                          NDA {v.nda_signed ? "Signed" : "Required"}
-                        </span>
-                      )}
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${v.sent ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
-                        {v.sent ? "Sent" : "Pending"}
-                      </span>
-                    </div>
+                <div key={commodity} className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">{commodity}</span>
+                    <span className="text-[10px] text-slate-400">{catalogVendors.length} catalog vendors</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {v.sent && <CopyButton text={rfqUrl} />}
-                    {isSourcing && !v.sent && (
-                      <button onClick={() => handleSendRFQ(vid)}
-                        className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-lg transition-colors">
-                        Send RFQ
-                      </button>
+                  <div className="p-4 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {catalogVendors.map(cv => {
+                        const existingEntry = Object.entries(vendors).find(([, v]) => v.vendor_name === cv.name && v.commodity === commodity)
+                        const isAdded = !!existingEntry
+                        const [existingId, existingVendor] = existingEntry ?? ["", null]
+                        const rfqUrl = existingVendor ? `${baseUrl}/rfq/ntd/${id}/${existingVendor.token}` : ""
+
+                        return (
+                          <div key={cv.name} className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${isAdded ? "border-indigo-200 bg-indigo-50" : "border-slate-200 bg-white"}`}>
+                            <input type="checkbox" checked={isAdded}
+                              onChange={() => {
+                                if (isAdded) {
+                                  const { [existingId]: _removed, ...rest } = vendors
+                                  setNTDRFQ(id, { vendors: rest })
+                                  reload()
+                                } else {
+                                  handleAddVendorToRFQ(cv.name, true, commodity)
+                                }
+                              }}
+                              className="mt-0.5 rounded border-slate-300 accent-indigo-600" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-800">{cv.name}</p>
+                              <p className="text-[10px] text-slate-400">{cv.tier}{cv.spocName ? ` · ${cv.spocName}` : ""}</p>
+                              {isAdded && existingVendor && (
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  {existingVendor.sent ? (
+                                    <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+                                      <CheckCircle2 className="w-3 h-3" /> RFQ Sent
+                                    </span>
+                                  ) : (
+                                    <button onClick={() => handleSendRFQ(existingId)}
+                                      className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 px-2 py-0.5 rounded-lg transition-colors">
+                                      Send RFQ
+                                    </button>
+                                  )}
+                                  {rfqUrl && <CopyButton text={rfqUrl} />}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {isSourcing && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <input type="text" autoComplete="off"
+                          placeholder={`Add custom ${commodity} vendor...`}
+                          value={customVendorName}
+                          onFocus={pausePolling} onBlur={resumePolling}
+                          onChange={e => setCustomVendorName(e.target.value)}
+                          className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                        <button onClick={() => {
+                          if (customVendorName.trim()) {
+                            handleAddVendorToRFQ(customVendorName.trim(), false, commodity)
+                            setCustomVendorName("")
+                          }
+                        }} disabled={!customVendorName.trim()}
+                          className="text-xs font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg transition-colors">
+                          <Plus className="w-3 h-3 inline mr-1" />Add
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
               )
             })}
-          </div>
-        )}
 
-        {isSourcing && rfqData && Object.values(rfqData.vendors).some(v => v.sent) && (
-          <button onClick={handleAdvanceFromRFQ}
-            className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
-            Proceed to Quotation Review <ChevronRight className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+            {activeCommodities.length === 0 && (
+              <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <p className="text-sm text-amber-800">No commodity components defined. Complete Stage 1 with component commodities first.</p>
+              </div>
+            )}
+
+            {isSourcing && stage === 3 && (
+              <button onClick={handleAdvanceFromRFQ} disabled={!allSent}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors">
+                {allSent ? "Proceed to Quotation Review →" : "Waiting for RFQs across all commodities"}
+              </button>
+            )}
+          </div>
+        )
+      })()}
     </StageCard>
   )
 
   // Stage 4 — Quotation & Negotiation
   if (stage >= 3) cards.push(
-    <StageCard key="s4" stageNum={4} colorClass="border-amber-500" title="Quotation & Negotiation"
+    <StageCard key="s4" stageNum={4} stage={stage} colorClass="border-amber-500" title="Quotation & Negotiation"
       doneLabel={quotationData ? `${Object.values(quotationData).filter(v => v.status === "finalized").length} finalized` : undefined}>
       <div className="space-y-4">
         {rfqData && Object.entries(rfqData.vendors).map(([vid, vendor]) => {
@@ -859,6 +898,9 @@ export default function NTDDetailPage() {
                       <textarea
                         value={counterText[vid] ?? ""}
                         onChange={e => setCounterText(prev => ({ ...prev, [vid]: e.target.value }))}
+                        onFocus={pausePolling}
+                        onBlur={resumePolling}
+                        autoComplete="off"
                         placeholder="Your message or negotiation note..."
                         rows={2}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
@@ -867,9 +909,13 @@ export default function NTDDetailPage() {
                         <div className="flex-1 relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">₹</span>
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
                             value={counterPrice[vid] ?? ""}
                             onChange={e => setCounterPrice(prev => ({ ...prev, [vid]: e.target.value }))}
+                            onFocus={pausePolling}
+                            onBlur={resumePolling}
                             placeholder="Counter price (optional)"
                             className="w-full rounded-lg border border-slate-200 pl-6 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
                           />
@@ -923,7 +969,7 @@ export default function NTDDetailPage() {
 
   // Stage 5 — Supplier Selection
   if (stage >= 4) cards.push(
-    <StageCard key="s5" stageNum={5} colorClass="border-blue-500" title="Supplier Selection"
+    <StageCard key="s5" stageNum={5} stage={stage} colorClass="border-blue-500" title="Supplier Selection"
       doneLabel={selectionData?.sourcing_approved ? `${selectionData.selected_vendor_name} selected` : undefined}>
       <div className="space-y-4">
         {!selectionData?.sourcing_approved ? (
@@ -976,7 +1022,7 @@ export default function NTDDetailPage() {
 
   // Stage 6 — Design Handoff
   if (stage >= 5) cards.push(
-    <StageCard key="s6" stageNum={6} colorClass="border-emerald-500" title="Final Design Handoff"
+    <StageCard key="s6" stageNum={6} stage={stage} colorClass="border-emerald-500" title="Final Design Handoff"
       doneLabel={handoffData?.supplier_acknowledged ? `${handoffData.component_count} components · Supplier acknowledged` : undefined}>
       <div className="space-y-4">
         {!handoffData?.submitted_by ? isRnd ? (
@@ -1024,7 +1070,7 @@ export default function NTDDetailPage() {
                   <input type="text" placeholder="File name" value={slot.slotName}
                     onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, slotName: e.target.value } : s))}
                     className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
-                  <input type="url" placeholder="Drive link" value={slot.link}
+                  <input type="text" autoComplete="off" placeholder="Drive link" value={slot.link}
                     onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, link: e.target.value } : s))}
                     className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
                 </div>
@@ -1072,7 +1118,7 @@ export default function NTDDetailPage() {
 
   // Stage 7 — DFM
   if (stage >= 6) cards.push(
-    <StageCard key="s7" stageNum={7} colorClass="border-purple-500" title="DFM Review"
+    <StageCard key="s7" stageNum={7} stage={stage} colorClass="border-purple-500" title="DFM Review"
       doneLabel={dfmData?.stage_complete ? `${dfmProgress.approved}/${dfmProgress.total} approved` : undefined}>
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -1097,7 +1143,7 @@ export default function NTDDetailPage() {
 
   // Stage 8 — Mould Design
   if (stage >= 7) cards.push(
-    <StageCard key="s8" stageNum={8} colorClass="border-slate-500" title="Mould Design"
+    <StageCard key="s8" stageNum={8} stage={stage} colorClass="border-slate-500" title="Mould Design"
       doneLabel={mouldData?.stage_complete ? `${mouldProgress.approved} components approved` : undefined}>
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -1120,7 +1166,7 @@ export default function NTDDetailPage() {
 
   // Stage 9 — Manufacturing
   if (stage >= 8) cards.push(
-    <StageCard key="s9" stageNum={9} colorClass="border-blue-500" title="Manufacturing"
+    <StageCard key="s9" stageNum={9} stage={stage} colorClass="border-blue-500" title="Manufacturing"
       doneLabel={mfgData?.status === "complete" ? `Completed · ETA was ${mfgData.eta_date}` : undefined}>
       <div className="space-y-3">
         {!mfgData ? (isSourcing ? (
@@ -1193,7 +1239,7 @@ export default function NTDDetailPage() {
 
   // Stage 10 — Trials
   if (stage >= 9) cards.push(
-    <StageCard key="s10" stageNum={10} colorClass="border-orange-500" title="Trials"
+    <StageCard key="s10" stageNum={10} stage={stage} colorClass="border-orange-500" title="Trials"
       doneLabel={trialsData?.stage_complete ? `All ${trialProgress.total} components passed` : undefined}>
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -1216,7 +1262,7 @@ export default function NTDDetailPage() {
   if (stage >= 10) {
     const subStepNames = ["Inspection Report", "Commissioning", "Shipment", "EXIM Clearance", "Arrival", "Final Sign-off"]
     cards.push(
-      <StageCard key="s11" stageNum={11} colorClass="border-slate-600" title="Commissioning & Dispatch"
+      <StageCard key="s11" stageNum={11} stage={stage} colorClass="border-slate-600" title="Commissioning & Dispatch"
         doneLabel={complete ? "NTD Complete" : undefined}>
         <div className="space-y-4">
           {/* Sub-step progress bar */}
