@@ -4,11 +4,14 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, Trash2, ArrowLeft, AlertTriangle } from "lucide-react"
 import { saveNTDRecord, setNTDInitiation, appendActivity, generateNTDId, createVersionedFile } from "@/lib/ntd"
+import { NTD_COMMODITIES, type NTDCommodity } from "@/types/ntd"
 
-interface FileSlot {
+interface ComponentRow {
   id: string
-  slotName: string
-  link: string
+  name: string
+  commodity: NTDCommodity
+  specSlotName: string
+  specLink: string
 }
 
 export default function NTDNewPage() {
@@ -16,7 +19,9 @@ export default function NTDNewPage() {
   const [currentRole, setCurrentRole] = useState("")
   const [title, setTitle] = useState("")
   const [notes, setNotes] = useState("")
-  const [fileSlots, setFileSlots] = useState<FileSlot[]>([{ id: "1", slotName: "", link: "" }])
+  const [componentRows, setComponentRows] = useState<ComponentRow[]>([
+    { id: "C01", name: "", commodity: "Sheet Metal", specSlotName: "", specLink: "" }
+  ])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -26,23 +31,25 @@ export default function NTDNewPage() {
 
   const canCreate = currentRole.startsWith("rnd") || currentRole === "super_admin"
 
-  const addSlot = () => {
-    setFileSlots(prev => [...prev, { id: String(Date.now()), slotName: "", link: "" }])
+  const addComponentRow = () => {
+    const nextNum = componentRows.length + 1
+    const id = `C${String(nextNum).padStart(2, "0")}`
+    setComponentRows(prev => [...prev, { id, name: "", commodity: "Sheet Metal", specSlotName: "", specLink: "" }])
   }
 
-  const removeSlot = (id: string) => {
-    if (fileSlots.length > 1) setFileSlots(prev => prev.filter(s => s.id !== id))
+  const removeComponentRow = (rowId: string) => {
+    if (componentRows.length > 1) setComponentRows(prev => prev.filter(r => r.id !== rowId))
   }
 
-  const updateSlot = (id: string, field: "slotName" | "link", value: string) => {
-    setFileSlots(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s))
+  const updateComponentRow = (rowId: string, field: keyof ComponentRow, value: string) => {
+    setComponentRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: value } : r))
   }
 
   const validate = () => {
     const e: Record<string, string> = {}
     if (!title.trim()) e.title = "Title is required"
-    const hasValidSlot = fileSlots.some(s => s.slotName.trim() && s.link.trim())
-    if (!hasValidSlot) e.files = "At least one file slot with a name and link is required"
+    const hasValidComponent = componentRows.some(r => r.name.trim())
+    if (!hasValidComponent) e.components = "At least one component with a name is required"
     return e
   }
 
@@ -55,6 +62,17 @@ export default function NTDNewPage() {
     const now = new Date().toISOString()
 
     const ntdRole = currentRole === "rnd_head" ? "rnd_head" : currentRole === "super_admin" ? "super_admin" : "rnd"
+
+    const validComponents = componentRows.filter(r => r.name.trim())
+    const ntdComponents = validComponents.map(r => ({
+      componentId: r.id,
+      name: r.name.trim(),
+      commodity: r.commodity,
+    }))
+
+    const partSpecs = validComponents
+      .filter(r => r.specSlotName.trim() && r.specLink.trim())
+      .map(r => createVersionedFile(r.specSlotName.trim(), r.specLink.trim(), currentRole))
 
     // Stage 1 is auto-submitted at creation — no approval gate, advance immediately to Stage 2
     saveNTDRecord({
@@ -72,14 +90,14 @@ export default function NTDNewPage() {
       title: title.trim(),
       spoc: "Rohan Desai",
       notes: notes.trim(),
-      part_specs: fileSlots
-        .filter(s => s.slotName.trim() && s.link.trim())
-        .map(s => createVersionedFile(s.slotName.trim(), s.link.trim(), currentRole)),
+      components: ntdComponents,
+      part_specs: partSpecs,
       submitted_by: currentRole,
       submitted_at: now,
     })
 
-    appendActivity(id, currentRole, ntdRole, 1, "ntd_created", `NTD created: ${title.trim()}`)
+    appendActivity(id, currentRole, ntdRole, 1, "ntd_created",
+      `NTD created: "${title.trim()}" — ${ntdComponents.length} component(s) across ${[...new Set(ntdComponents.map(c => c.commodity))].join(", ")}`)
     appendActivity(id, currentRole, ntdRole, 2, "stage_advanced", "Stage 1 auto-submitted — advanced to Stage 2 (Spec & Sign-off)")
     router.push(`/ntd/${id}`)
   }
@@ -146,61 +164,82 @@ export default function NTDNewPage() {
           />
         </div>
 
-        {/* Part Spec Files */}
+        {/* Component rows */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Part Spec Files <span className="text-red-500">*</span>
+            <label className="text-sm font-semibold text-slate-700">
+              Components <span className="text-red-500">*</span>
             </label>
-            <button onClick={addSlot}
-              className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 transition-colors">
-              <Plus className="w-3.5 h-3.5" /> Add File Slot
+            <button type="button" onClick={addComponentRow}
+              className="flex items-center gap-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+              <Plus className="w-3.5 h-3.5" /> Add Component
             </button>
           </div>
 
-          {errors.files && (
+          {errors.components && (
             <p className="text-xs text-red-600 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" /> {errors.files}
+              <AlertTriangle className="w-3 h-3" /> {errors.components}
             </p>
           )}
 
-          <div className="space-y-2">
-            {fileSlots.map((slot, i) => (
-              <div key={slot.id} className="flex gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="flex-1 space-y-2">
-                  <input
-                    type="text"
-                    placeholder={`Slot name (e.g. Drawing Package ${i + 1})`}
-                    value={slot.slotName}
-                    onChange={e => { updateSlot(slot.id, "slotName", e.target.value); setErrors(prev => ({ ...prev, files: "" })) }}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  />
-                  <input
-                    type="url"
-                    placeholder="Drive / SharePoint link"
-                    value={slot.link}
-                    onChange={e => { updateSlot(slot.id, "link", e.target.value); setErrors(prev => ({ ...prev, files: "" })) }}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  />
-                </div>
-                <button
-                  onClick={() => removeSlot(slot.id)}
-                  disabled={fileSlots.length === 1}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors self-start mt-1"
-                  aria-label="Remove file slot"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+          {componentRows.map((row) => (
+            <div key={row.id} className="border border-slate-200 rounded-xl bg-white p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{row.id}</span>
+                {componentRows.length > 1 && (
+                  <button type="button" onClick={() => removeComponentRow(row.id)}
+                    className="text-slate-300 hover:text-red-400 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
 
-          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-800">
-              Part spec files defined here can be revised (new versions uploaded) but the slots themselves are permanent after submission.
-            </p>
-          </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Component Name <span className="text-red-500">*</span>
+                  </label>
+                  <input type="text" autoComplete="off"
+                    placeholder="e.g. Core Insert"
+                    value={row.name}
+                    onChange={e => updateComponentRow(row.id, "name", e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Commodity <span className="text-red-500">*</span>
+                  </label>
+                  <select value={row.commodity}
+                    onChange={e => updateComponentRow(row.id, "commodity", e.target.value as NTDCommodity)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
+                    {NTD_COMMODITIES.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Spec File Name</label>
+                  <input type="text" autoComplete="off"
+                    placeholder="e.g. Core Insert Drawing"
+                    value={row.specSlotName}
+                    onChange={e => updateComponentRow(row.id, "specSlotName", e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Spec File Link</label>
+                  <input type="text" autoComplete="off"
+                    placeholder="Drive / SharePoint URL"
+                    value={row.specLink}
+                    onChange={e => updateComponentRow(row.id, "specLink", e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
