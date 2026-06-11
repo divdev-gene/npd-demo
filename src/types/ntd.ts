@@ -194,7 +194,7 @@ export type NTDRFQVendor = {
   sent: boolean
   sent_at: string
   sent_by: string
-  commodity: string                    // which commodity pool this vendor belongs to
+  commodity: NTDCommodity              // which commodity pool this vendor belongs to
 }
 
 export type NTDRFQData = {
