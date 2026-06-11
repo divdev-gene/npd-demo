@@ -292,7 +292,7 @@ export function isNTDStageUnlocked(id: string, stage: NTDStage): boolean {
 
     case 3: {
       const spec = getNTDSpec(id)
-      return !!(spec?.sourcing_signed && spec?.rnd_signed)
+      return !!spec?.sourcing_signed
     }
 
     case 4: {

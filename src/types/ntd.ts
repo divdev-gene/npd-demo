@@ -156,15 +156,24 @@ export type NTDSpecComparison = {
   notes: string
 }
 
+export type NTDStage2Query = {
+  query_id: string
+  text: string
+  raised_by: string
+  raised_at: string
+  resolved: boolean
+  response?: string
+  resolved_by?: string
+  resolved_at?: string
+}
+
 export type NTDSpecData = {
   spec_sheet: VersionedFile
   comparisons: NTDSpecComparison[]
+  queries: NTDStage2Query[]
   sourcing_signed: boolean
   sourcing_signed_by: string
   sourcing_signed_at: string
-  rnd_signed: boolean
-  rnd_signed_by: string
-  rnd_signed_at: string
 }
 
 // ─── Stage 3 — RFQ Dispatch ───────────────────────────────────

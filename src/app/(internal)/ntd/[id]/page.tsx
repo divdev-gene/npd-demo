@@ -17,7 +17,7 @@ import {
   getTrialProgress, getStage11CurrentSubstep, isNTDComplete,
   createVersionedFile, addFileVersion, generateVendorToken,
 } from "@/lib/ntd"
-import type { NTDRecord, NTDStage, NTDRole, NTDRFQData, NTDMfgData } from "@/types/ntd"
+import type { NTDRecord, NTDStage, NTDRole, NTDRFQData, NTDMfgData, NTDStage2Query } from "@/types/ntd"
 import { ActivityFeed } from "@/components/ntd/ActivityFeed"
 import { VersionedFileInput } from "@/components/ntd/VersionedFileInput"
 
@@ -64,7 +64,7 @@ export default function NTDDetailPage() {
   const id = params.id as string
   const [currentRole, setCurrentRole] = useState("")
   const [record, setRecord] = useState<NTDRecord | null>(null)
-  const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "activity" | "documents">("overview")
 
   // Stage-specific state
   const [specSheet, setSpecSheet] = useState("")
@@ -74,6 +74,10 @@ export default function NTDDetailPage() {
   const [mfgUpdate, setMfgUpdate] = useState("")
   const [mfgStartDate, setMfgStartDate] = useState("")
   const [mfgEta, setMfgEta] = useState("")
+
+  // Stage 2 query
+  const [queryText, setQueryText] = useState("")
+  const [queryResponseText, setQueryResponseText] = useState<Record<string, string>>({})
 
   // Stage 6 component builder
   const [components, setComponents] = useState<{ id: string; name: string }[]>([{ id: "C01", name: "" }])
@@ -147,23 +151,60 @@ export default function NTDDetailPage() {
     }
   }
 
-  // ── Stage 2 sign-off ──
-  const handleSpecSignOff = (who: "sourcing" | "rnd") => {
+  // ── Stage 2 sign-off (sourcing only) ──
+  const handleSpecSignOff = () => {
     const existing = specData ?? {
       spec_sheet: createVersionedFile("Spec Sheet", specSheet, currentRole),
       comparisons: comparisons.map(c => ({ row_id: c.id, vendor_name: c.vendor_name, spec_doc_link: c.spec_doc_link, notes: c.notes })),
+      queries: [],
       sourcing_signed: false, sourcing_signed_by: "", sourcing_signed_at: "",
-      rnd_signed: false, rnd_signed_by: "", rnd_signed_at: "",
     }
     const now = new Date().toISOString()
-    const updated = who === "sourcing"
-      ? { ...existing, sourcing_signed: true, sourcing_signed_by: currentRole, sourcing_signed_at: now }
-      : { ...existing, rnd_signed: true, rnd_signed_by: currentRole, rnd_signed_at: now }
+    const updated = { ...existing, sourcing_signed: true, sourcing_signed_by: currentRole, sourcing_signed_at: now }
     setNTDSpec(id, updated)
-    appendActivity(id, currentRole, ntdRole, 2, "stage_complete", `Stage 2 ${who} sign-off`)
-    if (updated.sourcing_signed && updated.rnd_signed) {
-      advanceNTDStage(id, 3, currentRole, ntdRole)
+    appendActivity(id, currentRole, ntdRole, 2, "stage_complete", "Stage 2 sourcing sign-off — advancing to RFQ Dispatch")
+    advanceNTDStage(id, 3, currentRole, ntdRole)
+    reload()
+  }
+
+  // ── Stage 2 query: raise (sourcing) ──
+  const handleRaiseQuery = () => {
+    if (!queryText.trim()) return
+    const existing = specData ?? {
+      spec_sheet: createVersionedFile("Spec Sheet", specSheet, currentRole),
+      comparisons: comparisons.map(c => ({ row_id: c.id, vendor_name: c.vendor_name, spec_doc_link: c.spec_doc_link, notes: c.notes })),
+      queries: [],
+      sourcing_signed: false, sourcing_signed_by: "", sourcing_signed_at: "",
     }
+    const query: NTDStage2Query = {
+      query_id: String(Date.now()),
+      text: queryText.trim(),
+      raised_by: currentRole,
+      raised_at: new Date().toISOString(),
+      resolved: false,
+    }
+    setNTDSpec(id, { ...existing, queries: [...(existing.queries ?? []), query] })
+    appendActivity(id, currentRole, ntdRole, 2, "query_posted", `Query raised: "${queryText.trim()}"`)
+    setQueryText("")
+    reload()
+  }
+
+  // ── Stage 2 query: resolve (R&D) ──
+  const handleResolveQuery = (queryId: string) => {
+    if (!specData) return
+    const response = queryResponseText[queryId]?.trim() ?? ""
+    const now = new Date().toISOString()
+    const updated = {
+      ...specData,
+      queries: specData.queries.map(q =>
+        q.query_id === queryId
+          ? { ...q, resolved: true, response, resolved_by: currentRole, resolved_at: now }
+          : q
+      ),
+    }
+    setNTDSpec(id, updated)
+    appendActivity(id, currentRole, ntdRole, 2, "query_posted", `Query resolved by ${currentRole}`)
+    setQueryResponseText(prev => { const next = { ...prev }; delete next[queryId]; return next })
     reload()
   }
 
@@ -392,167 +433,203 @@ export default function NTDDetailPage() {
     </div>
   )
 
-  // Stage 2 — Spec Sheet & Sign-off (Sourcing fills + signs; R&D reviews + signs; both required)
-  if (stage >= 1) cards.push(
-    <StageCard key="s2" stageNum={2} colorClass="border-teal-500" title="Spec Sheet & Sign-off"
-      doneLabel={specData ? `Sourcing: ${specData.sourcing_signed_by || "✓"} · R&D: ${specData.rnd_signed_by || "✓"}` : undefined}>
-      <div className="space-y-5">
+  // Stage 2 — Spec Sheet, Query & Sourcing Sign-off
+  if (stage >= 1) {
+    const s2Queries = specData?.queries ?? []
+    const hasOpenQuery = s2Queries.some(q => !q.resolved)
+    cards.push(
+      <StageCard key="s2" stageNum={2} colorClass="border-teal-500" title="Spec Sheet & Sign-off"
+        doneLabel={specData?.sourcing_signed ? `Approved by ${specData.sourcing_signed_by}` : undefined}>
+        <div className="space-y-5">
 
-        {/* ── Spec sheet + vendor comparisons ── */}
-        {!specData ? (
-          isSourcing ? (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Spec Sheet Link <span className="text-red-500">*</span>
-                </label>
-                <input type="url" value={specSheet} onChange={e => setSpecSheet(e.target.value)}
-                  placeholder="Drive / SharePoint link"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Vendor Comparisons</p>
-                  <button
-                    onClick={() => setComparisons(prev => [...prev, { id: String(Date.now()), vendor_name: "", spec_doc_link: "", notes: "" }])}
-                    className="text-xs text-teal-700 hover:text-teal-900 flex items-center gap-1 font-medium">
-                    <Plus className="w-3 h-3" /> Add Row
-                  </button>
+          {/* ── Spec sheet + vendor comparisons ── */}
+          {!specData ? (
+            isSourcing ? (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Spec Sheet Link <span className="text-red-500">*</span>
+                  </label>
+                  <input type="url" value={specSheet} onChange={e => setSpecSheet(e.target.value)}
+                    placeholder="Drive / SharePoint link"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
                 </div>
-                {comparisons.length === 0 && (
-                  <p className="text-xs text-slate-400 italic px-1">No comparisons added yet — optional</p>
-                )}
-                {comparisons.map(c => (
-                  <div key={c.id} className="flex gap-2 items-start bg-slate-50 rounded-lg p-2">
-                    <input type="text" placeholder="Vendor name" value={c.vendor_name}
-                      onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, vendor_name: e.target.value } : x))}
-                      className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
-                    <input type="url" placeholder="Spec doc link" value={c.spec_doc_link}
-                      onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, spec_doc_link: e.target.value } : x))}
-                      className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
-                    <input type="text" placeholder="Notes" value={c.notes}
-                      onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, notes: e.target.value } : x))}
-                      className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
-                    <button onClick={() => setComparisons(prev => prev.filter(x => x.id !== c.id))}
-                      className="p-1 text-slate-300 hover:text-red-400 transition-colors mt-0.5">
-                      <Trash2 className="w-3.5 h-3.5" />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Vendor Comparisons</p>
+                    <button
+                      onClick={() => setComparisons(prev => [...prev, { id: String(Date.now()), vendor_name: "", spec_doc_link: "", notes: "" }])}
+                      className="text-xs text-teal-700 hover:text-teal-900 flex items-center gap-1 font-medium">
+                      <Plus className="w-3 h-3" /> Add Row
                     </button>
                   </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-              <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-              <p className="text-sm text-amber-800">Awaiting sourcing to prepare the spec sheet.</p>
-            </div>
-          )
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Spec Sheet</p>
-              <VersionedFileInput
-                file={specData.spec_sheet}
-                slotName="Spec Sheet"
-                role={ntdRole}
-                readOnly={!isSourcing}
-                onUpload={link => handleSpecFileAction("upload", link)}
-                onRevise={(link, note) => handleSpecFileAction("revise", link, note)}
-                onAddComment={() => {}}
-                onResolveComment={() => {}}
-              />
-            </div>
-            {specData.comparisons.length > 0 && (
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Vendor Comparisons</p>
-                <div className="space-y-1">
-                  {specData.comparisons.map(c => (
-                    <div key={c.row_id} className="flex items-center gap-3 text-xs text-slate-700 bg-slate-50 rounded-lg px-3 py-2">
-                      <span className="font-medium min-w-[120px] text-slate-800">{c.vendor_name || "—"}</span>
-                      {c.spec_doc_link ? (
-                        <a href={c.spec_doc_link} target="_blank" rel="noopener noreferrer"
-                          className="text-blue-700 hover:underline flex items-center gap-0.5">
-                          <ExternalLink className="w-2.5 h-2.5" /> Doc
-                        </a>
-                      ) : <span className="text-slate-400">No doc</span>}
-                      {c.notes && <span className="text-slate-400">— {c.notes}</span>}
+                  {comparisons.length === 0 && (
+                    <p className="text-xs text-slate-400 italic px-1">No comparisons added yet — optional</p>
+                  )}
+                  {comparisons.map(c => (
+                    <div key={c.id} className="flex gap-2 items-start bg-slate-50 rounded-lg p-2">
+                      <input type="text" placeholder="Vendor name" value={c.vendor_name}
+                        onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, vendor_name: e.target.value } : x))}
+                        className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
+                      <input type="url" placeholder="Spec doc link" value={c.spec_doc_link}
+                        onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, spec_doc_link: e.target.value } : x))}
+                        className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
+                      <input type="text" placeholder="Notes" value={c.notes}
+                        onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, notes: e.target.value } : x))}
+                        className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
+                      <button onClick={() => setComparisons(prev => prev.filter(x => x.id !== c.id))}
+                        className="p-1 text-slate-300 hover:text-red-400 transition-colors mt-0.5">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-        )}
+            ) : (
+              <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                <p className="text-sm text-amber-800">Awaiting sourcing to prepare the spec sheet.</p>
+              </div>
+            )
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Spec Sheet</p>
+                <VersionedFileInput
+                  file={specData.spec_sheet}
+                  slotName="Spec Sheet"
+                  role={ntdRole}
+                  readOnly={!isSourcing}
+                  onUpload={link => handleSpecFileAction("upload", link)}
+                  onRevise={(link, note) => handleSpecFileAction("revise", link, note)}
+                  onAddComment={() => {}}
+                  onResolveComment={() => {}}
+                />
+              </div>
+              {specData.comparisons.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Vendor Comparisons</p>
+                  <div className="space-y-1">
+                    {specData.comparisons.map(c => (
+                      <div key={c.row_id} className="flex items-center gap-3 text-xs text-slate-700 bg-slate-50 rounded-lg px-3 py-2">
+                        <span className="font-medium min-w-[120px] text-slate-800">{c.vendor_name || "—"}</span>
+                        {c.spec_doc_link ? (
+                          <a href={c.spec_doc_link} target="_blank" rel="noopener noreferrer"
+                            className="text-blue-700 hover:underline flex items-center gap-0.5">
+                            <ExternalLink className="w-2.5 h-2.5" /> Doc
+                          </a>
+                        ) : <span className="text-slate-400">No doc</span>}
+                        {c.notes && <span className="text-slate-400">— {c.notes}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* ── Sign-off panels ── */}
-        <div className="flex gap-3">
-          {/* Sourcing sign-off */}
-          <div className={`flex-1 rounded-xl border px-3 py-3 transition-colors ${specData?.sourcing_signed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sourcing Sign-off</p>
+          {/* ── Query thread ── */}
+          {s2Queries.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Queries
+                {hasOpenQuery && <span className="ml-1.5 bg-amber-100 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">{s2Queries.filter(q => !q.resolved).length} open</span>}
+              </p>
+              {s2Queries.map(q => (
+                <div key={q.query_id}
+                  className={`rounded-xl border p-3 space-y-2 ${q.resolved ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-0.5 flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-800">{q.text}</p>
+                      <p className="text-[10px] text-slate-400">Raised by {q.raised_by} · {new Date(q.raised_at).toLocaleString()}</p>
+                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${q.resolved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                      {q.resolved ? "Resolved" : "Open"}
+                    </span>
+                  </div>
+                  {q.resolved && q.response && (
+                    <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2">
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase mb-0.5">R&D Response</p>
+                      <p className="text-xs text-slate-700">{q.response}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">by {q.resolved_by} · {new Date(q.resolved_at!).toLocaleString()}</p>
+                    </div>
+                  )}
+                  {!q.resolved && isRnd && (
+                    <div className="space-y-2 pt-1">
+                      <textarea
+                        value={queryResponseText[q.query_id] ?? ""}
+                        onChange={e => setQueryResponseText(prev => ({ ...prev, [q.query_id]: e.target.value }))}
+                        placeholder="Type your response..."
+                        rows={2}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                      />
+                      <button onClick={() => handleResolveQuery(q.query_id)}
+                        className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-lg transition-colors">
+                        Respond & Resolve
+                      </button>
+                    </div>
+                  )}
+                  {!q.resolved && !isRnd && (
+                    <p className="text-[11px] text-amber-700 italic">Awaiting R&D response...</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Raise query (sourcing) ── */}
+          {isSourcing && specData && !specData.sourcing_signed && (
+            <div className="space-y-2 border-t border-slate-100 pt-4">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Raise a Query to R&D</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={queryText}
+                  onChange={e => setQueryText(e.target.value)}
+                  placeholder="Type your query..."
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <button onClick={handleRaiseQuery} disabled={!queryText.trim()}
+                  className="flex items-center gap-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors whitespace-nowrap">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Raise Query
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Sourcing sign-off ── */}
+          <div className={`rounded-xl border px-4 py-3 transition-colors ${specData?.sourcing_signed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sourcing Approval</p>
             {specData?.sourcing_signed ? (
               <div>
                 <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> {specData.sourcing_signed_by}
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Approved by {specData.sourcing_signed_by}
                 </p>
                 <p className="text-[10px] text-slate-400 mt-0.5">{new Date(specData.sourcing_signed_at).toLocaleString()}</p>
               </div>
-            ) : !specData ? (
-              isSourcing ? (
-                <button onClick={() => handleSpecSignOff("sourcing")} disabled={!specSheet.trim()}
-                  className="text-xs font-semibold bg-teal-700 hover:bg-teal-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg transition-colors">
-                  Save & Sign Off
+            ) : isSourcing ? (
+              <div className="space-y-2">
+                {hasOpenQuery && (
+                  <p className="text-xs text-amber-700 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> Resolve all open queries before approving.
+                  </p>
+                )}
+                <button
+                  onClick={handleSpecSignOff}
+                  disabled={(!specData && !specSheet.trim()) || hasOpenQuery}
+                  className="text-xs font-semibold bg-teal-700 hover:bg-teal-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-lg transition-colors">
+                  {!specData ? "Save & Approve →" : "Approve & Advance to Stage 3 →"}
                 </button>
-              ) : <p className="text-xs text-slate-400 italic">Pending</p>
-            ) : (
-              isSourcing ? (
-                <button onClick={() => handleSpecSignOff("sourcing")}
-                  className="text-xs font-semibold bg-teal-700 hover:bg-teal-800 text-white px-3 py-1.5 rounded-lg transition-colors">
-                  Sign Off
-                </button>
-              ) : <p className="text-xs text-slate-400 italic">Pending</p>
-            )}
-          </div>
-
-          {/* R&D sign-off */}
-          <div className={`flex-1 rounded-xl border px-3 py-3 transition-colors ${specData?.rnd_signed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">R&D Sign-off</p>
-            {specData?.rnd_signed ? (
-              <div>
-                <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> {specData.rnd_signed_by}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(specData.rnd_signed_at).toLocaleString()}</p>
               </div>
-            ) : specData ? (
-              isRnd ? (
-                <button onClick={() => handleSpecSignOff("rnd")}
-                  className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-lg transition-colors">
-                  Sign Off
-                </button>
-              ) : <p className="text-xs text-slate-400 italic">Pending</p>
             ) : (
-              <p className="text-xs text-slate-400 italic">Waiting for spec sheet</p>
+              <p className="text-xs text-slate-400 italic">Awaiting sourcing approval</p>
             )}
           </div>
-        </div>
 
-        {/* Progress bar */}
-        {specData && (
-          <div className="flex items-center gap-2">
-            <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-              <div
-                className="bg-teal-500 h-full rounded-full transition-all duration-500"
-                style={{ width: `${([specData.sourcing_signed, specData.rnd_signed].filter(Boolean).length / 2) * 100}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-slate-500 font-medium shrink-0">
-              {[specData.sourcing_signed, specData.rnd_signed].filter(Boolean).length}/2 signed
-            </span>
-          </div>
-        )}
-      </div>
-    </StageCard>
-  )
+        </div>
+      </StageCard>
+    )
+  }
 
   // Stage 3 — RFQ Dispatch
   if (stage >= 2) cards.push(
@@ -1273,6 +1350,10 @@ export default function NTDDetailPage() {
           className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors ${activeTab === "activity" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
           Activity
         </button>
+        <button onClick={() => setActiveTab("documents")}
+          className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors ${activeTab === "documents" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+          Documents
+        </button>
       </div>
 
       {/* Content */}
@@ -1280,10 +1361,93 @@ export default function NTDDetailPage() {
         <div className="space-y-3">
           {[...cards].reverse()}
         </div>
-      ) : (
+      ) : activeTab === "activity" ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <ActivityFeed ntdId={id} />
         </div>
+      ) : (
+        /* Documents tab — all VersionedFiles across every stage */
+        (() => {
+          type DocEntry = { stage: string; label: string; file: import("@/types/ntd").VersionedFile }
+          const docs: DocEntry[] = []
+
+          // Stage 1 part specs
+          initData?.part_specs.forEach(f => docs.push({ stage: "Stage 1 — Initiation", label: f.slot_name, file: f }))
+          // Stage 2 spec sheet
+          if (specData?.spec_sheet) docs.push({ stage: "Stage 2 — Spec Sheet", label: "Spec Sheet", file: specData.spec_sheet })
+          // Stage 6 final designs
+          handoffData?.final_designs.forEach(f => docs.push({ stage: "Stage 6 — Design Handoff", label: f.slot_name, file: f }))
+          // Stage 7 DFM files
+          dfmData?.components.forEach(c => {
+            if (c.ppt) docs.push({ stage: "Stage 7 — DFM", label: `${c.name} — PPT`, file: c.ppt })
+            if (c.design_3d) docs.push({ stage: "Stage 7 — DFM", label: `${c.name} — 3D Design`, file: c.design_3d })
+          })
+          // Stage 8 mould files
+          mouldData?.components.forEach(c => {
+            if (c.mould_3d) docs.push({ stage: "Stage 8 — Mould Design", label: `${c.name} — Mould 3D`, file: c.mould_3d })
+            if (c.mfa_ppt) docs.push({ stage: "Stage 8 — Mould Design", label: `${c.name} — MFA PPT`, file: c.mfa_ppt })
+          })
+          mouldData?.joint_review?.supplier_files.forEach(f => docs.push({ stage: "Stage 8 — Joint Review", label: f.slot_name, file: f }))
+          // Stage 11
+          if (s11Data?.inspection?.report) docs.push({ stage: "Stage 11 — Commissioning", label: "Final Inspection Report", file: s11Data.inspection.report })
+          if (s11Data?.commissioning?.pack_list) docs.push({ stage: "Stage 11 — Commissioning", label: "Pack List", file: s11Data.commissioning.pack_list })
+          if (s11Data?.commissioning?.invoice) docs.push({ stage: "Stage 11 — Commissioning", label: "Invoice", file: s11Data.commissioning.invoice })
+          s11Data?.shipment?.exim_docs.forEach(f => docs.push({ stage: "Stage 11 — Shipment", label: f.slot_name, file: f }))
+
+          // Group by stage
+          const grouped = docs.reduce<Record<string, DocEntry[]>>((acc, d) => {
+            acc[d.stage] = acc[d.stage] ?? []
+            acc[d.stage].push(d)
+            return acc
+          }, {})
+
+          return docs.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-6 py-12 text-center">
+              <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-400">No documents yet. Files will appear here as stages progress.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(grouped).map(([stageName, entries]) => (
+                <div key={stageName} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b border-slate-100 bg-slate-50">
+                    <p className="text-xs font-bold text-slate-600">{stageName}</p>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {entries.map((d, i) => {
+                      const latestLink = d.file.versions.find(v => v.version_no === d.file.current_version)?.link ?? ""
+                      const latestUploader = d.file.versions.find(v => v.version_no === d.file.current_version)?.uploaded_by ?? ""
+                      return (
+                        <div key={i} className="px-5 py-3 flex items-center justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-800 truncate">{d.label}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              v{d.file.current_version} · {d.file.versions.length} version(s)
+                              {latestUploader && ` · ${latestUploader}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {d.file.approved && (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Approved</span>
+                            )}
+                            {latestLink ? (
+                              <a href={latestLink} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors">
+                                <ExternalLink className="w-3 h-3" /> Open
+                              </a>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">No link</span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()
       )}
     </div>
   )
