@@ -17,6 +17,7 @@ import {
   getTrialProgress, getStage11CurrentSubstep, isNTDComplete,
   createVersionedFile, addFileVersion, generateVendorToken,
   getActiveCommodities, allCommoditiesHaveRFQ, allCommoditiesAcknowledged,
+  allInspectionsSubmitted,
 } from "@/lib/ntd"
 import { VENDOR_CATALOG } from "@/lib/mockData"
 import type { NTDRecord, NTDStage, NTDRole, NTDRFQData, NTDMfgData, NTDStage2Query } from "@/types/ntd"
@@ -1548,17 +1549,47 @@ export default function NTDDetailPage() {
           ) : (
             <div className="text-sm text-slate-600">
               {s11Step === 1 && (
-                <div className="space-y-2">
-                  <p className="text-slate-500">Step 1: Supplier must submit Final Inspection Report</p>
+                <div className="space-y-3">
+                  <p className="text-slate-500">Step 1: Each commodity supplier must submit a Final Inspection Report</p>
                   <div className="flex items-center gap-2">
                     <code className="text-xs bg-slate-100 px-2 py-1 rounded">/supplier/ntd/{id}</code>
                     <CopyButton text={`${typeof window !== "undefined" ? window.location.origin : ""}/supplier/ntd/${id}`} />
                   </div>
-                  {s11Data?.inspection && (
-                    <div className="flex items-center gap-2 text-xs text-emerald-700">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Inspection report submitted by {s11Data.inspection.submitted_by}
-                    </div>
-                  )}
+                  {(() => {
+                    const activeCommodities = getActiveCommodities(id)
+                    const inspections = s11Data?.inspection ?? {}
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-slate-700">
+                          Final Inspection Reports — {Object.keys(inspections).length} / {activeCommodities.length} submitted
+                        </p>
+                        {activeCommodities.map(commodity => {
+                          const insp = inspections[commodity]
+                          const supplierName = record?.selectedSuppliers?.[commodity] ?? commodity
+                          return (
+                            <div key={commodity} className={`border rounded-xl p-3 ${insp ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <div>
+                                  <span className="text-xs font-bold text-slate-700">{commodity}</span>
+                                  <span className="ml-2 text-xs text-slate-400">{supplierName}</span>
+                                </div>
+                                {insp
+                                  ? <span className="flex items-center gap-1 text-xs text-emerald-700 font-semibold"><CheckCircle2 className="w-3.5 h-3.5" /> Submitted</span>
+                                  : <span className="text-xs text-amber-600 font-semibold">Awaiting</span>
+                                }
+                              </div>
+                              {insp && (
+                                <p className="text-xs text-slate-500">Submitted by {insp.submitted_by} · {new Date(insp.submitted_at).toLocaleDateString()}</p>
+                              )}
+                              {!insp && (
+                                <p className="text-xs text-slate-400 italic">Supplier will upload via portal</p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
               {s11Step === 2 && isSourcing && (
@@ -1831,8 +1862,12 @@ export default function NTDDetailPage() {
             if (c.mfa_ppt) docs.push({ stage: "Stage 8 — Mould Design", label: `${c.name} — MFA PPT`, file: c.mfa_ppt })
           })
           mouldData?.joint_review?.supplier_files.forEach(f => docs.push({ stage: "Stage 8 — Joint Review", label: f.slot_name, file: f }))
-          // Stage 11
-          if (s11Data?.inspection?.report) docs.push({ stage: "Stage 11 — Commissioning", label: "Final Inspection Report", file: s11Data.inspection.report })
+          // Stage 11 — per-commodity inspection reports
+          if (s11Data?.inspection) {
+            Object.entries(s11Data.inspection).forEach(([commodity, insp]) => {
+              if (insp?.report) docs.push({ stage: "Stage 11 — Commissioning", label: `Final Inspection Report (${commodity})`, file: insp.report })
+            })
+          }
           if (s11Data?.commissioning?.pack_list) docs.push({ stage: "Stage 11 — Commissioning", label: "Pack List", file: s11Data.commissioning.pack_list })
           if (s11Data?.commissioning?.invoice) docs.push({ stage: "Stage 11 — Commissioning", label: "Invoice", file: s11Data.commissioning.invoice })
           s11Data?.shipment?.exim_docs.forEach(f => docs.push({ stage: "Stage 11 — Shipment", label: f.slot_name, file: f }))
