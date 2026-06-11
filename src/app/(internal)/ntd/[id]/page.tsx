@@ -82,6 +82,10 @@ export default function NTDDetailPage() {
   const [queryText, setQueryText] = useState("")
   const [queryResponseText, setQueryResponseText] = useState<Record<string, string>>({})
 
+  // Stage 4 negotiation (per vendor)
+  const [counterText, setCounterText] = useState<Record<string, string>>({})
+  const [counterPrice, setCounterPrice] = useState<Record<string, string>>({})
+
   // Stage 6 component builder
   const [components, setComponents] = useState<{ id: string; name: string }[]>([{ id: "C01", name: "" }])
   const [finalDesignSlots, setFinalDesignSlots] = useState<{ id: string; slotName: string; link: string }[]>([{ id: "1", slotName: "", link: "" }])
@@ -259,6 +263,47 @@ export default function NTDDetailPage() {
 
   const handleAdvanceFromRFQ = () => {
     advanceNTDStage(id, 4, currentRole, ntdRole)
+    reload()
+  }
+
+  // ── Stage 4 negotiation ──
+  const handleSendCounter = (vendorId: string, vendorName: string) => {
+    const text = counterText[vendorId]?.trim()
+    if (!text) return
+    const price = counterPrice[vendorId] ? Number(counterPrice[vendorId]) : undefined
+    const existing = quotationData ?? {}
+    const q = existing[vendorId] ?? { quotation: undefined, thread: [], status: "sent" as const }
+    const updatedQ = {
+      ...q,
+      status: "negotiating" as const,
+      thread: [...q.thread, {
+        message_id: String(Date.now()),
+        author_name: currentRole,
+        author_type: "internal" as const,
+        text,
+        counter_offer: price,
+        created_at: new Date().toISOString(),
+      }],
+    }
+    setNTDQuotation(id, { ...existing, [vendorId]: updatedQ })
+    appendActivity(id, currentRole, ntdRole, 4, "negotiation_round", `Counter sent to ${vendorName}${price ? ` — ₹${price.toLocaleString()}` : ""}`, { vendor_id: vendorId })
+    setCounterText(prev => { const n = { ...prev }; delete n[vendorId]; return n })
+    setCounterPrice(prev => { const n = { ...prev }; delete n[vendorId]; return n })
+    reload()
+  }
+
+  const handleAcceptVendorPrice = (vendorId: string, vendorName: string, acceptedPrice: number, currency: string) => {
+    const existing = quotationData ?? {}
+    const q = existing[vendorId]
+    if (!q) return
+    const updatedQuotation = q.quotation
+      ? { ...q.quotation, amount: acceptedPrice, currency, last_updated_at: new Date().toISOString() }
+      : q.quotation
+    setNTDQuotation(id, {
+      ...existing,
+      [vendorId]: { ...q, quotation: updatedQuotation ?? q.quotation, status: "finalized" },
+    })
+    appendActivity(id, currentRole, ntdRole, 4, "negotiation_round", `Accepted price ${currency} ${acceptedPrice.toLocaleString()} from ${vendorName}`, { vendor_id: vendorId })
     reload()
   }
 
@@ -708,70 +753,160 @@ export default function NTDDetailPage() {
     </StageCard>
   )
 
-  // Stage 4 — Quotation Review
+  // Stage 4 — Quotation & Negotiation
   if (stage >= 3) cards.push(
-    <StageCard key="s4" stageNum={4} colorClass="border-amber-500" title="Quotation Review"
+    <StageCard key="s4" stageNum={4} colorClass="border-amber-500" title="Quotation & Negotiation"
       doneLabel={quotationData ? `${Object.values(quotationData).filter(v => v.status === "finalized").length} finalized` : undefined}>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {rfqData && Object.entries(rfqData.vendors).map(([vid, vendor]) => {
           const q = quotationData?.[vid]
+          const isFinalized = q?.status === "finalized"
+          // Last vendor message with a counter offer
+          const lastVendorCounter = [...(q?.thread ?? [])].reverse().find(m => m.author_type === "vendor" && m.counter_offer)
+          const lastInternalCounter = [...(q?.thread ?? [])].reverse().find(m => m.author_type === "internal" && m.counter_offer)
+          const vendorAwaitingResponse = q?.thread.length && q.thread[q.thread.length - 1].author_type === "vendor"
+
           return (
-            <div key={vid} className="border border-slate-200 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-slate-800">{vendor.vendor_name}</p>
+            <div key={vid} className={`border rounded-xl overflow-hidden ${isFinalized ? "border-emerald-200" : "border-slate-200"}`}>
+              {/* Vendor header */}
+              <div className={`flex items-center justify-between px-4 py-3 ${isFinalized ? "bg-emerald-50" : "bg-slate-50"}`}>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-slate-800">{vendor.vendor_name}</p>
+                  {vendorAwaitingResponse && !isFinalized && (
+                    <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full animate-pulse">
+                      Vendor replied
+                    </span>
+                  )}
+                </div>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  q?.status === "finalized" ? "bg-emerald-100 text-emerald-700"
+                  isFinalized ? "bg-emerald-100 text-emerald-700"
                   : q?.status === "negotiating" ? "bg-amber-100 text-amber-700"
                   : q?.status === "quotation_received" ? "bg-blue-100 text-blue-700"
                   : "bg-slate-100 text-slate-500"}`}>
-                  {q?.status ?? "Awaiting Quotation"}
+                  {isFinalized ? "Finalized ✓" : q?.status === "negotiating" ? "Negotiating" : q?.status === "quotation_received" ? "Quote received" : "Awaiting quote"}
                 </span>
               </div>
-              {q?.quotation ? (
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-slate-50 rounded-lg px-3 py-2">
-                    <p className="text-[10px] text-slate-400 uppercase">Amount</p>
-                    <p className="text-sm font-bold text-slate-800">{q.quotation.currency} {q.quotation.amount.toLocaleString()}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg px-3 py-2">
-                    <p className="text-[10px] text-slate-400 uppercase">Lead Time</p>
-                    <p className="text-sm font-bold text-slate-800">{q.quotation.lead_time_days}d</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg px-3 py-2">
-                    <p className="text-[10px] text-slate-400 uppercase">Doc</p>
-                    {q.quotation.doc_link
-                      ? <a href={q.quotation.doc_link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1"><ExternalLink className="w-3 h-3" />View</a>
-                      : <p className="text-xs text-slate-400">—</p>}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No quotation submitted yet. Share the RFQ URL for the vendor to submit.</p>
-              )}
-              {/* Thread messages */}
-              {q?.thread && q.thread.length > 0 && (
-                <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                  {q.thread.map(msg => (
-                    <div key={msg.message_id}
-                      className={`rounded-lg px-3 py-2 text-xs max-w-[80%] ${msg.author_type === "internal" ? "bg-blue-50 text-blue-900" : "bg-slate-100 text-slate-800 ml-auto"}`}>
-                      <p className="font-semibold text-[10px] text-slate-500 mb-0.5">{msg.author_name} {msg.counter_offer ? `— Counter: ${msg.counter_offer}` : ""}</p>
-                      {msg.text}
+
+              <div className="px-4 py-3 space-y-3">
+                {/* Quotation summary */}
+                {q?.quotation ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-slate-50 rounded-lg px-3 py-2">
+                      <p className="text-[10px] text-slate-400 uppercase">Quote</p>
+                      <p className="text-sm font-bold text-slate-800">{q.quotation.currency} {q.quotation.amount.toLocaleString()}</p>
                     </div>
-                  ))}
-                </div>
-              )}
-              {isSourcing && q?.status !== "finalized" && (
-                <div className="flex gap-2">
-                  <button onClick={() => {
-                    const existing = quotationData ?? {}
-                    setNTDQuotation(id, { ...existing, [vid]: { ...(q ?? { quotation: undefined, thread: [], status: "sent" }), status: "finalized" } })
-                    appendActivity(id, currentRole, ntdRole, 4, "quotation_submitted", `Quotation finalized for ${vendor.vendor_name}`, { vendor_id: vid })
-                    reload()
-                  }}
-                    className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors">
-                    Mark Finalized
-                  </button>
-                </div>
-              )}
+                    <div className="bg-slate-50 rounded-lg px-3 py-2">
+                      <p className="text-[10px] text-slate-400 uppercase">Lead Time</p>
+                      <p className="text-sm font-bold text-slate-800">{q.quotation.lead_time_days}d</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg px-3 py-2">
+                      <p className="text-[10px] text-slate-400 uppercase">Doc</p>
+                      {q.quotation.doc_link
+                        ? <a href={q.quotation.doc_link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1"><ExternalLink className="w-3 h-3" />View</a>
+                        : <p className="text-xs text-slate-400">—</p>}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">No quotation submitted yet. Share the RFQ link for the vendor to submit.</p>
+                )}
+
+                {/* Negotiation thread */}
+                {q?.thread && q.thread.length > 0 && (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-2">
+                    {q.thread.map(msg => (
+                      <div key={msg.message_id}
+                        className={`rounded-lg px-3 py-2 text-xs w-fit max-w-[85%] ${msg.author_type === "internal" ? "bg-blue-900 text-white ml-auto" : "bg-white border border-slate-200 text-slate-800"}`}>
+                        <p className={`text-[9px] font-bold mb-0.5 ${msg.author_type === "internal" ? "text-blue-200" : "text-slate-400"}`}>
+                          {msg.author_type === "internal" ? `Sourcing — ${msg.author_name}` : `Vendor — ${vendor.vendor_name}`}
+                        </p>
+                        {msg.text}
+                        {msg.counter_offer && (
+                          <p className={`mt-1 text-[10px] font-bold ${msg.author_type === "internal" ? "text-blue-200" : "text-amber-700"}`}>
+                            Counter offer: {q.quotation?.currency ?? "₹"} {msg.counter_offer.toLocaleString()}
+                          </p>
+                        )}
+                        <p className={`text-[8px] mt-0.5 ${msg.author_type === "internal" ? "text-blue-300" : "text-slate-400"}`}>
+                          {new Date(msg.created_at).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Sourcing action area */}
+                {isSourcing && !isFinalized && (
+                  <div className="space-y-3 border-t border-slate-100 pt-3">
+                    {/* Accept vendor counter if they replied with a price */}
+                    {lastVendorCounter && (
+                      <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                        <div>
+                          <p className="text-xs font-semibold text-amber-900">Vendor counter offer</p>
+                          <p className="text-sm font-bold text-amber-800 mt-0.5">
+                            {q?.quotation?.currency ?? "₹"} {lastVendorCounter.counter_offer!.toLocaleString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleAcceptVendorPrice(vid, vendor.vendor_name, lastVendorCounter.counter_offer!, q?.quotation?.currency ?? "INR")}
+                          className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors">
+                          Accept & Finalize
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Counter offer input */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Send Counter / Message</p>
+                      <textarea
+                        value={counterText[vid] ?? ""}
+                        onChange={e => setCounterText(prev => ({ ...prev, [vid]: e.target.value }))}
+                        placeholder="Your message or negotiation note..."
+                        rows={2}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">₹</span>
+                          <input
+                            type="number"
+                            value={counterPrice[vid] ?? ""}
+                            onChange={e => setCounterPrice(prev => ({ ...prev, [vid]: e.target.value }))}
+                            placeholder="Counter price (optional)"
+                            className="w-full rounded-lg border border-slate-200 pl-6 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                        </div>
+                        <button
+                          onClick={() => handleSendCounter(vid, vendor.vendor_name)}
+                          disabled={!counterText[vid]?.trim()}
+                          className="text-xs font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors whitespace-nowrap">
+                          Send Counter
+                        </button>
+                        {q?.quotation && (
+                          <button onClick={() => {
+                            const existing = quotationData ?? {}
+                            setNTDQuotation(id, { ...existing, [vid]: { ...q, status: "finalized" } })
+                            appendActivity(id, currentRole, ntdRole, 4, "quotation_submitted", `Quotation finalized for ${vendor.vendor_name}`, { vendor_id: vid })
+                            reload()
+                          }}
+                            className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors whitespace-nowrap">
+                            Finalize Quote
+                          </button>
+                        )}
+                      </div>
+                      {lastInternalCounter && (
+                        <p className="text-[10px] text-slate-400">
+                          Last counter sent: {q?.quotation?.currency ?? "₹"} {lastInternalCounter.counter_offer!.toLocaleString()} — awaiting vendor reply
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {isFinalized && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-700 font-semibold pt-1">
+                    <CheckCircle2 className="w-4 h-4" /> Finalized at {q?.quotation?.currency} {q?.quotation?.amount?.toLocaleString()}
+                  </div>
+                )}
+              </div>
             </div>
           )
         })}
