@@ -1,616 +1,1181 @@
 "use client"
-
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { CheckCircle2, Circle, ArrowLeft, Wrench, ArrowRight } from "lucide-react"
 import {
-  getNTDRecord,
-  getNTDSubStage8Status,
-  getDFMProgress,
-  getMouldDesignProgress,
-  getTrialProgress,
-  isNTDComplete,
-  updateNTDStage,
+  CheckCircle2, Circle, ChevronRight, ArrowLeft, Wrench,
+  AlertTriangle, ExternalLink, Plus, Trash2, Copy, Check,
+  Users, Clock, Package, Building2
+} from "lucide-react"
+import {
+  getNTDRecord, getNTDInitiation, getNTDSpec, setNTDSpec,
+  getNTDRFQ, setNTDRFQ, getNTDQuotation, setNTDQuotation,
+  getNTDSelection, setNTDSelection, getNTDHandoff, setNTDHandoff,
+  getNTDDFM, getNTDMould, getNTDMfg, setNTDMfg, getNTDTrials,
+  getNTDStage11, setNTDStage11, advanceNTDStage, saveNTDRecord,
+  appendActivity, getMouldSubStage, getDFMProgress, getMouldProgress,
+  getTrialProgress, getStage11CurrentSubstep, isNTDComplete,
+  createVersionedFile, generateVendorToken,
 } from "@/lib/ntd"
-import type { NTDRecord, NTDStage } from "@/types/ntd"
-import Stage1 from "./stages/Stage1"
-import Stage2 from "./stages/Stage2"
-import Stage3 from "./stages/Stage3"
-import Stage4 from "./stages/Stage4"
-import Stage5 from "./stages/Stage5"
-import Stage6 from "./stages/Stage6"
-import Stage8B from "./stages/Stage8B"
-import Stage9 from "./stages/Stage9"
+import type { NTDRecord, NTDStage, NTDRole, NTDRFQData, NTDMfgData } from "@/types/ntd"
+import { ActivityFeed } from "@/components/ntd/ActivityFeed"
+import { VersionedFileInput } from "@/components/ntd/VersionedFileInput"
 
-const STAGE_NAMES: Record<NTDStage, string> = {
-  1: "Tool Initiation & R&D Brief",
-  2: "Spec Sheet & Comparison",
-  3: "RFQ Dispatch",
-  4: "Quotation Review & Negotiations",
-  5: "Supplier Finalization",
-  6: "R&D Final Data Submission",
-  7: "DFM Review",
-  8: "Mould Design, Manufacturing & Trials",
-  9: "Tool Commissioning & Dispatch",
+const STAGE_NAMES: Record<number, string> = {
+  1: "Initiation", 2: "Spec & Sign-off", 3: "RFQ Dispatch", 4: "Quotation Review",
+  5: "Supplier Selection", 6: "Design Handoff", 7: "DFM", 8: "Mould Design",
+  9: "Manufacturing", 10: "Trials", 11: "Commissioning",
 }
 
-const STAGE_NAMES_ARRAY = ([1, 2, 3, 4, 5, 6, 7, 8, 9] as NTDStage[]).map(s => STAGE_NAMES[s])
+const VENDOR_CATALOG = [
+  "Precision Tools Ltd", "Global Mould Co", "Apex Engineering", "MasterCraft Tools",
+  "TechForm Industries", "Meridian Manufacturing", "Elite Tooling", "ProMould Solutions",
+]
 
-// Card accent colours per stage
-const STAGE_ACCENT = {
-  1: { border: "border-violet-300",  bg: "bg-violet-50/30",  icon: "text-violet-600",  badge: "bg-violet-100 text-violet-700" },
-  2: { border: "border-teal-300",    bg: "bg-teal-50/30",    icon: "text-teal-600",    badge: "bg-teal-100 text-teal-700" },
-  3: { border: "border-indigo-300",  bg: "bg-indigo-50/30",  icon: "text-indigo-600",  badge: "bg-indigo-100 text-indigo-700" },
-  4: { border: "border-amber-300",   bg: "bg-amber-50/30",   icon: "text-amber-600",   badge: "bg-amber-100 text-amber-700" },
-  5: { border: "border-blue-300",    bg: "bg-blue-50/30",    icon: "text-blue-600",    badge: "bg-blue-100 text-blue-700" },
-  6: { border: "border-emerald-300", bg: "bg-emerald-50/30", icon: "text-emerald-600", badge: "bg-emerald-100 text-emerald-700" },
-  7: { border: "border-purple-300",  bg: "bg-purple-50/30",  icon: "text-purple-600",  badge: "bg-purple-100 text-purple-700" },
-  8: { border: "border-slate-300",   bg: "bg-slate-50/30",   icon: "text-slate-600",   badge: "bg-slate-100 text-slate-700" },
-  9: { border: "border-blue-300",    bg: "bg-blue-50/30",    icon: "text-blue-600",    badge: "bg-blue-100 text-blue-700" },
-} as const
+function toNTDRole(pocRole: string): NTDRole {
+  if (pocRole === "rnd_head") return "rnd_head"
+  if (pocRole === "sourcing_head") return "sourcing_head"
+  if (pocRole === "super_admin") return "super_admin"
+  if (pocRole === "exim") return "exim"
+  if (pocRole.startsWith("rnd")) return "rnd"
+  if (pocRole.startsWith("sourcing")) return "sourcing"
+  return "rnd"
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button onClick={handleCopy}
+      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition-colors"
+      aria-label="Copy link">
+      {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  )
+}
 
 export default function NTDDetailPage() {
   const params = useParams()
-  const id = typeof params.id === "string" ? params.id : ""
+  const id = params.id as string
+  const [currentRole, setCurrentRole] = useState("")
+  const [record, setRecord] = useState<NTDRecord | null>(null)
+  const [activeTab, setActiveTab] = useState<"overview" | "activity">("overview")
 
-  const [record, setRecord] = useState<NTDRecord | null | undefined>(undefined)
-  const [subStage8, setSubStage8] = useState<"8A" | "8B" | "8C">("8A")
-  const [currentRole, setCurrentRole] = useState("rnd_user")
-  const [ntdComplete, setNtdComplete] = useState(false)
+  // Stage-specific state
+  const [specSheet, setSpecSheet] = useState("")
+  const [comparisons, setComparisons] = useState<{ id: string; vendor_name: string; spec_doc_link: string; notes: string }[]>([])
+  const [selectedVendors, setSelectedVendors] = useState<string[]>([])
+  const [customVendorName, setCustomVendorName] = useState("")
+  const [mfgUpdate, setMfgUpdate] = useState("")
+  const [mfgStartDate, setMfgStartDate] = useState("")
+  const [mfgEta, setMfgEta] = useState("")
 
-  useEffect(() => {
-    setCurrentRole(localStorage.getItem("poc_role") || "rnd_user")
+  // Stage 6 component builder
+  const [components, setComponents] = useState<{ id: string; name: string }[]>([{ id: "C01", name: "" }])
+  const [finalDesignSlots, setFinalDesignSlots] = useState<{ id: string; slotName: string; link: string }[]>([{ id: "1", slotName: "", link: "" }])
+
+  // Stage 11
+  const [s11Step, setS11Step] = useState<1 | 2 | 3 | 4 | 5 | 6>(1)
+
+  const reload = useCallback(() => {
     const r = getNTDRecord(id)
-    setRecord(r ?? null)
-    setSubStage8(getNTDSubStage8Status(id))
-    setNtdComplete(isNTDComplete(id))
-
-    const onRoleChange = (e: CustomEvent) => setCurrentRole(e.detail)
-    window.addEventListener("rolechange", onRoleChange as EventListener)
-    return () => window.removeEventListener("rolechange", onRoleChange as EventListener)
+    if (r) setRecord(r)
+    setS11Step(getStage11CurrentSubstep(id))
   }, [id])
 
-  function handleStageAdvance() {
-    const r = getNTDRecord(id)
-    if (r) {
-      setRecord(r)
-      setSubStage8(getNTDSubStage8Status(id))
-      setNtdComplete(isNTDComplete(id))
+  useEffect(() => {
+    setCurrentRole(localStorage.getItem("poc_role") ?? "rnd_engineer")
+    reload()
+    const t = setInterval(reload, 3000)
+    const onRole = () => setCurrentRole(localStorage.getItem("poc_role") ?? "")
+    window.addEventListener("rolechange", onRole)
+    return () => { clearInterval(t); window.removeEventListener("rolechange", onRole) }
+  }, [reload])
+
+  if (!record) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-slate-400">NTD record not found.</p>
+      </div>
+    )
+  }
+
+  const stage = record.current_stage
+  const ntdRole = toNTDRole(currentRole)
+  const isRnd = currentRole.startsWith("rnd") || currentRole === "super_admin"
+  const isSourcing = currentRole.startsWith("sourcing") || currentRole === "super_admin"
+  const canApprove = currentRole === "rnd_head" || currentRole === "super_admin"
+  const isExim = currentRole === "exim" || currentRole === "super_admin"
+
+  const initData = getNTDInitiation(id)
+  const specData = getNTDSpec(id)
+  const rfqData = getNTDRFQ(id)
+  const quotationData = getNTDQuotation(id)
+  const selectionData = getNTDSelection(id)
+  const handoffData = getNTDHandoff(id)
+  const dfmData = getNTDDFM(id)
+  const mouldData = getNTDMould(id)
+  const mfgData = getNTDMfg(id)
+  const trialsData = getNTDTrials(id)
+  const s11Data = getNTDStage11(id)
+
+  const mouldSubStage = getMouldSubStage(id)
+  const dfmProgress = getDFMProgress(id)
+  const mouldProgress = getMouldProgress(id)
+  const trialProgress = getTrialProgress(id)
+  const complete = isNTDComplete(id)
+
+  // ── Demo advance/revert ──
+  const demoAdvance = () => {
+    if (stage < 11) {
+      const next = (stage + 1) as NTDStage
+      advanceNTDStage(id, next, "demo", "super_admin")
+      reload()
+    }
+  }
+  const demoRevert = () => {
+    if (stage > 1) {
+      const r = getNTDRecord(id)
+      if (!r) return
+      saveNTDRecord({ ...r, current_stage: (stage - 1) as NTDStage })
+      reload()
     }
   }
 
-  // Loading
-  if (record === undefined) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <span className="text-[13px] text-slate-400">Loading…</span>
-      </div>
-    )
+  // ── Stage 2 sign-off ──
+  const handleSpecSignOff = (who: "sourcing" | "rnd") => {
+    const existing = specData ?? {
+      spec_sheet: createVersionedFile("Spec Sheet", specSheet, currentRole),
+      comparisons: comparisons.map(c => ({ row_id: c.id, vendor_name: c.vendor_name, spec_doc_link: c.spec_doc_link, notes: c.notes })),
+      sourcing_signed: false, sourcing_signed_by: "", sourcing_signed_at: "",
+      rnd_signed: false, rnd_signed_by: "", rnd_signed_at: "",
+    }
+    const now = new Date().toISOString()
+    const updated = who === "sourcing"
+      ? { ...existing, sourcing_signed: true, sourcing_signed_by: currentRole, sourcing_signed_at: now }
+      : { ...existing, rnd_signed: true, rnd_signed_by: currentRole, rnd_signed_at: now }
+    setNTDSpec(id, updated)
+    appendActivity(id, currentRole, ntdRole, 2, "stage_complete", `Stage 2 ${who} sign-off`)
+    if (updated.sourcing_signed && updated.rnd_signed) {
+      advanceNTDStage(id, 3, currentRole, ntdRole)
+    }
+    reload()
   }
 
-  // Not found
-  if (record === null) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full py-24 text-center">
-        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-          <Wrench className="w-6 h-6 text-slate-400" />
+  // ── Stage 3 RFQ dispatch ──
+  const handleSendRFQ = (vendorId: string) => {
+    const existing = rfqData ?? { vendors: {} }
+    const vendor = existing.vendors[vendorId]
+    if (!vendor) return
+    const updated: NTDRFQData = {
+      vendors: {
+        ...existing.vendors,
+        [vendorId]: { ...vendor, sent: true, sent_at: new Date().toISOString(), sent_by: currentRole },
+      }
+    }
+    setNTDRFQ(id, updated)
+    appendActivity(id, currentRole, ntdRole, 3, "supplier_submitted", `RFQ sent to ${vendor.vendor_name}`, { vendor_id: vendorId })
+    reload()
+  }
+
+  const handleAddVendorToRFQ = (vendorName: string, isCatalog: boolean) => {
+    const existing = rfqData ?? { vendors: {} }
+    const vendorId = `vendor_${Date.now()}`
+    setNTDRFQ(id, {
+      vendors: {
+        ...existing.vendors,
+        [vendorId]: {
+          vendor_name: vendorName,
+          is_catalog: isCatalog,
+          token: generateVendorToken(),
+          nda_required: !isCatalog,
+          nda_signed: isCatalog,
+          sent: false,
+          sent_at: "",
+          sent_by: "",
+        }
+      }
+    })
+    reload()
+  }
+
+  const handleAdvanceFromRFQ = () => {
+    advanceNTDStage(id, 4, currentRole, ntdRole)
+    reload()
+  }
+
+  // ── Stage 5 selection ──
+  const handleSelectSupplier = (vendorId: string, vendorName: string) => {
+    const existing = selectionData ?? {
+      selected_vendor_id: "", selected_vendor_name: "",
+      sourcing_approved: false, sourcing_approved_by: "", sourcing_approved_at: "",
+      rnd_acknowledged: false, rnd_acknowledged_by: "", rnd_acknowledged_at: "",
+    }
+    setNTDSelection(id, { ...existing, selected_vendor_id: vendorId, selected_vendor_name: vendorName, sourcing_approved: true, sourcing_approved_by: currentRole, sourcing_approved_at: new Date().toISOString() })
+    const r = getNTDRecord(id)
+    if (r) saveNTDRecord({ ...r, supplier: vendorName })
+    appendActivity(id, currentRole, ntdRole, 5, "supplier_selected", `Supplier selected: ${vendorName}`, { vendor_id: vendorId })
+    reload()
+  }
+
+  const handleRndAcknowledge = () => {
+    if (!selectionData) return
+    const updated = { ...selectionData, rnd_acknowledged: true, rnd_acknowledged_by: currentRole, rnd_acknowledged_at: new Date().toISOString() }
+    setNTDSelection(id, updated)
+    if (updated.sourcing_approved && updated.rnd_acknowledged) {
+      advanceNTDStage(id, 6, currentRole, ntdRole)
+    }
+    appendActivity(id, currentRole, ntdRole, 5, "supplier_selected", "R&D acknowledged supplier selection")
+    reload()
+  }
+
+  // ── Stage 6 handoff ──
+  const handleSubmitHandoff = () => {
+    const comps = components.filter(c => c.name.trim()).map(c => ({ componentId: c.id, name: c.name }))
+    if (comps.length === 0) return
+    const finalFiles = finalDesignSlots.filter(s => s.slotName.trim() && s.link.trim()).map(s => createVersionedFile(s.slotName, s.link, currentRole))
+    setNTDHandoff(id, {
+      components: comps,
+      component_count: comps.length,
+      final_designs: finalFiles,
+      submitted_by: currentRole,
+      submitted_at: new Date().toISOString(),
+      supplier_acknowledged: false,
+      supplier_acknowledged_at: "",
+    })
+    const r = getNTDRecord(id)
+    if (r) saveNTDRecord({ ...r, component_count: comps.length })
+    appendActivity(id, currentRole, ntdRole, 6, "supplier_submitted", `Design handoff submitted — ${comps.length} components`)
+    reload()
+  }
+
+  const handleSimulateSupplierAck = () => {
+    if (!handoffData) return
+    setNTDHandoff(id, { ...handoffData, supplier_acknowledged: true, supplier_acknowledged_at: new Date().toISOString() })
+    advanceNTDStage(id, 7, currentRole, ntdRole)
+    appendActivity(id, currentRole, ntdRole, 6, "supplier_acknowledged", "Supplier acknowledged design handoff")
+    reload()
+  }
+
+  // ── Stage 9 Manufacturing ──
+  const handleMfgStart = () => {
+    setNTDMfg(id, {
+      mfg_start_date: mfgStartDate || new Date().toISOString().split("T")[0],
+      eta_date: mfgEta || "",
+      updates: [],
+      status: "in_progress",
+      completed_by: "",
+      completed_at: "",
+    })
+    appendActivity(id, currentRole, ntdRole, 9, "manufacturing_update", "Manufacturing started")
+    reload()
+  }
+
+  const handleMfgUpdate = () => {
+    if (!mfgData || !mfgUpdate.trim()) return
+    const updated: NTDMfgData = {
+      ...mfgData,
+      updates: [...mfgData.updates, { update_id: String(Date.now()), date: new Date().toISOString().split("T")[0], note: mfgUpdate.trim(), posted_by: currentRole, posted_by_role: currentRole }]
+    }
+    setNTDMfg(id, updated)
+    appendActivity(id, currentRole, ntdRole, 9, "manufacturing_update", mfgUpdate.trim())
+    setMfgUpdate("")
+    reload()
+  }
+
+  const handleMfgComplete = () => {
+    if (!mfgData) return
+    setNTDMfg(id, { ...mfgData, status: "complete", completed_by: currentRole, completed_at: new Date().toISOString() })
+    advanceNTDStage(id, 10, currentRole, ntdRole)
+    appendActivity(id, currentRole, ntdRole, 9, "manufacturing_complete", "Manufacturing marked complete")
+    reload()
+  }
+
+  // ── Card helpers ──
+  function StageCard({
+    stageNum, colorClass, title, children, doneLabel,
+  }: {
+    stageNum: number; colorClass: string; title: string; children: React.ReactNode; doneLabel?: string
+  }) {
+    const isDone = stage > stageNum
+    const isActive = stage === stageNum
+    const isUpcoming = stage === stageNum - 1
+
+    if (isDone) return (
+      <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3">
+        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+        <div>
+          <p className="text-xs font-semibold text-slate-700">Stage {stageNum} — {STAGE_NAMES[stageNum]}</p>
+          {doneLabel && <p className="text-[11px] text-slate-400">{doneLabel}</p>}
         </div>
-        <p className="text-[15px] font-bold text-slate-800">NTD not found</p>
-        <p className="text-[12px] text-slate-400 mt-1">
-          This NTD record does not exist or has been removed.
-        </p>
-        <Link
-          href="/ntd"
-          className="mt-4 text-[13px] text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to NTD List
-        </Link>
+      </div>
+    )
+
+    if (isUpcoming) return (
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 opacity-50">
+        <Circle className="w-4 h-4 text-slate-400 shrink-0" />
+        <div>
+          <p className="text-xs font-semibold text-slate-500">Stage {stageNum} — {STAGE_NAMES[stageNum]}</p>
+          <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Upcoming</span>
+        </div>
+      </div>
+    )
+
+    if (!isActive) return null
+
+    return (
+      <div className={`bg-white border-l-4 ${colorClass} border border-t-0 border-b-0 border-r-0 rounded-xl shadow-sm`}>
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${colorClass.replace("border-l-4 ", "").replace("border-", "bg-")}`} />
+          <h3 className="font-semibold text-slate-800 text-sm">Stage {stageNum} — {title}</h3>
+        </div>
+        <div className="px-5 py-4">{children}</div>
       </div>
     )
   }
 
-  const currentStage = record.current_stage
-
-  // ── Build card stack ──────────────────────────────────────────
-
+  // ── Build card stack ──
   const cards: React.ReactNode[] = []
 
-  function pushCard(stage: NTDStage, activeContent: React.ReactNode, doneLabel?: string) {
-    const isActive   = currentStage === stage
-    const isDone     = currentStage > stage
-    const isUpcoming = !isActive && !isDone
-
-    const accent = STAGE_ACCENT[stage]
-
-    const cardClass = [
-      "rounded-xl border p-4",
-      isDone     ? "bg-slate-50 border-slate-200" :
-      isActive   ? `${accent.border} ${accent.bg}` :
-                   "bg-slate-50 border-slate-200 opacity-50",
-    ].join(" ")
-
-    cards.push(
-      <div key={stage} className={cardClass}>
-        <div className="flex items-center gap-2 mb-3">
-          {isDone
-            ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            : <Circle className={`w-4 h-4 shrink-0 ${isActive ? accent.icon : "text-slate-400"}`} />
-          }
-          <h4 className="font-bold text-slate-800 text-sm">
-            Stage {stage} — {STAGE_NAMES[stage]}
-          </h4>
-          {isDone && (
-            <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
-              {doneLabel ?? "Done"}
-            </span>
-          )}
-          {isActive && (
-            <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${accent.badge}`}>
-              Active
-            </span>
-          )}
-          {isUpcoming && (
-            <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
-              Upcoming
-            </span>
-          )}
-        </div>
-        {isDone && (
-          <p className="text-[12px] text-slate-500">{doneLabel ?? "Completed"}</p>
-        )}
-        {isActive && activeContent}
-      </div>
-    )
-  }
-
-  // Stage 1 (always pushed)
-  pushCard(1,
-    <Stage1 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />,
-    "Tool Initiation Submitted"
-  )
-
-  // Stages 2–6 (simple component stages)
-  const simpleStageComponents: Partial<Record<NTDStage, React.ReactNode>> = {
-    2: <Stage2 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />,
-    3: <Stage3 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />,
-    4: <Stage4 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />,
-    5: <Stage5 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />,
-    6: <Stage6 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />,
-  }
-  const simpleDoneLabels: Partial<Record<NTDStage, string>> = {
-    2: "Spec Sheet Approved",
-    3: "RFQ Dispatched",
-    4: "Quotations Reviewed",
-    5: "Supplier Finalized",
-    6: "R&D Data Submitted",
-  }
-  for (const s of [2, 3, 4, 5, 6] as NTDStage[]) {
-    if (currentStage >= s - 1) {
-      pushCard(s, simpleStageComponents[s], simpleDoneLabels[s])
-    }
-  }
-
-  // Stage 7 — DFM Review (pushed when currentStage >= 6)
-  if (currentStage >= 6) {
-    const dfmProgress = getDFMProgress(id)
-    const isActive7   = currentStage === 7
-    const isDone7     = currentStage > 7
-    const isUpcoming7 = currentStage === 6
-    const accent7 = STAGE_ACCENT[7]
-
-    const card7Class = [
-      "rounded-xl border p-4",
-      isDone7     ? "bg-slate-50 border-slate-200" :
-      isActive7   ? `${accent7.border} ${accent7.bg}` :
-                    "bg-slate-50 border-slate-200 opacity-50",
-    ].join(" ")
-
-    cards.push(
-      <div key={7} className={card7Class}>
-        <div className="flex items-center gap-2 mb-3">
-          {isDone7
-            ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            : <Circle className={`w-4 h-4 shrink-0 ${isActive7 ? accent7.icon : "text-slate-400"}`} />
-          }
-          <h4 className="font-bold text-slate-800 text-sm">Stage 7 — {STAGE_NAMES[7]}</h4>
-          {isDone7 && (
-            <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
-              DFM Review Complete — {dfmProgress.approved}/{dfmProgress.total} components approved
-            </span>
-          )}
-          {isActive7 && (
-            <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${accent7.badge}`}>
-              Active
-            </span>
-          )}
-          {isUpcoming7 && (
-            <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
-              Upcoming
-            </span>
-          )}
-        </div>
-        {isDone7 && (
-          <p className="text-[12px] text-slate-500">
-            DFM review complete — {dfmProgress.approved} / {dfmProgress.total} components approved
-          </p>
-        )}
-        {isActive7 && (
-          <div>
-            <p className="text-[13px] text-slate-500 mb-4">
-              Per-component DFM review loop — supplier submits, R&D and sourcing review iteratively.
-            </p>
-            <Link
-              href={`/ntd/${id}/dfm`}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold bg-purple-600 hover:bg-purple-700 text-white transition-colors"
-            >
-              Open DFM Review →
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-            <p className="text-[11px] text-slate-400 mt-2">
-              Progress: {dfmProgress.approved} / {dfmProgress.total} components approved
-            </p>
+  // Stage 1 — always show (done or active from creation)
+  cards.push(
+    <StageCard key="s1" stageNum={1} colorClass="border-violet-500" title="Tool Initiation"
+      doneLabel={initData ? `Submitted by ${initData.submitted_by} · ${initData.part_specs.length} spec file(s)` : undefined}>
+      {initData && (
+        <div className="space-y-3">
+          {initData.notes && <p className="text-sm text-slate-600">{initData.notes}</p>}
+          <div className="space-y-2">
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Part Spec Files</p>
+            {initData.part_specs.map(f => (
+              <VersionedFileInput key={f.file_id} file={f} slotName={f.slot_name} role={ntdRole} readOnly
+                onUpload={() => {}} onRevise={() => {}} />
+            ))}
           </div>
-        )}
-      </div>
-    )
-  }
-
-  // Stage 8 — Mould Design, Manufacturing & Trials (pushed when currentStage >= 7)
-  if (currentStage >= 7) {
-    const mouldProgress = getMouldDesignProgress(id)
-    const trialProgress = getTrialProgress(id)
-    const sub8 = subStage8
-
-    const isActive8   = currentStage === 8
-    const isDone8     = currentStage > 8
-    const isUpcoming8 = currentStage === 7
-    const accent8 = STAGE_ACCENT[8]
-
-    const card8Class = [
-      "rounded-xl border p-4",
-      isDone8     ? "bg-slate-50 border-slate-200" :
-      isActive8   ? `${accent8.border} ${accent8.bg}` :
-                    "bg-slate-50 border-slate-200 opacity-50",
-    ].join(" ")
-
-    cards.push(
-      <div key={8} className={card8Class}>
-        <div className="flex items-center gap-2 mb-3">
-          {isDone8
-            ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            : <Circle className={`w-4 h-4 shrink-0 ${isActive8 ? accent8.icon : "text-slate-400"}`} />
-          }
-          <h4 className="font-bold text-slate-800 text-sm">Stage 8 — {STAGE_NAMES[8]}</h4>
-          {isDone8 && (
-            <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
-              Done
-            </span>
-          )}
-          {isActive8 && (
-            <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${accent8.badge}`}>
-              Active
-            </span>
-          )}
-          {isUpcoming8 && (
-            <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
-              Upcoming
-            </span>
-          )}
-        </div>
-
-        {isDone8 && (
-          <p className="text-[12px] text-slate-500">
-            Mould Design, Manufacturing &amp; Trials — all sub-stages complete
-          </p>
-        )}
-
-        {isActive8 && (
-          <div className="space-y-3">
-            {/* Sub-stage indicator strip */}
-            <div className="flex items-center gap-0">
-              {(["8A", "8B", "8C"] as const).map((ss, idx) => {
-                const ssDone =
-                  (ss === "8A" && (sub8 === "8B" || sub8 === "8C")) ||
-                  (ss === "8B" && sub8 === "8C")
-                const ssCurrent = sub8 === ss
-                return (
-                  <div key={ss} className="flex items-center flex-1">
-                    <div
-                      className={[
-                        "flex items-center justify-center px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all flex-1",
-                        ssDone
-                          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                          : ssCurrent
-                          ? "bg-slate-700 border-slate-700 text-white"
-                          : "bg-slate-50 border-slate-200 text-slate-400",
-                      ].join(" ")}
-                    >
-                      {ssDone && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                      {ss}
-                    </div>
-                    {idx < 2 && (
-                      <ArrowRight className="w-4 h-4 text-slate-300 mx-1 shrink-0" />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* 8A — Mould Design card */}
-            <div
-              className={[
-                "rounded-xl border shadow-sm overflow-hidden",
-                sub8 === "8A" ? "border-slate-300" : "border-slate-100",
-              ].join(" ")}
-            >
-              <div className="bg-white px-5 py-4 flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={[
-                      "w-6 h-6 rounded-md flex items-center justify-center shrink-0",
-                      sub8 === "8A"
-                        ? "bg-slate-100 border border-slate-200"
-                        : "bg-emerald-50 border border-emerald-100",
-                    ].join(" ")}
-                  >
-                    {sub8 !== "8A" ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    ) : (
-                      <span className="text-[10px] font-bold text-slate-700">8A</span>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-bold text-slate-800">Mould Design Review</p>
-                    <p className="text-[11px] text-slate-400">
-                      {mouldProgress.approved} / {mouldProgress.total} components approved
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href={`/ntd/${id}/mould-design`}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold bg-slate-900 hover:bg-slate-700 text-white transition-colors"
-                >
-                  Open Mould Design
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-
-            {/* 8B — Manufacturing (inline component) */}
-            <Stage8B
-              ntdId={id}
-              currentRole={currentRole}
-              onStageAdvance={handleStageAdvance}
-            />
-
-            {/* 8C — Trials card */}
-            <div
-              className={[
-                "rounded-xl border shadow-sm overflow-hidden",
-                sub8 === "8C" ? "border-slate-300" : "border-slate-100",
-              ].join(" ")}
-            >
-              <div
-                className={[
-                  "bg-white px-5 py-4 flex items-center justify-between flex-wrap gap-3",
-                  sub8 !== "8C" ? "opacity-60" : "",
-                ].join(" ")}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={[
-                      "w-6 h-6 rounded-md flex items-center justify-center shrink-0",
-                      sub8 === "8C"
-                        ? "bg-slate-100 border border-slate-200"
-                        : "bg-slate-100 border border-slate-200",
-                    ].join(" ")}
-                  >
-                    <span
-                      className={[
-                        "text-[10px] font-bold",
-                        sub8 === "8C" ? "text-slate-700" : "text-slate-400",
-                      ].join(" ")}
-                    >
-                      8C
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-bold text-slate-800">Trial Samples &amp; Testing</p>
-                    <p className="text-[11px] text-slate-400">
-                      {trialProgress.passed} / {trialProgress.total} components passed across all trials
-                    </p>
-                  </div>
-                </div>
-                {sub8 === "8C" ? (
-                  <Link
-                    href={`/ntd/${id}/trials`}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold bg-slate-900 hover:bg-slate-700 text-white transition-colors"
-                  >
-                    Open Trials
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                ) : (
-                  <span className="text-[11px] text-slate-400 font-medium">
-                    Locked — complete 8B first
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // Stage 9 — Tool Commissioning & Dispatch (pushed when currentStage >= 8)
-  if (currentStage >= 8) {
-    const isActive9   = currentStage === 9
-    const isDone9     = currentStage > 9
-    const isUpcoming9 = currentStage === 8
-    const accent9 = STAGE_ACCENT[9]
-
-    const card9Class = [
-      "rounded-xl border p-4",
-      isDone9     ? "bg-slate-50 border-slate-200" :
-      isActive9   ? `${accent9.border} ${accent9.bg}` :
-                    "bg-slate-50 border-slate-200 opacity-50",
-    ].join(" ")
-
-    cards.push(
-      <div key={9} className={card9Class}>
-        <div className="flex items-center gap-2 mb-3">
-          {isDone9
-            ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            : <Circle className={`w-4 h-4 shrink-0 ${isActive9 ? accent9.icon : "text-slate-400"}`} />
-          }
-          <h4 className="font-bold text-slate-800 text-sm">Stage 9 — {STAGE_NAMES[9]}</h4>
-          {isDone9 && (
-            <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
-              NTD Commissioned &amp; Complete
-            </span>
-          )}
-          {isActive9 && (
-            <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${accent9.badge}`}>
-              Active
-            </span>
-          )}
-          {isUpcoming9 && (
-            <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
-              Upcoming
-            </span>
-          )}
-        </div>
-        {isDone9 && (
-          <p className="text-[12px] text-slate-500">NTD Commissioned &amp; Complete</p>
-        )}
-        {isActive9 && (
-          <Stage9 ntdId={id} currentRole={currentRole} onStageAdvance={handleStageAdvance} />
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-6 max-w-[1400px] mx-auto animate-in fade-in duration-300 px-6 py-6">
-
-      {/* Back link */}
-      <Link
-        href="/ntd"
-        className="inline-flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-800 transition-colors"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" />
-        NTD List
-      </Link>
-
-      {/* NTD Complete banner */}
-      {ntdComplete && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          <div>
-            <p className="text-[14px] font-bold text-emerald-800">NTD Complete</p>
-            <p className="text-[12px] text-emerald-600">
-              All 9 stages are done. This NTD has been fully commissioned and closed.
-            </p>
-          </div>
+          <p className="text-xs text-slate-400">Submitted by {initData.submitted_by}</p>
         </div>
       )}
+    </StageCard>
+  )
 
-      {/* NTD Header Card */}
+  // Stage 2 — Spec & Sign-off
+  if (stage >= 1) cards.push(
+    <StageCard key="s2" stageNum={2} colorClass="border-teal-500" title="Spec Sheet & Sign-off"
+      doneLabel={specData ? `Sourcing: ${specData.sourcing_signed_by || "✓"} · R&D: ${specData.rnd_signed_by || "✓"}` : undefined}>
+      <div className="space-y-4">
+        {!specData ? (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-500 uppercase">Spec Sheet Link</label>
+              <input type="url" value={specSheet} onChange={e => setSpecSheet(e.target.value)}
+                placeholder="Drive / SharePoint link"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold text-slate-500 uppercase">Vendor Comparisons</p>
+                <button onClick={() => setComparisons(prev => [...prev, { id: String(Date.now()), vendor_name: "", spec_doc_link: "", notes: "" }])}
+                  className="text-xs text-teal-700 hover:text-teal-900 flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add Row
+                </button>
+              </div>
+              {comparisons.map((c) => (
+                <div key={c.id} className="flex gap-2 items-start bg-slate-50 rounded-lg p-2">
+                  <input type="text" placeholder="Vendor name" value={c.vendor_name}
+                    onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, vendor_name: e.target.value } : x))}
+                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
+                  <input type="url" placeholder="Spec doc link" value={c.spec_doc_link}
+                    onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, spec_doc_link: e.target.value } : x))}
+                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
+                  <input type="text" placeholder="Notes" value={c.notes}
+                    onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, notes: e.target.value } : x))}
+                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
+                  <button onClick={() => setComparisons(prev => prev.filter(x => x.id !== c.id))}
+                    className="p-1 text-slate-300 hover:text-red-400 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {specData.spec_sheet && (
+              <a href={specData.spec_sheet.versions[0]?.link} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-blue-700 hover:underline">
+                <ExternalLink className="w-3 h-3" /> Spec Sheet v{specData.spec_sheet.current_version}
+              </a>
+            )}
+            {specData.comparisons.length > 0 && (
+              <p className="text-xs text-slate-500">{specData.comparisons.length} vendor comparison(s)</p>
+            )}
+          </div>
+        )}
+
+        {/* Sign-off status */}
+        <div className="flex gap-3">
+          <div className={`flex-1 rounded-lg border px-3 py-2 ${specData?.sourcing_signed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+            <p className="text-[10px] font-bold text-slate-500 uppercase">Sourcing Sign-off</p>
+            {specData?.sourcing_signed
+              ? <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> {specData.sourcing_signed_by}</p>
+              : isSourcing ? (
+                <button onClick={() => handleSpecSignOff("sourcing")}
+                  className="mt-1 text-xs font-semibold bg-teal-700 hover:bg-teal-800 text-white px-3 py-1 rounded-lg transition-colors">
+                  Sign Off
+                </button>
+              ) : <p className="text-xs text-slate-400 italic">Pending</p>}
+          </div>
+          <div className={`flex-1 rounded-lg border px-3 py-2 ${specData?.rnd_signed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+            <p className="text-[10px] font-bold text-slate-500 uppercase">R&D Sign-off</p>
+            {specData?.rnd_signed
+              ? <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> {specData.rnd_signed_by}</p>
+              : isRnd ? (
+                <button onClick={() => handleSpecSignOff("rnd")}
+                  className="mt-1 text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1 rounded-lg transition-colors">
+                  Sign Off
+                </button>
+              ) : <p className="text-xs text-slate-400 italic">Pending</p>}
+          </div>
+        </div>
+      </div>
+    </StageCard>
+  )
+
+  // Stage 3 — RFQ Dispatch
+  if (stage >= 2) cards.push(
+    <StageCard key="s3" stageNum={3} colorClass="border-indigo-500" title="RFQ Dispatch"
+      doneLabel={rfqData ? `${Object.values(rfqData.vendors).filter(v => v.sent).length} RFQs sent` : undefined}>
+      <div className="space-y-4">
+        {/* Catalog vendor select */}
+        {isSourcing && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Select Vendors</p>
+            <div className="flex flex-wrap gap-2">
+              {VENDOR_CATALOG.filter(v => !Object.values(rfqData?.vendors ?? {}).some(rv => rv.vendor_name === v)).map(v => (
+                <button key={v} onClick={() => handleAddVendorToRFQ(v, true)}
+                  className="text-xs border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors">
+                  + {v}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input type="text" placeholder="Custom vendor name" value={customVendorName} onChange={e => setCustomVendorName(e.target.value)}
+                className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              <button onClick={() => { if (customVendorName.trim()) { handleAddVendorToRFQ(customVendorName.trim(), false); setCustomVendorName("") } }}
+                disabled={!customVendorName.trim()}
+                className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg transition-colors">
+                Add Custom
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Vendor list */}
+        {rfqData && Object.entries(rfqData.vendors).length > 0 && (
+          <div className="space-y-2">
+            {Object.entries(rfqData.vendors).map(([vid, v]) => {
+              const rfqUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/rfq/ntd/${id}/${v.token}`
+              return (
+                <div key={vid} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{v.vendor_name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {v.nda_required && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${v.nda_signed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                          NDA {v.nda_signed ? "Signed" : "Required"}
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${v.sent ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
+                        {v.sent ? "Sent" : "Pending"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {v.sent && <CopyButton text={rfqUrl} />}
+                    {isSourcing && !v.sent && (
+                      <button onClick={() => handleSendRFQ(vid)}
+                        className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-lg transition-colors">
+                        Send RFQ
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {isSourcing && rfqData && Object.values(rfqData.vendors).some(v => v.sent) && (
+          <button onClick={handleAdvanceFromRFQ}
+            className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+            Proceed to Quotation Review <ChevronRight className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </StageCard>
+  )
+
+  // Stage 4 — Quotation Review
+  if (stage >= 3) cards.push(
+    <StageCard key="s4" stageNum={4} colorClass="border-amber-500" title="Quotation Review"
+      doneLabel={quotationData ? `${Object.values(quotationData).filter(v => v.status === "finalized").length} finalized` : undefined}>
+      <div className="space-y-3">
+        {rfqData && Object.entries(rfqData.vendors).map(([vid, vendor]) => {
+          const q = quotationData?.[vid]
+          return (
+            <div key={vid} className="border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-slate-800">{vendor.vendor_name}</p>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  q?.status === "finalized" ? "bg-emerald-100 text-emerald-700"
+                  : q?.status === "negotiating" ? "bg-amber-100 text-amber-700"
+                  : q?.status === "quotation_received" ? "bg-blue-100 text-blue-700"
+                  : "bg-slate-100 text-slate-500"}`}>
+                  {q?.status ?? "Awaiting Quotation"}
+                </span>
+              </div>
+              {q?.quotation ? (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">Amount</p>
+                    <p className="text-sm font-bold text-slate-800">{q.quotation.currency} {q.quotation.amount.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">Lead Time</p>
+                    <p className="text-sm font-bold text-slate-800">{q.quotation.lead_time_days}d</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400 uppercase">Doc</p>
+                    {q.quotation.doc_link
+                      ? <a href={q.quotation.doc_link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1"><ExternalLink className="w-3 h-3" />View</a>
+                      : <p className="text-xs text-slate-400">—</p>}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic">No quotation submitted yet. Share the RFQ URL for the vendor to submit.</p>
+              )}
+              {/* Thread messages */}
+              {q?.thread && q.thread.length > 0 && (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                  {q.thread.map(msg => (
+                    <div key={msg.message_id}
+                      className={`rounded-lg px-3 py-2 text-xs max-w-[80%] ${msg.author_type === "internal" ? "bg-blue-50 text-blue-900" : "bg-slate-100 text-slate-800 ml-auto"}`}>
+                      <p className="font-semibold text-[10px] text-slate-500 mb-0.5">{msg.author_name} {msg.counter_offer ? `— Counter: ${msg.counter_offer}` : ""}</p>
+                      {msg.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {isSourcing && q?.status !== "finalized" && (
+                <div className="flex gap-2">
+                  <button onClick={() => {
+                    const existing = quotationData ?? {}
+                    setNTDQuotation(id, { ...existing, [vid]: { ...(q ?? { quotation: undefined, thread: [], status: "sent" }), status: "finalized" } })
+                    appendActivity(id, currentRole, ntdRole, 4, "quotation_submitted", `Quotation finalized for ${vendor.vendor_name}`, { vendor_id: vid })
+                    reload()
+                  }}
+                    className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors">
+                    Mark Finalized
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {isSourcing && quotationData && Object.values(quotationData).some(v => v.status === "finalized") && (
+          <button onClick={() => { advanceNTDStage(id, 5, currentRole, ntdRole); reload() }}
+            className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+            Proceed to Supplier Selection <ChevronRight className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </StageCard>
+  )
+
+  // Stage 5 — Supplier Selection
+  if (stage >= 4) cards.push(
+    <StageCard key="s5" stageNum={5} colorClass="border-blue-500" title="Supplier Selection"
+      doneLabel={selectionData?.sourcing_approved ? `${selectionData.selected_vendor_name} selected` : undefined}>
+      <div className="space-y-4">
+        {!selectionData?.sourcing_approved ? (
+          <div className="space-y-2">
+            <p className="text-sm text-slate-600">Select the final supplier from finalized quotations:</p>
+            {quotationData && Object.entries(rfqData?.vendors ?? {}).filter(([vid]) => quotationData[vid]?.status === "finalized").map(([vid, vendor]) => (
+              <div key={vid} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-3">
+                <div>
+                  <p className="font-semibold text-slate-800">{vendor.vendor_name}</p>
+                  <p className="text-xs text-slate-500">{quotationData[vid]?.quotation?.currency} {quotationData[vid]?.quotation?.amount?.toLocaleString()}</p>
+                </div>
+                {isSourcing && (
+                  <button onClick={() => handleSelectSupplier(vid, vendor.vendor_name)}
+                    className="text-xs font-semibold bg-blue-900 hover:bg-blue-800 text-white px-3 py-2 rounded-lg transition-colors">
+                    Select as Supplier
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+              <CheckCircle2 className="w-5 h-5 text-blue-600" />
+              <div>
+                <p className="font-semibold text-blue-900">{selectionData.selected_vendor_name}</p>
+                <p className="text-xs text-blue-600">Selected by {selectionData.sourcing_approved_by}</p>
+              </div>
+            </div>
+            {!selectionData.rnd_acknowledged ? (
+              isRnd ? (
+                <button onClick={handleRndAcknowledge}
+                  className="text-sm font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg transition-colors">
+                  R&D Acknowledge Selection
+                </button>
+              ) : (
+                <p className="text-xs text-slate-400 italic">Awaiting R&D acknowledgement...</p>
+              )
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-emerald-700">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                R&D acknowledged by {selectionData.rnd_acknowledged_by}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </StageCard>
+  )
+
+  // Stage 6 — Design Handoff
+  if (stage >= 5) cards.push(
+    <StageCard key="s6" stageNum={6} colorClass="border-emerald-500" title="Final Design Handoff"
+      doneLabel={handoffData?.supplier_acknowledged ? `${handoffData.component_count} components · Supplier acknowledged` : undefined}>
+      <div className="space-y-4">
+        {!handoffData?.submitted_by ? isRnd ? (
+          <div className="space-y-4">
+            {/* Component builder */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Components ({components.length})</p>
+                <button onClick={() => {
+                  const nextNum = String(components.length + 1).padStart(2, "0")
+                  setComponents(prev => [...prev, { id: `C${nextNum}`, name: "" }])
+                }}
+                  className="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-1">
+                  <Plus className="w-3.5 h-3.5" /> Add Component
+                </button>
+              </div>
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">Component list cannot be changed after submission.</p>
+              </div>
+              {components.map(c => (
+                <div key={c.id} className="flex gap-2 items-center">
+                  <span className="text-xs font-bold text-slate-400 w-10">{c.id}</span>
+                  <input type="text" placeholder="Component name" value={c.name}
+                    onChange={e => setComponents(prev => prev.map(x => x.id === c.id ? { ...x, name: e.target.value } : x))}
+                    className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                  <button onClick={() => components.length > 1 && setComponents(prev => prev.filter(x => x.id !== c.id))}
+                    disabled={components.length === 1}
+                    className="p-1.5 text-slate-300 hover:text-red-400 disabled:opacity-30 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Final design files */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Final Design Files</p>
+                <button onClick={() => setFinalDesignSlots(prev => [...prev, { id: String(Date.now()), slotName: "", link: "" }])}
+                  className="text-xs text-emerald-700 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Slot</button>
+              </div>
+              {finalDesignSlots.map(slot => (
+                <div key={slot.id} className="flex gap-2 bg-slate-50 rounded-lg p-2">
+                  <input type="text" placeholder="File name" value={slot.slotName}
+                    onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, slotName: e.target.value } : s))}
+                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                  <input type="url" placeholder="Drive link" value={slot.link}
+                    onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, link: e.target.value } : s))}
+                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                </div>
+              ))}
+            </div>
+
+            <button onClick={handleSubmitHandoff}
+              disabled={components.every(c => !c.name.trim())}
+              className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+              Submit & Notify Supplier
+            </button>
+          </div>
+        ) : <p className="text-sm text-slate-400 italic">Awaiting R&D to submit design handoff...</p>
+        : (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">{handoffData.component_count} components submitted by {handoffData.submitted_by}</p>
+            {!handoffData.supplier_acknowledged ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <p className="text-xs text-amber-800">Awaiting supplier acknowledgement</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-slate-500">Supplier portal:</p>
+                  <code className="text-xs bg-slate-100 px-2 py-1 rounded">/supplier/ntd/{id}</code>
+                  <CopyButton text={`${typeof window !== "undefined" ? window.location.origin : ""}/supplier/ntd/${id}`} />
+                </div>
+                {isRnd && (
+                  <button onClick={handleSimulateSupplierAck}
+                    className="text-xs font-semibold border border-dashed border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 px-3 py-1.5 rounded-lg transition-colors">
+                    ⚡ Simulate Supplier Acknowledgement (demo)
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-emerald-700">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Supplier acknowledged handoff
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </StageCard>
+  )
+
+  // Stage 7 — DFM
+  if (stage >= 6) cards.push(
+    <StageCard key="s7" stageNum={7} colorClass="border-purple-500" title="DFM Review"
+      doneLabel={dfmData?.stage_complete ? `${dfmProgress.approved}/${dfmProgress.total} approved` : undefined}>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-slate-600">{dfmProgress.approved} / {dfmProgress.total} components approved</p>
+            {dfmProgress.total > 0 && (
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-48 mt-1">
+                <div className="h-full bg-purple-600 rounded-full" style={{ width: `${Math.round((dfmProgress.approved / dfmProgress.total) * 100)}%` }} />
+              </div>
+            )}
+          </div>
+          {stage === 7 && (
+            <Link href={`/ntd/${id}/dfm`}
+              className="flex items-center gap-1.5 bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+              Open DFM Review <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
+        </div>
+      </div>
+    </StageCard>
+  )
+
+  // Stage 8 — Mould Design
+  if (stage >= 7) cards.push(
+    <StageCard key="s8" stageNum={8} colorClass="border-slate-500" title="Mould Design"
+      doneLabel={mouldData?.stage_complete ? `${mouldProgress.approved} components approved` : undefined}>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${mouldSubStage === "8A" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
+            Sub-stage {mouldSubStage}
+          </span>
+          {mouldSubStage === "8A" && (
+            <p className="text-sm text-slate-600">{mouldProgress.approved} / {mouldProgress.total} components approved</p>
+          )}
+        </div>
+        {stage === 8 && (
+          <Link href={`/ntd/${id}/mould-design`}
+            className="inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+            Open Mould Design Review <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        )}
+      </div>
+    </StageCard>
+  )
+
+  // Stage 9 — Manufacturing
+  if (stage >= 8) cards.push(
+    <StageCard key="s9" stageNum={9} colorClass="border-blue-500" title="Manufacturing"
+      doneLabel={mfgData?.status === "complete" ? `Completed · ETA was ${mfgData.eta_date}` : undefined}>
+      <div className="space-y-3">
+        {!mfgData ? (isSourcing ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase">Start Date</label>
+                <input type="date" value={mfgStartDate} onChange={e => setMfgStartDate(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase">ETA Date</label>
+                <input type="date" value={mfgEta} onChange={e => setMfgEta(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+            </div>
+            <button onClick={handleMfgStart}
+              className="text-sm font-semibold bg-blue-900 hover:bg-blue-800 text-white px-4 py-2 rounded-lg transition-colors">
+              Confirm Manufacturing Start
+            </button>
+          </div>
+        ) : <p className="text-sm text-slate-400 italic">Awaiting manufacturing start confirmation...</p>)
+        : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-slate-50 rounded-lg px-3 py-2">
+                <p className="text-[10px] text-slate-400 uppercase">Start Date</p>
+                <p className="text-sm font-bold text-slate-800">{mfgData.mfg_start_date}</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg px-3 py-2">
+                <p className="text-[10px] text-slate-400 uppercase">ETA</p>
+                <p className="text-sm font-bold text-slate-800">{mfgData.eta_date || "—"}</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg px-3 py-2">
+                <p className="text-[10px] text-slate-400 uppercase">Status</p>
+                <span className={`text-xs font-bold ${mfgData.status === "complete" ? "text-emerald-700" : "text-blue-700"}`}>
+                  {mfgData.status === "complete" ? "Complete" : "In Progress"}
+                </span>
+              </div>
+            </div>
+            {/* Updates feed */}
+            {mfgData.updates.length > 0 && (
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {[...mfgData.updates].reverse().map(u => (
+                  <div key={u.update_id} className="text-xs bg-slate-50 rounded-lg px-3 py-2">
+                    <span className="text-slate-400">{u.date}</span> — {u.note}
+                  </div>
+                ))}
+              </div>
+            )}
+            {mfgData.status !== "complete" && isSourcing && (
+              <div className="flex gap-2">
+                <input type="text" placeholder="Post a status update..." value={mfgUpdate} onChange={e => setMfgUpdate(e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                <button onClick={handleMfgUpdate} disabled={!mfgUpdate.trim()}
+                  className="text-xs font-semibold bg-slate-700 hover:bg-slate-800 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg transition-colors">
+                  Post
+                </button>
+                <button onClick={handleMfgComplete}
+                  className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors">
+                  Mark Complete
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </StageCard>
+  )
+
+  // Stage 10 — Trials
+  if (stage >= 9) cards.push(
+    <StageCard key="s10" stageNum={10} colorClass="border-orange-500" title="Trials"
+      doneLabel={trialsData?.stage_complete ? `All ${trialProgress.total} components passed` : undefined}>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-slate-600">{trialProgress.passed} / {trialProgress.total} components passed (cumulative)</p>
+            {trialsData && <p className="text-xs text-slate-400">{trialsData.trials.length} trial(s) conducted</p>}
+          </div>
+          {stage === 10 && (
+            <Link href={`/ntd/${id}/trials`}
+              className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+              Open Trials <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
+        </div>
+      </div>
+    </StageCard>
+  )
+
+  // Stage 11 — Commissioning
+  if (stage >= 10) {
+    const subStepNames = ["Inspection Report", "Commissioning", "Shipment", "EXIM Clearance", "Arrival", "Final Sign-off"]
+    cards.push(
+      <StageCard key="s11" stageNum={11} colorClass="border-slate-600" title="Commissioning & Dispatch"
+        doneLabel={complete ? "NTD Complete" : undefined}>
+        <div className="space-y-4">
+          {/* Sub-step progress bar */}
+          <div className="flex gap-1">
+            {subStepNames.map((name, i) => {
+              const stepNum = (i + 1) as 1 | 2 | 3 | 4 | 5 | 6
+              const isDoneStep = s11Step > stepNum || complete
+              const isCurrentStep = s11Step === stepNum && !complete
+              return (
+                <div key={i} className={`flex-1 rounded px-1.5 py-1.5 text-center transition-all ${
+                  isDoneStep ? "bg-emerald-600" : isCurrentStep ? "bg-blue-700 ring-1 ring-blue-400 ring-offset-1" : "bg-slate-100"
+                }`}>
+                  <p className={`text-[9px] font-bold truncate ${isDoneStep || isCurrentStep ? "text-white" : "text-slate-400"}`}>{name}</p>
+                </div>
+              )
+            })}
+          </div>
+
+          {complete ? (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <p className="font-semibold text-emerald-800">NTD Complete — Tool approved and received</p>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-600">
+              {s11Step === 1 && (
+                <div className="space-y-2">
+                  <p className="text-slate-500">Step 1: Supplier must submit Final Inspection Report</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs bg-slate-100 px-2 py-1 rounded">/supplier/ntd/{id}</code>
+                    <CopyButton text={`${typeof window !== "undefined" ? window.location.origin : ""}/supplier/ntd/${id}`} />
+                  </div>
+                  {s11Data?.inspection && (
+                    <div className="flex items-center gap-2 text-xs text-emerald-700">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Inspection report submitted by {s11Data.inspection.submitted_by}
+                    </div>
+                  )}
+                </div>
+              )}
+              {s11Step === 2 && isSourcing && (
+                <div className="space-y-3">
+                  <p className="font-semibold text-slate-700">Step 2: Commissioning</p>
+                  <button onClick={() => {
+                    const existing = s11Data ?? { inspection: null, commissioning: null, shipment: null, exim: null, arrival: null, final_approval: null }
+                    setNTDStage11(id, { ...existing, commissioning: { checklist_items: [], pack_list: createVersionedFile("Pack List", "", currentRole), invoice: createVersionedFile("Invoice", "", currentRole), completed_by: currentRole, completed_at: new Date().toISOString() } })
+                    appendActivity(id, currentRole, ntdRole, 11, "stage_complete", "Commissioning completed")
+                    reload()
+                  }}
+                    className="text-sm font-semibold bg-blue-900 hover:bg-blue-800 text-white px-4 py-2 rounded-lg transition-colors">
+                    Mark Commissioning Complete
+                  </button>
+                </div>
+              )}
+              {s11Step === 3 && isSourcing && (
+                <div className="space-y-3">
+                  <p className="font-semibold text-slate-700">Step 3: Shipment Setup</p>
+                  <button onClick={() => {
+                    const existing = s11Data ?? { inspection: null, commissioning: null, shipment: null, exim: null, arrival: null, final_approval: null }
+                    setNTDStage11(id, { ...existing, shipment: { exim_docs: [], mode: "sea", tracking_id: "TRK-DEMO", dispatched_at: new Date().toISOString(), dispatched_by: currentRole } })
+                    appendActivity(id, currentRole, ntdRole, 11, "shipment_update", "Shipment confirmed")
+                    reload()
+                  }}
+                    className="text-sm font-semibold bg-blue-900 hover:bg-blue-800 text-white px-4 py-2 rounded-lg transition-colors">
+                    Confirm Shipment
+                  </button>
+                </div>
+              )}
+              {s11Step === 4 && (isExim || currentRole === "super_admin") && (
+                <div className="space-y-3">
+                  <p className="font-semibold text-slate-700">Step 4: EXIM Clearance</p>
+                  <button onClick={() => {
+                    const existing = s11Data ?? { inspection: null, commissioning: null, shipment: null, exim: null, arrival: null, final_approval: null }
+                    setNTDStage11(id, { ...existing, exim: { updates: [], cleared: true, cleared_at: new Date().toISOString() } })
+                    appendActivity(id, currentRole, ntdRole, 11, "exim_update", "EXIM cleared")
+                    reload()
+                  }}
+                    className="text-sm font-semibold bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-lg transition-colors">
+                    Mark EXIM Cleared
+                  </button>
+                </div>
+              )}
+              {s11Step === 5 && isSourcing && (
+                <div className="space-y-3">
+                  <p className="font-semibold text-slate-700">Step 5: Tool Arrival</p>
+                  <button onClick={() => {
+                    const existing = s11Data ?? { inspection: null, commissioning: null, shipment: null, exim: null, arrival: null, final_approval: null }
+                    setNTDStage11(id, { ...existing, arrival: { arrived_at: new Date().toISOString(), confirmed_by: currentRole } })
+                    appendActivity(id, currentRole, ntdRole, 11, "stage_complete", "Tool arrived at Gurugram plant")
+                    reload()
+                  }}
+                    className="text-sm font-semibold bg-blue-900 hover:bg-blue-800 text-white px-4 py-2 rounded-lg transition-colors">
+                    Confirm Tool Arrived at Gurugram
+                  </button>
+                </div>
+              )}
+              {s11Step === 6 && (
+                <div className="space-y-3">
+                  <p className="font-semibold text-slate-700">Step 6: Final Sign-off (Both Required)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className={`rounded-lg border px-3 py-2 ${s11Data?.final_approval?.rnd_head_approved ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">R&D Head</p>
+                      {s11Data?.final_approval?.rnd_head_approved
+                        ? <p className="text-xs text-emerald-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Approved</p>
+                        : canApprove ? (
+                          <button onClick={() => {
+                            const existing = s11Data ?? { inspection: null, commissioning: null, shipment: null, exim: null, arrival: null, final_approval: null }
+                            const fa = existing.final_approval ?? { rnd_head_approved: false, rnd_head_by: "", rnd_head_at: "", sourcing_head_approved: false, sourcing_head_by: "", sourcing_head_at: "", ntd_complete: false }
+                            const updated = { ...fa, rnd_head_approved: true, rnd_head_by: currentRole, rnd_head_at: new Date().toISOString() }
+                            const complete = updated.rnd_head_approved && updated.sourcing_head_approved
+                            setNTDStage11(id, { ...existing, final_approval: { ...updated, ntd_complete: complete } })
+                            if (complete) {
+                              const r = getNTDRecord(id)
+                              if (r) saveNTDRecord({ ...r, status: "complete" })
+                              appendActivity(id, currentRole, ntdRole, 11, "ntd_complete", "NTD marked complete — dual sign-off")
+                            } else {
+                              appendActivity(id, currentRole, ntdRole, 11, "dual_signed", "R&D Head signed off")
+                            }
+                            reload()
+                          }}
+                            className="mt-1 text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1 rounded-lg transition-colors">
+                            Approve
+                          </button>
+                        ) : <p className="text-xs text-slate-400 italic">Pending</p>}
+                    </div>
+                    <div className={`rounded-lg border px-3 py-2 ${s11Data?.final_approval?.sourcing_head_approved ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">Sourcing Head</p>
+                      {s11Data?.final_approval?.sourcing_head_approved
+                        ? <p className="text-xs text-emerald-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Approved</p>
+                        : (currentRole === "sourcing_head" || currentRole === "super_admin") ? (
+                          <button onClick={() => {
+                            const existing = s11Data ?? { inspection: null, commissioning: null, shipment: null, exim: null, arrival: null, final_approval: null }
+                            const fa = existing.final_approval ?? { rnd_head_approved: false, rnd_head_by: "", rnd_head_at: "", sourcing_head_approved: false, sourcing_head_by: "", sourcing_head_at: "", ntd_complete: false }
+                            const updated = { ...fa, sourcing_head_approved: true, sourcing_head_by: currentRole, sourcing_head_at: new Date().toISOString() }
+                            const complete = updated.rnd_head_approved && updated.sourcing_head_approved
+                            setNTDStage11(id, { ...existing, final_approval: { ...updated, ntd_complete: complete } })
+                            if (complete) {
+                              const r = getNTDRecord(id)
+                              if (r) saveNTDRecord({ ...r, status: "complete" })
+                              appendActivity(id, currentRole, ntdRole, 11, "ntd_complete", "NTD marked complete — dual sign-off")
+                            } else {
+                              appendActivity(id, currentRole, ntdRole, 11, "dual_signed", "Sourcing Head signed off")
+                            }
+                            reload()
+                          }}
+                            className="mt-1 text-xs font-semibold bg-teal-700 hover:bg-teal-800 text-white px-3 py-1 rounded-lg transition-colors">
+                            Approve
+                          </button>
+                        ) : <p className="text-xs text-slate-400 italic">Pending</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </StageCard>
+    )
+  }
+
+  // Build stepper pills
+  const stageProgress = Array.from({ length: 11 }, (_, i) => {
+    const s = i + 1
+    return {
+      step: s,
+      name: s === 8 ? `8${mouldSubStage}` : String(s),
+      label: STAGE_NAMES[s] ?? String(s),
+      status: stage > s ? "complete" : stage === s ? "current" : "upcoming",
+    }
+  })
+
+  return (
+    <div className="space-y-6 max-w-[1400px] mx-auto px-6 py-6 animate-in fade-in duration-300">
+      {/* Back link */}
+      <Link href="/ntd" className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+        <ArrowLeft className="w-4 h-4" /> Back to Tool Development
+      </Link>
+
+      {/* Header card */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex flex-col lg:flex-row justify-between items-start gap-6">
-          {/* Left column */}
+          {/* Left */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">{record.id}</span>
+              {complete && <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Complete</span>}
             </div>
             <h1 className="text-2xl font-bold text-slate-900">{record.title}</h1>
-            <p className="text-slate-500 text-sm">New Tool Development · {record.component_count} Components</p>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="bg-slate-100 text-slate-700 border-none text-xs font-semibold px-2 py-0.5 rounded-full">New Tool Development (NTD)</span>
-            </div>
+            <p className="text-slate-500 text-sm">New Tool Development · {record.component_count != null ? `${record.component_count} Components` : "Components TBD"}</p>
+            <span className="inline-block bg-slate-100 text-slate-700 border-none text-xs px-2.5 py-1 rounded-full">New Tool Development (NTD)</span>
           </div>
-          {/* Right column: 2×2 info chips */}
+
+          {/* Right: 2×2 info tiles */}
           <div className="grid grid-cols-2 gap-3 shrink-0">
-            {/* Created By (used as SPOC equivalent) */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Created By</p>
-              <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{record.created_by}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Users className="w-3 h-3" /> Assigned SPOC</p>
+              <p className="text-sm font-semibold text-slate-800 mt-0.5">Rohan Desai</p>
+              <p className="text-[10px] text-slate-400">Others</p>
             </div>
-            {/* Locked Supplier */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Locked Supplier</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Building2 className="w-3 h-3" /> Supplier</p>
               <p className="text-sm font-semibold text-slate-800 mt-0.5 leading-tight line-clamp-2">
-                {record.supplier
-                  ? record.supplier
-                  : <span className="text-slate-400 italic font-normal text-xs">Pending Assignment</span>}
+                {record.supplier ?? <span className="text-slate-400 italic font-normal text-xs">TBD</span>}
               </p>
             </div>
-            {/* Components chip */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Components</p>
-              <p className="text-sm font-bold text-slate-800 mt-0.5">{record.component_count}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">in this tool</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Package className="w-3 h-3" /> Components</p>
+              <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                {record.component_count ?? <span className="text-slate-400 italic text-xs font-normal">Set in Stage 6</span>}
+              </p>
             </div>
-            {/* Current Stage chip */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Wrench className="w-3 h-3" /> Current Stage</p>
               <p className="text-sm font-semibold text-blue-900 mt-0.5 leading-tight line-clamp-2">
-                {currentStage}. {STAGE_NAMES[currentStage]}
+                {complete ? "Complete" : `${stage}. ${STAGE_NAMES[stage]}`}
               </p>
             </div>
           </div>
         </div>
-        {/* Demo Controls strip */}
+
+        {/* Demo controls */}
         <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
           <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Demo Controls</span>
           <div className="flex items-center gap-2">
             <button
-              disabled={currentStage <= 1}
-              onClick={() => { updateNTDStage(id, (currentStage - 1) as NTDStage); handleStageAdvance() }}
-              className="text-xs h-7 px-3 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
+              onClick={demoRevert}
+              disabled={stage <= 1}
+              className="text-xs h-7 px-3 border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               ← Previous Stage
             </button>
+            <span className="text-xs text-slate-400 font-medium">Stage {stage} / 11</span>
             <button
-              disabled={currentStage >= 9}
-              onClick={() => { updateNTDStage(id, (currentStage + 1) as NTDStage); handleStageAdvance() }}
-              className="text-xs h-7 px-3 rounded-md bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
+              onClick={demoAdvance}
+              disabled={stage >= 11 || complete}
+              className="text-xs h-7 px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               Demo: Next Stage →
             </button>
           </div>
         </div>
       </div>
 
-      {/* Stage Progress — horizontal pill stepper */}
+      {/* Stage stepper */}
       <div className="bg-white px-6 py-4 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
-        <div className="flex min-w-[700px] gap-1">
-          {STAGE_NAMES_ARRAY.map((name, idx) => {
-            const step = idx + 1
-            const status = step < currentStage ? "complete" : step === currentStage ? "current" : "upcoming"
-            const chipBg = status === "complete" ? "bg-blue-900"
-              : status === "current" ? "bg-blue-700 ring-2 ring-blue-400 ring-offset-1"
+        <div className="flex min-w-[900px] gap-1">
+          {stageProgress.map(s => {
+            const chipBg = s.status === "complete" ? "bg-blue-900"
+              : s.status === "current" ? "bg-blue-700 ring-2 ring-blue-400 ring-offset-1"
               : "bg-slate-100"
-            const labelColor = (status === "complete" || status === "current") ? "text-blue-200" : "text-slate-400"
-            const nameColor = status === "complete" ? "text-white"
-              : status === "current" ? "text-white"
-              : "text-slate-400"
+            const labelColor = s.status !== "upcoming" ? "text-blue-200" : "text-slate-400"
+            const nameColor = s.status !== "upcoming" ? "text-white" : "text-slate-400"
             return (
-              <div key={step} className={`flex-1 rounded-md px-2 py-2.5 flex flex-col gap-1 transition-all duration-300 ${chipBg}`}>
-                <span className={`text-[9px] font-bold uppercase tracking-wider ${labelColor}`}>Step {step}</span>
-                <span className={`text-[11px] font-semibold leading-tight ${nameColor}`}>{name}</span>
+              <div key={s.step} className={`flex-1 rounded-md px-2 py-2.5 flex flex-col gap-1 transition-all duration-300 ${chipBg}`}>
+                <span className={`text-[9px] font-bold uppercase tracking-wider ${labelColor}`}>
+                  {s.step === 8 ? `Step ${s.step}${mouldSubStage}` : `Step ${s.step}`}
+                </span>
+                <span className={`text-[11px] font-semibold leading-tight ${nameColor}`}>{STAGE_NAMES[s.step]}</span>
               </div>
             )
           })}
         </div>
       </div>
 
-      {/* Card stack */}
-      <div className="space-y-3">
-        {[...cards].reverse()}
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+        <button onClick={() => setActiveTab("overview")}
+          className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors ${activeTab === "overview" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+          Overview
+        </button>
+        <button onClick={() => setActiveTab("activity")}
+          className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors ${activeTab === "activity" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+          Activity
+        </button>
       </div>
+
+      {/* Content */}
+      {activeTab === "overview" ? (
+        <div className="space-y-3">
+          {[...cards].reverse()}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <ActivityFeed ntdId={id} />
+        </div>
+      )}
     </div>
   )
 }
