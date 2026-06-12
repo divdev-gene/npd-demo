@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, Trash2, ArrowLeft, AlertTriangle, FileSpreadsheet, X, CheckCircle2 } from "lucide-react"
@@ -27,7 +27,6 @@ function makeId(n: number) {
 
 export default function NTDNewPage() {
   const router = useRouter()
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [currentRole, setCurrentRole] = useState("")
   const [title, setTitle] = useState("")
   const [notes, setNotes] = useState("")
@@ -37,7 +36,6 @@ export default function NTDNewPage() {
   const [techSpecSheet, setTechSpecSheet] = useState<{ file_name: string; link: string; autoFilledCount?: number } | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
-  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     setCurrentRole(localStorage.getItem("poc_role") ?? "rnd_engineer")
@@ -60,30 +58,17 @@ export default function NTDNewPage() {
     setComponentRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: value } : r))
   }
 
-  // ── Bulk upload (demo: ignores file contents, fills fixed sample data) ──
-  const handleBulkUpload = (file: File) => {
-    if (file.size > 1024 * 1024) {
-      alert("File too large (max 1 MB). Use a Drive link instead.")
-      return
-    }
+  // ── Bulk fill (demo: no file picker, fills fixed sample data instantly) ──
+  const handleBulkFill = () => {
     const newRows = DEMO_COMPONENTS.map((c, i) => ({ id: makeId(i + 1), name: c.name, commodity: c.commodity, specLink: "" }))
-    setTechSpecSheet({ file_name: file.name, link: "", autoFilledCount: newRows.length })
+    setTechSpecSheet({ file_name: "TechSpec_AmberNTD.xlsx", link: "", autoFilledCount: newRows.length })
     setComponentRows(newRows)
     setErrors(prev => ({ ...prev, components: "" }))
-    setUploading(true)
-    const reader = new FileReader()
-    reader.onload = () => {
-      setTechSpecSheet(prev => prev ? { ...prev, link: reader.result as string } : null)
-      setUploading(false)
-    }
-    reader.onerror = () => setUploading(false)
-    reader.readAsDataURL(file)
   }
 
   const removeTechSpec = () => {
     setTechSpecSheet(null)
     setComponentRows([{ id: "C01", name: "", commodity: "Sheet Metal", specLink: "" }])
-    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
   // ── Validation ─────────────────────────────────────────────────
@@ -218,20 +203,17 @@ export default function NTDNewPage() {
                 </div>
               </div>
             ) : (
-              <label className="flex flex-col items-center gap-2 border-2 border-dashed border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-xl px-4 py-6 text-center cursor-pointer transition-colors">
+              <button
+                type="button"
+                onClick={handleBulkFill}
+                className="w-full flex flex-col items-center gap-2 border-2 border-dashed border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-xl px-4 py-6 text-center cursor-pointer transition-colors"
+              >
                 <FileSpreadsheet className="w-8 h-8 text-blue-400" />
                 <div>
-                  <p className="text-sm font-semibold text-blue-700">Upload Tech Spec Sheet</p>
-                  <p className="text-xs text-blue-500 mt-0.5">Excel (.xlsx / .xls) · auto-fills components</p>
+                  <p className="text-sm font-semibold text-blue-700">Load Tech Spec Sheet</p>
+                  <p className="text-xs text-blue-500 mt-0.5">Click to auto-fill components from spec</p>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="sr-only"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleBulkUpload(f) }}
-                />
-              </label>
+              </button>
             )}
           </div>
         </div>
@@ -316,10 +298,10 @@ export default function NTDNewPage() {
             <Link href="/ntd" className="text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</Link>
             <button
               onClick={handleSubmit}
-              disabled={submitting || uploading}
+              disabled={submitting}
               className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-colors"
             >
-              {submitting ? "Creating..." : uploading ? "Reading file..." : "Create NTD Record →"}
+              {submitting ? "Creating..." : "Create NTD Record →"}
             </button>
           </div>
         </div>
