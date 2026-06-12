@@ -37,6 +37,7 @@ export default function NTDNewPage() {
   const [techSpecSheet, setTechSpecSheet] = useState<{ file_name: string; link: string; autoFilledCount?: number } | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     setCurrentRole(localStorage.getItem("poc_role") ?? "rnd_engineer")
@@ -61,12 +62,21 @@ export default function NTDNewPage() {
 
   // ── Bulk upload (demo: ignores file contents, fills fixed sample data) ──
   const handleBulkUpload = (file: File) => {
+    if (file.size > 1024 * 1024) {
+      alert("File too large (max 1 MB). Use a Drive link instead.")
+      return
+    }
     const newRows = DEMO_COMPONENTS.map((c, i) => ({ id: makeId(i + 1), name: c.name, commodity: c.commodity, specLink: "" }))
     setTechSpecSheet({ file_name: file.name, link: "", autoFilledCount: newRows.length })
     setComponentRows(newRows)
     setErrors(prev => ({ ...prev, components: "" }))
+    setUploading(true)
     const reader = new FileReader()
-    reader.onload = () => setTechSpecSheet(prev => prev ? { ...prev, link: reader.result as string } : null)
+    reader.onload = () => {
+      setTechSpecSheet(prev => prev ? { ...prev, link: reader.result as string } : null)
+      setUploading(false)
+    }
+    reader.onerror = () => setUploading(false)
     reader.readAsDataURL(file)
   }
 
@@ -306,10 +316,10 @@ export default function NTDNewPage() {
             <Link href="/ntd" className="text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</Link>
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || uploading}
               className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-colors"
             >
-              {submitting ? "Creating..." : "Create NTD Record →"}
+              {submitting ? "Creating..." : uploading ? "Reading file..." : "Create NTD Record →"}
             </button>
           </div>
         </div>
