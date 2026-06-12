@@ -5,7 +5,7 @@ import Link from "next/link"
 import {
   CheckCircle2, Circle, ChevronRight, ArrowLeft, Wrench,
   AlertTriangle, ExternalLink, Plus, Trash2, Copy, Check,
-  Users, Clock, Package, Building2
+  Users, Clock, Package, Building2, Paperclip, X, FileSpreadsheet
 } from "lucide-react"
 import {
   getNTDRecord, getNTDInitiation, getNTDSpec, setNTDSpec,
@@ -111,6 +111,7 @@ export default function NTDDetailPage() {
 
   // Stage-specific state
   const [specSheet, setSpecSheet] = useState("")
+  const [specSheetFileName, setSpecSheetFileName] = useState("")
   const [comparisons, setComparisons] = useState<{ id: string; vendor_name: string; spec_doc_link: string; notes: string }[]>([])
   const [selectedVendors, setSelectedVendors] = useState<string[]>([])
   const [customVendorName, setCustomVendorName] = useState("")
@@ -130,7 +131,14 @@ export default function NTDDetailPage() {
 
   // Stage 6 component builder
   const [components, setComponents] = useState<{ id: string; name: string }[]>([{ id: "C01", name: "" }])
-  const [finalDesignSlots, setFinalDesignSlots] = useState<{ id: string; slotName: string; link: string }[]>([{ id: "1", slotName: "", link: "" }])
+  const [finalDesignSlots, setFinalDesignSlots] = useState<{ id: string; slotName: string; link: string; fileName?: string }[]>([{ id: "1", slotName: "", link: "" }])
+
+  const readFileAsDataURL = (file: File, onDone: (dataUrl: string, name: string) => void) => {
+    if (file.size > 8 * 1024 * 1024) { alert("File too large (max 8 MB). Use a Drive link instead."); return }
+    const reader = new FileReader()
+    reader.onload = () => onDone(reader.result as string, file.name)
+    reader.readAsDataURL(file)
+  }
 
   // Stage 11
   const [s11Step, setS11Step] = useState<1 | 2 | 3 | 4 | 5 | 6>(1)
@@ -565,7 +573,9 @@ export default function NTDDetailPage() {
           <p className="text-xs font-semibold text-slate-700">Stage 1 — Initiation</p>
           {initData && (
             <p className="text-[11px] text-slate-400">
-              Submitted by {initData.submitted_by} · {initData.part_specs.length} spec file(s)
+              Submitted by {initData.submitted_by}
+              {initData.tech_spec_sheet && ` · Tech Spec: ${initData.tech_spec_sheet.file_name}`}
+              {initData.part_specs.length > 0 && ` · ${initData.part_specs.length} spec file(s)`}
             </p>
           )}
         </div>
@@ -575,7 +585,23 @@ export default function NTDDetailPage() {
           {initData.notes && (
             <p className="text-xs text-slate-500 italic">{initData.notes}</p>
           )}
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-3">
+            {initData.tech_spec_sheet && (
+              initData.tech_spec_sheet.link.startsWith("http") ? (
+                <a href={initData.tech_spec_sheet.link} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors">
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+                  {initData.tech_spec_sheet.file_name}
+                  <span className="text-slate-400 ml-1">· master spec</span>
+                </a>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+                  {initData.tech_spec_sheet.file_name}
+                  <span className="text-slate-400 ml-1">· master spec</span>
+                </span>
+              )
+            )}
             {initData.part_specs.map(f => {
               const link = f.versions.find(v => v.version_no === f.current_version)?.link ?? ""
               return link ? (
@@ -614,9 +640,26 @@ export default function NTDDetailPage() {
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     Spec Sheet Link <span className="text-red-500">*</span>
                   </label>
-                  <input type="text" autoComplete="off" value={specSheet} onChange={e => setSpecSheet(e.target.value)}
-                    placeholder="Drive / SharePoint link"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                  <div className="flex gap-2">
+                    {specSheetFileName ? (
+                      <div className="flex-1 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                        <Paperclip className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="text-sm text-blue-700 truncate flex-1">{specSheetFileName}</span>
+                        <button type="button" onClick={() => { setSpecSheet(""); setSpecSheetFileName("") }}
+                          className="text-slate-400 hover:text-slate-600 shrink-0"><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ) : (
+                      <input type="text" autoComplete="off" value={specSheet} onChange={e => { setSpecSheet(e.target.value); setSpecSheetFileName("") }}
+                        placeholder="Drive / SharePoint link"
+                        className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                    )}
+                    <label className="cursor-pointer flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-500 hover:text-slate-700 text-sm font-medium px-3 py-2 rounded-lg transition-colors shrink-0"
+                      title="Attach a file">
+                      <Paperclip className="w-3.5 h-3.5" />
+                      <input type="file" className="sr-only"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) readFileAsDataURL(f, (url, name) => { setSpecSheet(url); setSpecSheetFileName(name) }) }} />
+                    </label>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1249,13 +1292,28 @@ export default function NTDDetailPage() {
                     className="text-xs text-emerald-700 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Slot</button>
                 </div>
                 {finalDesignSlots.map(slot => (
-                  <div key={slot.id} className="flex gap-2 bg-slate-50 rounded-lg p-2">
+                  <div key={slot.id} className="flex gap-2 bg-slate-50 rounded-lg p-2 flex-wrap">
                     <input type="text" placeholder="File name" value={slot.slotName}
                       onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, slotName: e.target.value } : s))}
-                      className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
-                    <input type="text" autoComplete="off" placeholder="Drive link" value={slot.link}
-                      onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, link: e.target.value } : s))}
-                      className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                      className="w-32 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                    {slot.fileName ? (
+                      <div className="flex-1 flex items-center gap-1.5 rounded border border-blue-200 bg-blue-50 px-2 py-1 min-w-0">
+                        <Paperclip className="w-3 h-3 text-blue-600 shrink-0" />
+                        <span className="text-xs text-blue-700 truncate flex-1">{slot.fileName}</span>
+                        <button type="button" onClick={() => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, link: "", fileName: "" } : s))}
+                          className="text-slate-400 hover:text-slate-600 shrink-0"><X className="w-3 h-3" /></button>
+                      </div>
+                    ) : (
+                      <input type="text" autoComplete="off" placeholder="Drive link" value={slot.link}
+                        onChange={e => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, link: e.target.value, fileName: "" } : s))}
+                        className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                    )}
+                    <label className="cursor-pointer flex items-center gap-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-400 hover:text-slate-600 px-2 py-1 rounded transition-colors shrink-0"
+                      title="Attach a file">
+                      <Paperclip className="w-3 h-3" />
+                      <input type="file" className="sr-only"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) readFileAsDataURL(f, (url, name) => setFinalDesignSlots(prev => prev.map(s => s.id === slot.id ? { ...s, link: url, fileName: name, slotName: s.slotName || name } : s))) }} />
+                    </label>
                   </div>
                 ))}
               </div>
