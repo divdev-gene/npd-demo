@@ -34,7 +34,7 @@ export default function NTDNewPage() {
   const [componentRows, setComponentRows] = useState<ComponentRow[]>([
     { id: "C01", name: "", commodity: "Sheet Metal", specLink: "" }
   ])
-  const [techSpecSheet, setTechSpecSheet] = useState<{ file_name: string; link: string } | null>(null)
+  const [techSpecSheet, setTechSpecSheet] = useState<{ file_name: string; link: string; autoFilledCount?: number } | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -46,7 +46,7 @@ export default function NTDNewPage() {
 
   // ── Component row helpers ──────────────────────────────────────
   const addComponentRow = () => {
-    const nextNum = componentRows.length + 1
+    const nextNum = Math.max(0, ...componentRows.map(r => parseInt(r.id.slice(1)))) + 1
     setComponentRows(prev => [...prev, { id: makeId(nextNum), name: "", commodity: "Sheet Metal", specLink: "" }])
   }
 
@@ -61,18 +61,18 @@ export default function NTDNewPage() {
 
   // ── Bulk upload (demo: ignores file contents, fills fixed sample data) ──
   const handleBulkUpload = (file: File) => {
-    setTechSpecSheet({ file_name: file.name, link: "" })
-    setComponentRows(
-      DEMO_COMPONENTS.map((c, i) => ({ id: makeId(i + 1), name: c.name, commodity: c.commodity, specLink: "" }))
-    )
+    const newRows = DEMO_COMPONENTS.map((c, i) => ({ id: makeId(i + 1), name: c.name, commodity: c.commodity, specLink: "" }))
+    setTechSpecSheet({ file_name: file.name, link: "", autoFilledCount: newRows.length })
+    setComponentRows(newRows)
     setErrors(prev => ({ ...prev, components: "" }))
     const reader = new FileReader()
-    reader.onload = () => setTechSpecSheet({ file_name: file.name, link: reader.result as string })
+    reader.onload = () => setTechSpecSheet(prev => prev ? { ...prev, link: reader.result as string } : null)
     reader.readAsDataURL(file)
   }
 
   const removeTechSpec = () => {
     setTechSpecSheet(null)
+    setComponentRows([{ id: "C01", name: "", commodity: "Sheet Metal", specLink: "" }])
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
@@ -204,7 +204,7 @@ export default function NTDNewPage() {
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-emerald-700">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  {DEMO_COMPONENTS.length} components auto-filled from spec sheet
+                  {techSpecSheet.autoFilledCount ?? DEMO_COMPONENTS.length} components auto-filled from spec sheet
                 </div>
               </div>
             ) : (
