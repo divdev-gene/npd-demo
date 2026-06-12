@@ -150,7 +150,7 @@ export type NTDInitiationData = {
   notes: string
   components: NTDComponent[]          // captured at creation; commodity-tagged
   part_specs: VersionedFile[]
-  tech_spec_sheet?: {
+  tech_spec_sheet?: {                  // flat (not VersionedFile) — creation-time doc, no revision history needed
     file_name: string
     link: string                       // Drive/SharePoint URL or base64 data URL
     uploaded_at: string
