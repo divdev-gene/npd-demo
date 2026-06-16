@@ -17,8 +17,8 @@ export default function VendorRFQPage() {
   const [vendor, setVendor] = useState<NTDRFQVendor | null>(null)
   const [vendorId, setVendorId] = useState("")
 
-  // Per-component pricing (stage / progression / semi-progression per component)
-  const [compPrices, setCompPrices] = useState<Record<string, { stage: string; progression: string; semiProg: string }>>({})
+  // Per-component pricing (stage / Progressive / semi-Progressive per component)
+  const [compPrices, setCompPrices] = useState<Record<string, { stage: string; Progressive: string; semiProg: string }>>({})
 
   // Counter quote / other form fields
   const [amount, setAmount] = useState("")       // used only in counter-quote form
@@ -40,10 +40,10 @@ export default function VendorRFQPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [tick, setTick] = useState(0)
 
-  const setCompPrice = (compId: string, field: "stage" | "progression" | "semiProg", val: string) => {
+  const setCompPrice = (compId: string, field: "stage" | "Progressive" | "semiProg", val: string) => {
     setCompPrices(prev => ({
       ...prev,
-      [compId]: { ...(prev[compId] ?? { stage: "", progression: "", semiProg: "" }), [field]: val },
+      [compId]: { ...(prev[compId] ?? { stage: "", Progressive: "", semiProg: "" }), [field]: val },
     }))
   }
 
@@ -73,7 +73,8 @@ export default function VendorRFQPage() {
   const quotationData = getNTDQuotation(ntdId)
   const vendorQ = quotationData?.[vendorId]
   const isFinalized = vendorQ?.status === "finalized"
-  const hasSemiProgression = initData?.semi_progression?.[vendor.commodity as NTDCommodity] ?? false
+  const hasSemiProgressive = initData?.semi_Progressive?.[vendor.commodity as NTDCommodity] ?? false
+  const hideStage = vendor.commodity === "Plastics" || vendor.commodity === "EPS"
 
   // Components scoped to this vendor's commodity
   const myCommodityComponents = (initData?.components ?? []).filter(
@@ -82,16 +83,16 @@ export default function VendorRFQPage() {
 
   // Computed pricing totals from per-component inputs
   const totalStage = myCommodityComponents.reduce((s, c) => s + (Number(compPrices[c.componentId]?.stage) || 0), 0)
-  const totalProgression = myCommodityComponents.reduce((s, c) => s + (Number(compPrices[c.componentId]?.progression) || 0), 0)
-  const totalSemiProg = hasSemiProgression
+  const totalProgressive = myCommodityComponents.reduce((s, c) => s + (Number(compPrices[c.componentId]?.Progressive) || 0), 0)
+  const totalSemiProg = hasSemiProgressive
     ? myCommodityComponents.reduce((s, c) => s + (Number(compPrices[c.componentId]?.semiProg) || 0), 0)
     : 0
-  const grandTotal = totalStage + totalProgression + (hasSemiProgression ? totalSemiProg : 0)
+  const grandTotal = (hideStage ? 0 : totalStage) + totalProgressive + (hasSemiProgressive ? totalSemiProg : 0)
 
   // Check all required component fields are filled
   const allCompsFilled = myCommodityComponents.length > 0 && myCommodityComponents.every(c => {
     const cp = compPrices[c.componentId]
-    return !!cp?.stage && !!cp?.progression && (!hasSemiProgression || !!cp?.semiProg)
+    return (!hideStage ? !!cp?.stage : true) && !!cp?.Progressive && (!hasSemiProgressive || !!cp?.semiProg)
   })
 
   const latestSourcingCounter = vendorQ?.thread
@@ -111,16 +112,16 @@ export default function VendorRFQPage() {
 
   const handleSubmitInitialQuote = () => {
     if (!leadTime || !allCompsFilled) return
-    const hasSP = hasSemiProgression
+    const hasSP = hasSemiProgressive
     const now = new Date().toISOString()
 
-    const componentPricesData: Record<string, { stage: number; progression: number; semi_progression?: number }> = {}
+    const componentPricesData: Record<string, { stage: number; Progressive: number; semi_Progressive?: number }> = {}
     for (const comp of myCommodityComponents) {
       const cp = compPrices[comp.componentId]
       componentPricesData[comp.componentId] = {
         stage: Number(cp?.stage ?? 0),
-        progression: Number(cp?.progression ?? 0),
-        ...(hasSP ? { semi_progression: Number(cp?.semiProg ?? 0) } : {}),
+        Progressive: Number(cp?.Progressive ?? 0),
+        ...(hasSP ? { semi_Progressive: Number(cp?.semiProg ?? 0) } : {}),
       }
     }
 
@@ -133,8 +134,8 @@ export default function VendorRFQPage() {
           currency,
           lead_time_days: Number(leadTime),
           stage_price: totalStage,
-          progression_price: totalProgression,
-          ...(hasSP ? { semi_progression_price: totalSemiProg } : {}),
+          Progressive_price: totalProgressive,
+          ...(hasSP ? { semi_Progressive_price: totalSemiProg } : {}),
           component_prices: componentPricesData,
           doc_link: docLink,
           notes,
@@ -154,18 +155,18 @@ export default function VendorRFQPage() {
 
   const handleSubmitCounter = () => {
     if (!allCompsFilled) return
-    const hasSP = hasSemiProgression
+    const hasSP = hasSemiProgressive
     const existing = quotationData ?? {}
     const q = existing[vendorId] ?? { quotation: undefined, thread: [], status: "sent" as const }
     const now = new Date().toISOString()
 
-    const componentPricesData: Record<string, { stage: number; progression: number; semi_progression?: number }> = {}
+    const componentPricesData: Record<string, { stage: number; Progressive: number; semi_Progressive?: number }> = {}
     for (const comp of myCommodityComponents) {
       const cp = compPrices[comp.componentId]
       componentPricesData[comp.componentId] = {
         stage: Number(cp?.stage ?? 0),
-        progression: Number(cp?.progression ?? 0),
-        ...(hasSP ? { semi_progression: Number(cp?.semiProg ?? 0) } : {}),
+        Progressive: Number(cp?.Progressive ?? 0),
+        ...(hasSP ? { semi_Progressive: Number(cp?.semiProg ?? 0) } : {}),
       }
     }
 
@@ -180,8 +181,8 @@ export default function VendorRFQPage() {
           currency,
           lead_time_days: leadTime ? Number(leadTime) : q.quotation?.lead_time_days ?? 0,
           stage_price: totalStage,
-          progression_price: totalProgression,
-          ...(hasSP ? { semi_progression_price: totalSemiProg } : {}),
+          Progressive_price: totalProgressive,
+          ...(hasSP ? { semi_Progressive_price: totalSemiProg } : {}),
           component_prices: componentPricesData,
           doc_link: (docLink || q.quotation?.doc_link) ?? "",
           notes: (counterNote || q.quotation?.notes) ?? "",
@@ -334,7 +335,7 @@ export default function VendorRFQPage() {
               </p>
               {vendorQ.quotation.stage_price != null && (
                 <p className="text-[11px] text-slate-400">
-                  {`Stage: ${vendorQ.quotation.currency} ${vendorQ.quotation.stage_price.toLocaleString()} · Progression: ${vendorQ.quotation.currency} ${vendorQ.quotation.progression_price?.toLocaleString() ?? "—"}${vendorQ.quotation.semi_progression_price != null ? ` · Semi-Prog: ${vendorQ.quotation.currency} ${vendorQ.quotation.semi_progression_price.toLocaleString()}` : ""}`}
+                  {`Stage: ${vendorQ.quotation.currency} ${vendorQ.quotation.stage_price.toLocaleString()} · Progressive: ${vendorQ.quotation.currency} ${vendorQ.quotation.Progressive_price?.toLocaleString() ?? "—"}${vendorQ.quotation.semi_Progressive_price != null ? ` · Semi-Prog: ${vendorQ.quotation.currency} ${vendorQ.quotation.semi_Progressive_price.toLocaleString()}` : ""}`}
                 </p>
               )}
             </div>
@@ -406,7 +407,7 @@ export default function VendorRFQPage() {
                     <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                       Component Prices <span className="font-normal text-slate-400">({currency})</span>
                     </p>
-                    {hasSemiProgression && (
+                    {hasSemiProgressive && (
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 uppercase tracking-wide">
                         Semi-Prog required
                       </span>
@@ -417,18 +418,20 @@ export default function VendorRFQPage() {
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-slate-200">
-                          <th className="px-3 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wide bg-slate-50 w-[38%]">
+                          <th className={`px-3 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wide bg-slate-50 ${!hideStage ? "w-[38%]" : ""}`}>
                             Component
                           </th>
-                          <th className="px-3 py-2 text-right text-[10px] font-bold text-blue-700 bg-blue-50/70 border-l border-blue-100 uppercase tracking-wide">
-                            Stage
-                          </th>
+                          {!hideStage && (
+                            <th className="px-3 py-2 text-right text-[10px] font-bold text-blue-700 bg-blue-50/70 border-l border-blue-100 uppercase tracking-wide">
+                              Stage
+                            </th>
+                          )}
                           <th className="px-3 py-2 text-right text-[10px] font-bold text-amber-700 bg-amber-50/70 border-l border-amber-100 uppercase tracking-wide">
-                            Prog.
+                            Progressive
                           </th>
-                          {hasSemiProgression && (
+                          {hasSemiProgressive && (
                             <th className="px-3 py-2 text-right text-[10px] font-bold text-indigo-700 bg-indigo-50/70 border-l border-indigo-100 uppercase tracking-wide">
-                              Semi-Prog.
+                              Semi-Progressive
                             </th>
                           )}
                         </tr>
@@ -442,25 +445,27 @@ export default function VendorRFQPage() {
                                 <span className="font-medium text-slate-700 text-[11px] truncate">{comp.name}</span>
                               </div>
                             </td>
-                            <td className="px-2 py-1.5 border-l border-blue-50 bg-blue-50/10">
-                              <input type="text" inputMode="numeric" autoComplete="off"
-                                value={compPrices[comp.componentId]?.stage ?? ""}
-                                onChange={e => setCompPrice(comp.componentId, "stage", e.target.value)}
-                                onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
-                                placeholder="0"
-                                className="w-full rounded border border-blue-200 bg-white px-2 py-1 text-right text-[11px] tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-400"
-                              />
-                            </td>
+                            {!hideStage && (
+                              <td className="px-2 py-1.5 border-l border-blue-50 bg-blue-50/10">
+                                <input type="text" inputMode="numeric" autoComplete="off"
+                                  value={compPrices[comp.componentId]?.stage ?? ""}
+                                  onChange={e => setCompPrice(comp.componentId, "stage", e.target.value)}
+                                  onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
+                                  placeholder="0"
+                                  className="w-full rounded border border-blue-200 bg-white px-2 py-1 text-right text-[11px] tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                />
+                              </td>
+                            )}
                             <td className="px-2 py-1.5 border-l border-amber-50 bg-amber-50/10">
                               <input type="text" inputMode="numeric" autoComplete="off"
-                                value={compPrices[comp.componentId]?.progression ?? ""}
-                                onChange={e => setCompPrice(comp.componentId, "progression", e.target.value)}
+                                value={compPrices[comp.componentId]?.Progressive ?? ""}
+                                onChange={e => setCompPrice(comp.componentId, "Progressive", e.target.value)}
                                 onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
                                 placeholder="0"
                                 className="w-full rounded border border-amber-200 bg-white px-2 py-1 text-right text-[11px] tabular-nums focus:outline-none focus:ring-1 focus:ring-amber-400"
                               />
                             </td>
-                            {hasSemiProgression && (
+                            {hasSemiProgressive && (
                               <td className="px-2 py-1.5 border-l border-indigo-50 bg-indigo-50/10">
                                 <input type="text" inputMode="numeric" autoComplete="off"
                                   value={compPrices[comp.componentId]?.semiProg ?? ""}
@@ -477,17 +482,19 @@ export default function VendorRFQPage() {
                       <tfoot>
                         <tr className="border-t border-slate-200 bg-slate-50">
                           <td className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Subtotals</td>
-                          <td className="px-3 py-2 text-right border-l border-blue-100 bg-blue-50/40">
-                            <span className="text-[11px] font-bold text-blue-700 tabular-nums">
-                              {totalStage > 0 ? totalStage.toLocaleString() : <span className="text-slate-300 font-normal">—</span>}
-                            </span>
-                          </td>
+                          {!hideStage && (
+                            <td className="px-3 py-2 text-right border-l border-blue-100 bg-blue-50/40">
+                              <span className="text-[11px] font-bold text-blue-700 tabular-nums">
+                                {totalStage > 0 ? totalStage.toLocaleString() : <span className="text-slate-300 font-normal">—</span>}
+                              </span>
+                            </td>
+                          )}
                           <td className="px-3 py-2 text-right border-l border-amber-100 bg-amber-50/40">
                             <span className="text-[11px] font-bold text-amber-700 tabular-nums">
-                              {totalProgression > 0 ? totalProgression.toLocaleString() : <span className="text-slate-300 font-normal">—</span>}
+                              {totalProgressive > 0 ? totalProgressive.toLocaleString() : <span className="text-slate-300 font-normal">—</span>}
                             </span>
                           </td>
-                          {hasSemiProgression && (
+                          {hasSemiProgressive && (
                             <td className="px-3 py-2 text-right border-l border-indigo-100 bg-indigo-50/40">
                               <span className="text-[11px] font-bold text-indigo-700 tabular-nums">
                                 {totalSemiProg > 0 ? totalSemiProg.toLocaleString() : <span className="text-slate-300 font-normal">—</span>}
@@ -506,7 +513,7 @@ export default function VendorRFQPage() {
                     <div>
                       <p className="text-[9px] font-bold uppercase tracking-widest leading-none text-slate-400">Grand Total</p>
                       <p className="text-[9px] mt-0.5 text-slate-500">
-                        {hasSemiProgression ? "Stage + Prog. + Semi" : "Stage + Progression"}
+                        {hideStage ? "Progressive" : "Stage + Progressive"}{hasSemiProgressive ? " + Semi" : ""}
                       </p>
                     </div>
                     <span className={`text-lg font-bold tabular-nums ${allCompsFilled ? "text-white" : "text-slate-300"}`}>
@@ -608,18 +615,20 @@ export default function VendorRFQPage() {
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-amber-200">
-                          <th className="px-3 py-2.5 text-left font-semibold text-slate-500 bg-amber-50/60 w-[38%]">Component</th>
-                          <th className="px-3 py-2.5 text-right font-bold text-blue-700 bg-blue-50 border-l border-blue-100">
-                            <span className="block text-[10px] uppercase tracking-wider leading-tight">Stage</span>
-                            <span className="text-[9px] font-normal text-blue-400">{currency}</span>
-                          </th>
+                          <th className="px-3 py-2.5 text-left font-semibold text-slate-500 bg-amber-50/60">Component</th>
+                          {!hideStage && (
+                            <th className="px-3 py-2.5 text-right font-bold text-blue-700 bg-blue-50 border-l border-blue-100">
+                              <span className="block text-[10px] uppercase tracking-wider leading-tight">Stage</span>
+                              <span className="text-[9px] font-normal text-blue-400">{currency}</span>
+                            </th>
+                          )}
                           <th className="px-3 py-2.5 text-right font-bold text-amber-700 bg-amber-100 border-l border-amber-200">
-                            <span className="block text-[10px] uppercase tracking-wider leading-tight">Progression</span>
+                            <span className="block text-[10px] uppercase tracking-wider leading-tight">Progressive</span>
                             <span className="text-[9px] font-normal text-amber-500">{currency}</span>
                           </th>
-                          {hasSemiProgression && (
+                          {hasSemiProgressive && (
                             <th className="px-3 py-2.5 text-right font-bold text-indigo-700 bg-indigo-50 border-l border-indigo-100">
-                              <span className="block text-[10px] uppercase tracking-wider leading-tight">Semi-Prog.</span>
+                              <span className="block text-[10px] uppercase tracking-wider leading-tight">Semi-Progressive</span>
                               <span className="text-[9px] font-normal text-indigo-400">{currency}</span>
                             </th>
                           )}
@@ -636,29 +645,31 @@ export default function VendorRFQPage() {
                                   <span className="text-sm font-medium text-slate-700 truncate">{comp.name}</span>
                                 </div>
                               </td>
-                              <td className="px-3 py-2 border-l border-blue-50 bg-blue-50/20">
-                                <input type="text" inputMode="numeric" autoComplete="off"
-                                  value={compPrices[comp.componentId]?.stage ?? ""}
-                                  onChange={e => setCompPrice(comp.componentId, "stage", e.target.value)}
-                                  onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
-                                  placeholder={String(prevCp?.stage ?? 0)}
-                                  className="w-full rounded-md border border-blue-200 bg-white px-2.5 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                              </td>
+                              {!hideStage && (
+                                <td className="px-3 py-2 border-l border-blue-50 bg-blue-50/20">
+                                  <input type="text" inputMode="numeric" autoComplete="off"
+                                    value={compPrices[comp.componentId]?.stage ?? ""}
+                                    onChange={e => setCompPrice(comp.componentId, "stage", e.target.value)}
+                                    onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
+                                    placeholder={String(prevCp?.stage ?? 0)}
+                                    className="w-full rounded-md border border-blue-200 bg-white px-2.5 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                </td>
+                              )}
                               <td className="px-3 py-2 border-l border-amber-100 bg-amber-50/20">
                                 <input type="text" inputMode="numeric" autoComplete="off"
-                                  value={compPrices[comp.componentId]?.progression ?? ""}
-                                  onChange={e => setCompPrice(comp.componentId, "progression", e.target.value)}
+                                  value={compPrices[comp.componentId]?.Progressive ?? ""}
+                                  onChange={e => setCompPrice(comp.componentId, "Progressive", e.target.value)}
                                   onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
-                                  placeholder={String(prevCp?.progression ?? 0)}
+                                  placeholder={String(prevCp?.Progressive ?? 0)}
                                   className="w-full rounded-md border border-amber-300 bg-white px-2.5 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-400" />
                               </td>
-                              {hasSemiProgression && (
+                              {hasSemiProgressive && (
                                 <td className="px-3 py-2 border-l border-indigo-50 bg-indigo-50/20">
                                   <input type="text" inputMode="numeric" autoComplete="off"
                                     value={compPrices[comp.componentId]?.semiProg ?? ""}
                                     onChange={e => setCompPrice(comp.componentId, "semiProg", e.target.value)}
                                     onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
-                                    placeholder={String(prevCp?.semi_progression ?? 0)}
+                                    placeholder={String(prevCp?.semi_Progressive ?? 0)}
                                     className="w-full rounded-md border border-indigo-200 bg-indigo-50/60 px-2.5 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                                 </td>
                               )}
@@ -669,13 +680,15 @@ export default function VendorRFQPage() {
                       <tfoot>
                         <tr className="border-t-2 border-amber-200">
                           <td className="px-3 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-amber-50/60">Total</td>
-                          <td className="px-3 py-2.5 text-right border-l border-blue-100 bg-blue-50">
-                            <span className="text-sm font-bold text-blue-700 tabular-nums">{totalStage > 0 ? `${currency} ${totalStage.toLocaleString()}` : "—"}</span>
-                          </td>
+                          {!hideStage && (
+                            <td className="px-3 py-2.5 text-right border-l border-blue-100 bg-blue-50">
+                              <span className="text-sm font-bold text-blue-700 tabular-nums">{totalStage > 0 ? `${currency} ${totalStage.toLocaleString()}` : "—"}</span>
+                            </td>
+                          )}
                           <td className="px-3 py-2.5 text-right border-l border-amber-200 bg-amber-100">
-                            <span className="text-sm font-bold text-amber-700 tabular-nums">{totalProgression > 0 ? `${currency} ${totalProgression.toLocaleString()}` : "—"}</span>
+                            <span className="text-sm font-bold text-amber-700 tabular-nums">{totalProgressive > 0 ? `${currency} ${totalProgressive.toLocaleString()}` : "—"}</span>
                           </td>
-                          {hasSemiProgression && (
+                          {hasSemiProgressive && (
                             <td className="px-3 py-2.5 text-right border-l border-indigo-100 bg-indigo-50">
                               <span className="text-sm font-bold text-indigo-700 tabular-nums">{totalSemiProg > 0 ? `${currency} ${totalSemiProg.toLocaleString()}` : "—"}</span>
                             </td>
@@ -719,13 +732,13 @@ export default function VendorRFQPage() {
               <button
                 onClick={() => {
                   const existing = vendorQ.quotation!.component_prices ?? {}
-                  const prefilled: Record<string, { stage: string; progression: string; semiProg: string }> = {}
+                  const prefilled: Record<string, { stage: string; Progressive: string; semiProg: string }> = {}
                   for (const comp of myCommodityComponents) {
                     const cp = existing[comp.componentId]
                     prefilled[comp.componentId] = {
                       stage: cp ? String(cp.stage) : "",
-                      progression: cp ? String(cp.progression) : "",
-                      semiProg: cp ? String(cp.semi_progression ?? "") : "",
+                      Progressive: cp ? String(cp.Progressive) : "",
+                      semiProg: cp ? String(cp.semi_Progressive ?? "") : "",
                     }
                   }
                   setCompPrices(prefilled)

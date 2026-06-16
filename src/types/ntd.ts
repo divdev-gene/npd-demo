@@ -124,6 +124,15 @@ export type NTDComponent = {
   componentId: string    // "C01", "C02"...
   name: string
   commodity: NTDCommodity
+  referenceNo?: string
+  drgNo?: string
+  partSize?: string
+  material?: string
+  qps?: string
+  drwgWeight?: string
+  noOfCavity?: string
+  runnerType?: string
+  mould?: string
   status?: "active" | "merged"   // merged = sourcing merged it into another component
   merged_into?: string           // componentId of the merged-result component
 }
@@ -181,7 +190,7 @@ export type NTDInitiationData = {
     uploaded_at: string
     uploaded_by: string
   }>>
-  semi_progression?: Partial<Record<NTDCommodity, boolean>>  // per-commodity semi-progression flag
+  semi_Progressive?: Partial<Record<NTDCommodity, boolean>>  // per-commodity semi-Progressive flag
   submitted_by: string
   submitted_at: string
 }
@@ -239,7 +248,7 @@ export type NTDRFQData = {
 // Sourcing picks which price category applies per (vendor, component).
 // NEVER read by the vendor portal — internal-only key.
 
-export type PriceCategory = "stage" | "progression" | "semi_progression"
+export type PriceCategory = "stage" | "Progressive" | "semi_Progressive"
 
 export type ComponentCategorySelection = {
   selected_category: PriceCategory
@@ -270,12 +279,12 @@ export type VendorQuotation = {
   doc_link: string
   notes: string
   stage_price?: number                // sum of stage prices across all components
-  progression_price?: number          // sum of progression prices across all components
-  semi_progression_price?: number     // sum of semi-progression prices (only when flag is on)
+  Progressive_price?: number          // sum of Progressive prices across all components
+  semi_Progressive_price?: number     // sum of semi-Progressive prices (only when flag is on)
   component_prices?: Record<string, { // per-component breakdown; key = componentId
     stage: number
-    progression: number
-    semi_progression?: number
+    Progressive: number
+    semi_Progressive?: number
   }>
   submitted_at: string
   last_updated_at: string

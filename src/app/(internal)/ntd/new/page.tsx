@@ -5,16 +5,27 @@ import Link from "next/link"
 import { Plus, Trash2, ArrowLeft, AlertTriangle, FileSpreadsheet, X, CheckCircle2, Paperclip } from "lucide-react"
 import { saveNTDRecord, setNTDInitiation, appendActivity, generateNTDId, createVersionedFile } from "@/lib/ntd"
 import { NTD_COMMODITIES, type NTDCommodity, type NTDInitiationData } from "@/types/ntd"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface ComponentRow {
   id: string
-  name: string
+  partName: string
+  referenceNo: string
+  drgNo: string
+  partSize: string
+  material: string
+  qps: string
+  drwgWeight: string
   specLink: string
   attachmentName?: string
 }
 
 type RowsByCommodity = Record<NTDCommodity, ComponentRow[]>
 type SpecSlot = { file_name: string; link: string; autoFilledCount?: number }
+
+// Shared cell input style with visible borders for clarity
+const cellInput =
+  "w-full min-w-0 bg-white border border-slate-200 rounded px-2 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors"
 
 const DEMO_BY_COMMODITY: Record<NTDCommodity, string[]> = {
   "Sheet Metal": ["Core Insert", "Cavity Plate"],
@@ -66,9 +77,9 @@ function nextId(byComm: RowsByCommodity): string {
 }
 
 const INITIAL_ROWS: RowsByCommodity = {
-  "Sheet Metal": [{ id: "C01", name: "", specLink: "", attachmentName: "" }],
-  "Plastics":    [{ id: "C02", name: "", specLink: "", attachmentName: "" }],
-  "EPS":         [{ id: "C03", name: "", specLink: "", attachmentName: "" }],
+  "Sheet Metal": [{ id: "C01", partName: "", referenceNo: "", drgNo: "", partSize: "", material: "", qps: "", drwgWeight: "", specLink: "", attachmentName: "" }],
+  "Plastics":    [{ id: "C02", partName: "", referenceNo: "", drgNo: "", partSize: "", material: "", qps: "", drwgWeight: "", specLink: "", attachmentName: "" }],
+  "EPS":         [{ id: "C03", partName: "", referenceNo: "", drgNo: "", partSize: "", material: "", qps: "", drwgWeight: "", specLink: "", attachmentName: "" }],
 }
 
 export default function NTDNewPage() {
@@ -91,7 +102,7 @@ export default function NTDNewPage() {
   const addRow = (commodity: NTDCommodity) => {
     setRowsByCommodity(prev => {
       const id = nextId(prev)
-      return { ...prev, [commodity]: [...(prev[commodity] ?? []), { id, name: "", specLink: "", attachmentName: "" }] }
+      return { ...prev, [commodity]: [...(prev[commodity] ?? []), { id, partName: "", referenceNo: "", drgNo: "", partSize: "", material: "", qps: "", drwgWeight: "", specLink: "", attachmentName: "" }] }
     })
   }
 
@@ -112,7 +123,7 @@ export default function NTDNewPage() {
   // ── Per-commodity bulk fill ────────────────────────────────────
   const handleBulkFill = (commodity: NTDCommodity) => {
     setRowsByCommodity(prev => {
-      const demoRows = DEMO_BY_COMMODITY[commodity].map(name => ({ id: "", name, specLink: "", attachmentName: "" }))
+      const demoRows = DEMO_BY_COMMODITY[commodity].map(name => ({ id: "", partName: name, referenceNo: "", drgNo: "", partSize: "", material: "", qps: "", drwgWeight: "", specLink: "", attachmentName: "" }))
       return reassignIds({ ...prev, [commodity]: demoRows })
     })
     setTechSpecSheets(prev => ({
@@ -128,7 +139,7 @@ export default function NTDNewPage() {
 
   const removeTechSpec = (commodity: NTDCommodity) => {
     setTechSpecSheets(prev => { const n = { ...prev }; delete n[commodity]; return n })
-    setRowsByCommodity(prev => reassignIds({ ...prev, [commodity]: [{ id: "", name: "", specLink: "", attachmentName: "" }] }))
+    setRowsByCommodity(prev => reassignIds({ ...prev, [commodity]: [{ id: "", partName: "", referenceNo: "", drgNo: "", partSize: "", material: "", qps: "", drwgWeight: "", specLink: "", attachmentName: "" }] }))
   }
 
   // ── Validation ─────────────────────────────────────────────────
@@ -136,7 +147,7 @@ export default function NTDNewPage() {
     const e: Record<string, string> = {}
     if (!title.trim()) e.title = "Project title is required"
     const allRows = NTD_COMMODITIES.flatMap(c => rowsByCommodity[c] ?? [])
-    if (!allRows.some(r => r.name.trim())) e.components = "At least one component name is required"
+    if (!allRows.some(r => r.partName.trim())) e.components = "At least one component name is required"
     return e
   }
 
@@ -152,14 +163,24 @@ export default function NTDNewPage() {
 
     const ntdComponents = NTD_COMMODITIES.flatMap(commodity =>
       (rowsByCommodity[commodity] ?? [])
-        .filter(r => r.name.trim())
-        .map(r => ({ componentId: r.id, name: r.name.trim(), commodity }))
+        .filter(r => r.partName.trim())
+        .map(r => ({
+          componentId: r.id,
+          name: r.partName.trim(),
+          commodity,
+          referenceNo: r.referenceNo.trim(),
+          drgNo: r.drgNo.trim(),
+          partSize: r.partSize.trim(),
+          material: r.material.trim(),
+          qps: r.qps.trim(),
+          drwgWeight: r.drwgWeight.trim(),
+        }))
     )
 
     const partSpecs = NTD_COMMODITIES.flatMap(commodity =>
       (rowsByCommodity[commodity] ?? [])
-        .filter(r => r.name.trim() && r.specLink.trim())
-        .map(r => createVersionedFile(r.name.trim(), r.specLink.trim(), currentRole))
+        .filter(r => r.partName.trim() && r.specLink.trim())
+        .map(r => createVersionedFile(r.partName.trim(), r.specLink.trim(), currentRole))
     )
 
     saveNTDRecord({
@@ -201,7 +222,7 @@ export default function NTDNewPage() {
 
   const totalComponents = NTD_COMMODITIES.reduce((n, c) => n + (rowsByCommodity[c]?.length ?? 0), 0)
   const namedComponents = NTD_COMMODITIES.reduce(
-    (n, c) => n + (rowsByCommodity[c]?.filter(r => r.name.trim()).length ?? 0), 0
+    (n, c) => n + (rowsByCommodity[c]?.filter(r => r.partName.trim()).length ?? 0), 0
   )
 
   return (
@@ -302,7 +323,7 @@ export default function NTDNewPage() {
         const rows = rowsByCommodity[commodity] ?? []
         const slot = techSpecSheets[commodity]
         const meta = COMMODITY_META[commodity]
-        const namedInSection = rows.filter(r => r.name.trim()).length
+        const namedInSection = rows.filter(r => r.partName.trim()).length
 
         return (
           <div
@@ -364,109 +385,209 @@ export default function NTDNewPage() {
               </div>
             </div>
 
-            {/* Column headers */}
-            <div className="grid grid-cols-[40px_1fr_1.8fr_28px] gap-3 px-5 py-2 border-b border-slate-100 bg-slate-50/50">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ID</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Component Name</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Spec Link & Attachment</span>
-              <span />
-            </div>
-
-            {/* Rows */}
-            <div className="divide-y divide-slate-100">
-              {rows.length === 0 ? (
-                <div className="px-5 py-5 text-sm text-slate-400 italic">
-                  No components yet — click "Add Component" or load a spec sheet.
-                </div>
-              ) : rows.map(row => (
-                <div
-                  key={row.id}
-                  className="grid grid-cols-[40px_1fr_1.8fr_28px] gap-3 px-5 py-2.5 items-center hover:bg-slate-50/50 transition-colors"
-                >
-                  {/* ID chip */}
-                  <span
-                    aria-label={`Component ID ${row.id}`}
-                    className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded text-center select-none"
-                  >
-                    {row.id}
-                  </span>
-
-                  {/* Component Name */}
-                  <input
-                    id={`name-${commodity.replace(/\s+/g, "-")}-${row.id}`}
-                    type="text"
-                    autoComplete="off"
-                    placeholder="e.g. Core Insert"
-                    value={row.name}
-                    onChange={e => updateRow(commodity, row.id, "name", e.target.value)}
-                    aria-label={`Component name for ${row.id}`}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 hover:border-slate-300 transition-colors"
-                  />
-
-                  {/* Spec Link + Attachment */}
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <input
-                      id={`spec-${commodity.replace(/\s+/g, "-")}-${row.id}`}
-                      type="text"
-                      autoComplete="off"
-                      placeholder="Drive / SharePoint URL"
-                      value={row.specLink}
-                      onChange={e => updateRow(commodity, row.id, "specLink", e.target.value)}
-                      aria-label={`Spec link for component ${row.id}`}
-                      className="flex-1 min-w-0 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 hover:border-slate-300 placeholder:text-slate-300 transition-colors"
-                    />
-
-                    {/* Attachment button — label wraps hidden file input */}
-                    <label
-                      htmlFor={`attach-${commodity.replace(/\s+/g, "-")}-${row.id}`}
-                      title="Attach a local file (filename saved for reference)"
-                      className={`flex items-center gap-1 shrink-0 cursor-pointer px-2 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                        row.attachmentName
-                          ? "bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100"
-                          : "bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600 hover:bg-slate-100"
-                      }`}
+            {/* Component Table - Full Width */}
+            <Table className="w-full table-fixed">
+              <TableHeader>
+                <TableRow className="border-b border-slate-100 hover:bg-transparent">
+                  <TableHead className="w-[4%] text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">ID</TableHead>
+                  <TableHead className="w-[16%] text-[10px] font-bold text-slate-400 uppercase tracking-wider">Part Name</TableHead>
+                  <TableHead className="w-[10%] text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ref. No.</TableHead>
+                  <TableHead className="w-[10%] text-[10px] font-bold text-slate-400 uppercase tracking-wider">Drg. No.</TableHead>
+                  <TableHead className="w-[8%] text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Size (mm)</TableHead>
+                  <TableHead className="w-[14%] text-[10px] font-bold text-slate-400 uppercase tracking-wider">Material</TableHead>
+                  <TableHead className="w-[6%] text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">QPS</TableHead>
+                  <TableHead className="w-[8%] text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Wt. (gms)</TableHead>
+                  <TableHead className="w-[20%] text-[10px] font-bold text-slate-400 uppercase tracking-wider">Spec Link</TableHead>
+                  <TableHead className="w-[4%]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="h-20 text-center text-sm text-slate-400 italic">
+                      No components yet — click "Add Component" or load a spec sheet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((row, idx) => (
+                    <TableRow
+                      key={row.id}
+                      className={`border-b border-slate-100 ${idx % 2 === 1 ? "bg-slate-50/40" : ""}`}
                     >
-                      <Paperclip className="w-3.5 h-3.5 shrink-0" />
-                      <span className="max-w-[72px] truncate">
-                        {row.attachmentName || "Attach"}
-                      </span>
-                      <input
-                        id={`attach-${commodity.replace(/\s+/g, "-")}-${row.id}`}
-                        type="file"
-                        className="sr-only"
-                        aria-label={`Attach file to component ${row.id}`}
-                        onChange={e => {
-                          const name = e.target.files?.[0]?.name ?? ""
-                          updateRow(commodity, row.id, "attachmentName", name)
-                        }}
-                      />
-                    </label>
+                      {/* ID */}
+                      <TableCell className="px-3 py-2 text-center">
+                        <span
+                          aria-label={`Component ID ${row.id}`}
+                          className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded inline-block"
+                        >
+                          {row.id}
+                        </span>
+                      </TableCell>
 
-                    {/* Clear attachment */}
-                    {row.attachmentName && (
-                      <button
-                        type="button"
-                        onClick={() => updateRow(commodity, row.id, "attachmentName", "")}
-                        aria-label={`Remove attachment from component ${row.id}`}
-                        className="shrink-0 text-violet-300 hover:text-violet-600 transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                      {/* Part Name */}
+                      <TableCell className="px-3 py-2">
+                        <input
+                          id={`partName-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                          type="text"
+                          autoComplete="off"
+                          placeholder="Part name"
+                          value={row.partName}
+                          onChange={e => updateRow(commodity, row.id, "partName", e.target.value)}
+                          aria-label={`Part name for ${row.id}`}
+                          className={`${cellInput} w-full`}
+                        />
+                      </TableCell>
 
-                  {/* Delete row */}
-                  <button
-                    type="button"
-                    onClick={() => removeRow(commodity, row.id)}
-                    aria-label={`Remove component ${row.id} from ${commodity}`}
-                    className="flex items-center justify-center text-slate-300 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
+                      {/* Reference No. */}
+                      <TableCell className="px-3 py-2">
+                        <input
+                          id={`referenceNo-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                          type="text"
+                          autoComplete="off"
+                          placeholder="Ref #"
+                          value={row.referenceNo}
+                          onChange={e => updateRow(commodity, row.id, "referenceNo", e.target.value)}
+                          aria-label={`Reference number for ${row.id}`}
+                          className={`${cellInput} w-full`}
+                        />
+                      </TableCell>
+
+                      {/* Drg. No. */}
+                      <TableCell className="px-3 py-2">
+                        <input
+                          id={`drgNo-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                          type="text"
+                          autoComplete="off"
+                          placeholder="Drg #"
+                          value={row.drgNo}
+                          onChange={e => updateRow(commodity, row.id, "drgNo", e.target.value)}
+                          aria-label={`Drawing number for ${row.id}`}
+                          className={`${cellInput} w-full`}
+                        />
+                      </TableCell>
+
+                      {/* Part Size (mm) */}
+                      <TableCell className="px-3 py-2 text-center">
+                        <input
+                          id={`partSize-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                          type="text"
+                          autoComplete="off"
+                          placeholder="mm"
+                          value={row.partSize}
+                          onChange={e => updateRow(commodity, row.id, "partSize", e.target.value)}
+                          aria-label={`Part size for ${row.id}`}
+                          className={`${cellInput} w-full text-center`}
+                        />
+                      </TableCell>
+
+                      {/* Material */}
+                      <TableCell className="px-3 py-2">
+                        <input
+                          id={`material-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                          type="text"
+                          autoComplete="off"
+                          placeholder="Material"
+                          value={row.material}
+                          onChange={e => updateRow(commodity, row.id, "material", e.target.value)}
+                          aria-label={`Material for ${row.id}`}
+                          className={`${cellInput} w-full`}
+                        />
+                      </TableCell>
+
+                      {/* QPS */}
+                      <TableCell className="px-3 py-2 text-center">
+                        <input
+                          id={`qps-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                          type="text"
+                          autoComplete="off"
+                          placeholder="QPS"
+                          value={row.qps}
+                          onChange={e => updateRow(commodity, row.id, "qps", e.target.value)}
+                          aria-label={`QPS for ${row.id}`}
+                          className={`${cellInput} w-full text-center`}
+                        />
+                      </TableCell>
+
+                      {/* Drwg Weight (gms) */}
+                      <TableCell className="px-3 py-2 text-center">
+                        <input
+                          id={`drwgWeight-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                          type="text"
+                          autoComplete="off"
+                          placeholder="gms"
+                          value={row.drwgWeight}
+                          onChange={e => updateRow(commodity, row.id, "drwgWeight", e.target.value)}
+                          aria-label={`Drawing weight for ${row.id}`}
+                          className={`${cellInput} w-full text-center`}
+                        />
+                      </TableCell>
+
+                      {/* Spec Link + Attachment */}
+                      <TableCell className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            id={`spec-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                            type="text"
+                            autoComplete="off"
+                            placeholder="Drive / SharePoint URL"
+                            value={row.specLink}
+                            onChange={e => updateRow(commodity, row.id, "specLink", e.target.value)}
+                            aria-label={`Spec link for component ${row.id}`}
+                            className={`${cellInput} flex-1 min-w-0`}
+                          />
+
+                          {/* Icon-only attach - POC demo click */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const demoFileNames = ["spec.pdf", "drawing.dwg", "model.step", "doc.pdf"]
+                              const randomFile = demoFileNames[Math.floor(Math.random() * demoFileNames.length)]
+                              updateRow(commodity, row.id, "attachmentName", randomFile)
+                            }}
+                            title={row.attachmentName ? `Attached: ${row.attachmentName}` : "Click to attach (demo)"}
+                            className={`shrink-0 cursor-pointer p-1.5 rounded-md transition-colors relative ${
+                              row.attachmentName
+                                ? "bg-violet-100 text-violet-600 hover:bg-violet-200"
+                                : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            <Paperclip className="w-3.5 h-3.5" />
+                         
+                          </button>
+
+                          {/* Clear attachment */}
+                          {row.attachmentName && (
+                            <button
+                              type="button"
+                              onClick={() => updateRow(commodity, row.id, "attachmentName", "")}
+                              title={`Remove ${row.attachmentName}`}
+                              aria-label={`Remove attachment from component ${row.id}`}
+                              className="shrink-0 text-slate-400 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-50"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        {/* Filename chip */}
+                   
+                      </TableCell>
+
+                      {/* Delete row */}
+                      <TableCell className="px-3 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removeRow(commodity, row.id)}
+                          aria-label={`Remove component ${row.id} from ${commodity}`}
+                          className="inline-flex items-center justify-center p-1.5 text-slate-300 hover:text-red-400 hover:bg-red-50 rounded-md transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
         )
       })}
