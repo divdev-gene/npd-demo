@@ -2,27 +2,73 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Plus, Trash2, ArrowLeft, AlertTriangle, FileSpreadsheet, X, CheckCircle2 } from "lucide-react"
+import { Plus, Trash2, ArrowLeft, AlertTriangle, FileSpreadsheet, X, CheckCircle2, Paperclip } from "lucide-react"
 import { saveNTDRecord, setNTDInitiation, appendActivity, generateNTDId, createVersionedFile } from "@/lib/ntd"
-import { NTD_COMMODITIES, type NTDCommodity } from "@/types/ntd"
+import { NTD_COMMODITIES, type NTDCommodity, type NTDInitiationData } from "@/types/ntd"
 
 interface ComponentRow {
   id: string
   name: string
-  commodity: NTDCommodity
   specLink: string
+  attachmentName?: string
 }
 
-const DEMO_COMPONENTS: { name: string; commodity: NTDCommodity }[] = [
-  { name: "Core Insert",   commodity: "Sheet Metal" },
-  { name: "Cavity Plate",  commodity: "Sheet Metal" },
-  { name: "Ejector Pin",   commodity: "Plastics"    },
-  { name: "Runner System", commodity: "Plastics"    },
-  { name: "Guide Pillar",  commodity: "EPS"         },
-]
+type RowsByCommodity = Record<NTDCommodity, ComponentRow[]>
+type SpecSlot = { file_name: string; link: string; autoFilledCount?: number }
 
-function makeId(n: number) {
-  return `C${String(n).padStart(2, "0")}`
+const DEMO_BY_COMMODITY: Record<NTDCommodity, string[]> = {
+  "Sheet Metal": ["Core Insert", "Cavity Plate"],
+  "Plastics":    ["Ejector Pin", "Runner System"],
+  "EPS":         ["Guide Pillar"],
+}
+
+// Visual identity per commodity — gives each section an instant colour anchor
+const COMMODITY_META: Record<NTDCommodity, {
+  borderAccent: string
+  headerBg: string
+  countBadge: string
+  addBtn: string
+}> = {
+  "Sheet Metal": {
+    borderAccent: "border-l-blue-400",
+    headerBg:     "bg-blue-50/70",
+    countBadge:   "bg-blue-100 text-blue-700",
+    addBtn:       "text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200",
+  },
+  "Plastics": {
+    borderAccent: "border-l-violet-400",
+    headerBg:     "bg-violet-50/70",
+    countBadge:   "bg-violet-100 text-violet-700",
+    addBtn:       "text-violet-700 bg-violet-50 hover:bg-violet-100 border-violet-200",
+  },
+  "EPS": {
+    borderAccent: "border-l-teal-400",
+    headerBg:     "bg-teal-50/70",
+    countBadge:   "bg-teal-100 text-teal-700",
+    addBtn:       "text-teal-700 bg-teal-50 hover:bg-teal-100 border-teal-200",
+  },
+}
+
+function makeId(n: number) { return `C${String(n).padStart(2, "0")}` }
+
+function reassignIds(byComm: RowsByCommodity): RowsByCommodity {
+  let counter = 1
+  const result = {} as RowsByCommodity
+  for (const c of NTD_COMMODITIES) {
+    result[c] = (byComm[c] ?? []).map(r => ({ ...r, id: makeId(counter++) }))
+  }
+  return result
+}
+
+function nextId(byComm: RowsByCommodity): string {
+  const all = NTD_COMMODITIES.flatMap(c => byComm[c] ?? [])
+  return makeId(Math.max(0, ...all.map(r => parseInt(r.id.slice(1)))) + 1)
+}
+
+const INITIAL_ROWS: RowsByCommodity = {
+  "Sheet Metal": [{ id: "C01", name: "", specLink: "", attachmentName: "" }],
+  "Plastics":    [{ id: "C02", name: "", specLink: "", attachmentName: "" }],
+  "EPS":         [{ id: "C03", name: "", specLink: "", attachmentName: "" }],
 }
 
 export default function NTDNewPage() {
@@ -30,10 +76,8 @@ export default function NTDNewPage() {
   const [currentRole, setCurrentRole] = useState("")
   const [title, setTitle] = useState("")
   const [notes, setNotes] = useState("")
-  const [componentRows, setComponentRows] = useState<ComponentRow[]>([
-    { id: "C01", name: "", commodity: "Sheet Metal", specLink: "" }
-  ])
-  const [techSpecSheet, setTechSpecSheet] = useState<{ file_name: string; link: string; autoFilledCount?: number } | null>(null)
+  const [rowsByCommodity, setRowsByCommodity] = useState<RowsByCommodity>(INITIAL_ROWS)
+  const [techSpecSheets, setTechSpecSheets] = useState<Partial<Record<NTDCommodity, SpecSlot>>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -43,39 +87,56 @@ export default function NTDNewPage() {
 
   const canCreate = currentRole.startsWith("rnd") || currentRole === "super_admin"
 
-  // ── Component row helpers ──────────────────────────────────────
-  const addComponentRow = () => {
-    const nextNum = Math.max(0, ...componentRows.map(r => parseInt(r.id.slice(1)))) + 1
-    setComponentRows(prev => [...prev, { id: makeId(nextNum), name: "", commodity: "Sheet Metal", specLink: "" }])
+  // ── Per-commodity row helpers ──────────────────────────────────
+  const addRow = (commodity: NTDCommodity) => {
+    setRowsByCommodity(prev => {
+      const id = nextId(prev)
+      return { ...prev, [commodity]: [...(prev[commodity] ?? []), { id, name: "", specLink: "", attachmentName: "" }] }
+    })
   }
 
-  const removeComponentRow = (rowId: string) => {
-    if (componentRows.length > 1)
-      setComponentRows(prev => prev.filter(r => r.id !== rowId))
+  const removeRow = (commodity: NTDCommodity, rowId: string) => {
+    setRowsByCommodity(prev => {
+      const updated = prev[commodity].filter(r => r.id !== rowId)
+      return reassignIds({ ...prev, [commodity]: updated })
+    })
   }
 
-  const updateRow = (rowId: string, field: keyof ComponentRow, value: string) => {
-    setComponentRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: value } : r))
+  const updateRow = (commodity: NTDCommodity, rowId: string, field: keyof Omit<ComponentRow, "id">, value: string) => {
+    setRowsByCommodity(prev => ({
+      ...prev,
+      [commodity]: prev[commodity].map(r => r.id === rowId ? { ...r, [field]: value } : r),
+    }))
   }
 
-  // ── Bulk fill (demo: no file picker, fills fixed sample data instantly) ──
-  const handleBulkFill = () => {
-    const newRows = DEMO_COMPONENTS.map((c, i) => ({ id: makeId(i + 1), name: c.name, commodity: c.commodity, specLink: "" }))
-    setTechSpecSheet({ file_name: "TechSpec_AmberNTD.xlsx", link: "", autoFilledCount: newRows.length })
-    setComponentRows(newRows)
+  // ── Per-commodity bulk fill ────────────────────────────────────
+  const handleBulkFill = (commodity: NTDCommodity) => {
+    setRowsByCommodity(prev => {
+      const demoRows = DEMO_BY_COMMODITY[commodity].map(name => ({ id: "", name, specLink: "", attachmentName: "" }))
+      return reassignIds({ ...prev, [commodity]: demoRows })
+    })
+    setTechSpecSheets(prev => ({
+      ...prev,
+      [commodity]: {
+        file_name: `TechSpec_${commodity.replace(/\s+/g, "")}.xlsx`,
+        link: "",
+        autoFilledCount: DEMO_BY_COMMODITY[commodity].length,
+      },
+    }))
     setErrors(prev => ({ ...prev, components: "" }))
   }
 
-  const removeTechSpec = () => {
-    setTechSpecSheet(null)
-    setComponentRows([{ id: "C01", name: "", commodity: "Sheet Metal", specLink: "" }])
+  const removeTechSpec = (commodity: NTDCommodity) => {
+    setTechSpecSheets(prev => { const n = { ...prev }; delete n[commodity]; return n })
+    setRowsByCommodity(prev => reassignIds({ ...prev, [commodity]: [{ id: "", name: "", specLink: "", attachmentName: "" }] }))
   }
 
   // ── Validation ─────────────────────────────────────────────────
   const validate = () => {
     const e: Record<string, string> = {}
-    if (!title.trim()) e.title = "Title is required"
-    if (!componentRows.some(r => r.name.trim())) e.components = "At least one component name is required"
+    if (!title.trim()) e.title = "Project title is required"
+    const allRows = NTD_COMMODITIES.flatMap(c => rowsByCommodity[c] ?? [])
+    if (!allRows.some(r => r.name.trim())) e.components = "At least one component name is required"
     return e
   }
 
@@ -89,21 +150,32 @@ export default function NTDNewPage() {
     const now = new Date().toISOString()
     const ntdRole = currentRole === "rnd_head" ? "rnd_head" : currentRole === "super_admin" ? "super_admin" : "rnd"
 
-    const validRows = componentRows.filter(r => r.name.trim())
-    const ntdComponents = validRows.map(r => ({ componentId: r.id, name: r.name.trim(), commodity: r.commodity }))
-    const partSpecs = validRows
-      .filter(r => r.specLink.trim())
-      .map(r => createVersionedFile(r.name.trim(), r.specLink.trim(), currentRole))
+    const ntdComponents = NTD_COMMODITIES.flatMap(commodity =>
+      (rowsByCommodity[commodity] ?? [])
+        .filter(r => r.name.trim())
+        .map(r => ({ componentId: r.id, name: r.name.trim(), commodity }))
+    )
+
+    const partSpecs = NTD_COMMODITIES.flatMap(commodity =>
+      (rowsByCommodity[commodity] ?? [])
+        .filter(r => r.name.trim() && r.specLink.trim())
+        .map(r => createVersionedFile(r.name.trim(), r.specLink.trim(), currentRole))
+    )
 
     saveNTDRecord({
       id, typeOfWork: "NTD", title: title.trim(), spoc: "Rohan Desai",
       created_by: currentRole, created_at: now, current_stage: 2, status: "active",
     })
 
+    const specSheetsPayload: NTDInitiationData["tech_spec_sheets"] = {}
+    for (const [commodity, slot] of Object.entries(techSpecSheets) as [NTDCommodity, SpecSlot][]) {
+      specSheetsPayload[commodity] = { file_name: slot.file_name, link: slot.link, uploaded_at: now, uploaded_by: currentRole }
+    }
+
     setNTDInitiation(id, {
       title: title.trim(), spoc: "Rohan Desai", notes: notes.trim(),
       components: ntdComponents, part_specs: partSpecs,
-      ...(techSpecSheet ? { tech_spec_sheet: { file_name: techSpecSheet.file_name, link: techSpecSheet.link, uploaded_at: now, uploaded_by: currentRole } } : {}),
+      ...(Object.keys(specSheetsPayload).length > 0 ? { tech_spec_sheets: specSheetsPayload } : {}),
       submitted_by: currentRole, submitted_at: now,
     })
 
@@ -127,164 +199,268 @@ export default function NTDNewPage() {
     )
   }
 
+  const totalComponents = NTD_COMMODITIES.reduce((n, c) => n + (rowsByCommodity[c]?.length ?? 0), 0)
+  const namedComponents = NTD_COMMODITIES.reduce(
+    (n, c) => n + (rowsByCommodity[c]?.filter(r => r.name.trim()).length ?? 0), 0
+  )
+
   return (
-    <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
-      {/* Back + header */}
-      <div className="space-y-1">
-        <Link href="/ntd" className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors w-fit">
-          <ArrowLeft className="w-4 h-4" /> Back to Tool Development
+    <div className="max-w-full px-4 py-6 space-y-5">
+
+      {/* ── Back nav + page header ── */}
+      <div className="space-y-2">
+        <Link
+          href="/ntd"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Tool Development
         </Link>
-        <div className="flex items-center justify-between">
+
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">New Tool Development</h1>
-            <p className="text-slate-500 text-sm mt-0.5">Create a new NTD record and define initial part spec files.</p>
+            <h1 className="text-2xl font-bold text-slate-900 leading-tight">New Tool Development</h1>
+            <p className="text-slate-500 text-sm mt-1">
+              Name the project, then add components per commodity. Spec links and file attachments are optional at this stage.
+            </p>
           </div>
-          <span className="bg-teal-100 text-teal-800 text-xs font-bold px-3 py-1 rounded-full shrink-0">
-            SPOC: Rohan Desai · Others
-          </span>
+          <div className="flex items-center gap-2 shrink-0 pt-0.5">
+            <span className="bg-teal-100 text-teal-800 text-xs font-bold px-3 py-1.5 rounded-full whitespace-nowrap">
+              SPOC: Rohan Desai
+            </span>
+            <span className="bg-slate-100 text-slate-600 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap">
+              Stage 1 → 2 on submit
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Two-column body */}
-      <div className="grid grid-cols-[380px_1fr] gap-8 items-start">
-
-        {/* ── LEFT: project meta + tech spec upload ── */}
-        <div className="space-y-5 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      {/* ── Project info card ── */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Project Details</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Title */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Tool Title <span className="text-red-500">*</span>
+            <label
+              htmlFor="ntd-title"
+              className="text-xs font-semibold text-slate-600 flex items-center gap-1"
+            >
+              Project Title
+              <span className="text-red-500" aria-label="required">*</span>
             </label>
             <input
+              id="ntd-title"
               type="text"
               value={title}
               onChange={e => { setTitle(e.target.value); setErrors(p => ({ ...p, title: "" })) }}
               placeholder="e.g. Core Insert Mould — Line 3"
-              className={`w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${errors.title ? "border-red-300" : "border-slate-200"}`}
+              aria-invalid={!!errors.title}
+              aria-describedby={errors.title ? "title-error" : undefined}
+              className={`w-full rounded-lg border px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
+                errors.title ? "border-red-300 bg-red-50/40" : "border-slate-200 hover:border-slate-300"
+              }`}
             />
-            {errors.title && <p className="text-xs text-red-600">{errors.title}</p>}
+            {errors.title && (
+              <p id="title-error" className="text-xs text-red-600 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                {errors.title}
+              </p>
+            )}
           </div>
 
-          {/* Notes */}
+          {/* Description */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Notes</label>
+            <label htmlFor="ntd-notes" className="text-xs font-semibold text-slate-600">
+              Project Description
+              <span className="ml-1.5 text-slate-400 font-normal">(optional)</span>
+            </label>
             <textarea
+              id="ntd-notes"
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="Background context, scope, requirements..."
-              rows={3}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+              placeholder="Background context, scope, special requirements…"
+              rows={2}
+              className="w-full rounded-lg border border-slate-200 hover:border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none transition-colors"
             />
           </div>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-[11px] text-slate-400 font-medium shrink-0">or fill manually →</span>
-            <div className="flex-1 h-px bg-slate-200" />
-          </div>
-
-          {/* Tech Spec Sheet upload */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tech Spec Sheet</label>
-
-            {techSpecSheet ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 bg-slate-100 rounded-xl px-4 py-2.5">
-                  <FileSpreadsheet className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span className="text-sm text-slate-700 truncate flex-1">{techSpecSheet.file_name}</span>
-                  <button type="button" onClick={removeTechSpec} className="text-slate-400 hover:text-slate-600 shrink-0">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-emerald-700">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {techSpecSheet.autoFilledCount ?? DEMO_COMPONENTS.length} components auto-filled from spec sheet
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleBulkFill}
-                className="w-full flex flex-col items-center gap-2 border-2 border-dashed border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-xl px-4 py-6 text-center cursor-pointer transition-colors"
-              >
-                <FileSpreadsheet className="w-8 h-8 text-blue-400" />
-                <div>
-                  <p className="text-sm font-semibold text-blue-700">Load Tech Spec Sheet</p>
-                  <p className="text-xs text-blue-500 mt-0.5">Click to auto-fill components from spec</p>
-                </div>
-              </button>
-            )}
-          </div>
         </div>
+      </div>
 
-        {/* ── RIGHT: component list + submit ── */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-              <span className="text-sm font-semibold text-slate-700">
-                Components <span className="text-red-500">*</span>
-                <span className="ml-2 text-xs font-normal text-slate-400">{componentRows.length} added</span>
-              </span>
-              <button type="button" onClick={addComponentRow}
-                className="flex items-center gap-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Add Component
-              </button>
+      {/* ── Component validation error ── */}
+      {errors.components && (
+        <div
+          role="alert"
+          className="flex items-center gap-2.5 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+          {errors.components}
+        </div>
+      )}
+
+      {/* ── One table per commodity ── */}
+      {NTD_COMMODITIES.map(commodity => {
+        const rows = rowsByCommodity[commodity] ?? []
+        const slot = techSpecSheets[commodity]
+        const meta = COMMODITY_META[commodity]
+        const namedInSection = rows.filter(r => r.name.trim()).length
+
+        return (
+          <div
+            key={commodity}
+            className={`bg-white rounded-xl border border-slate-200 border-l-4 ${meta.borderAccent} shadow-sm overflow-hidden`}
+          >
+            {/* Commodity header */}
+            <div className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 ${meta.headerBg}`}>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-slate-800">{commodity}</span>
+                {/* Named / total count — always visible */}
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${meta.countBadge}`}>
+                  {namedInSection} / {rows.length}
+                </span>
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  {namedInSection === 1 ? "component named" : "components named"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Tech spec loader / chip */}
+                {slot ? (
+                  <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span className="text-xs text-emerald-700 font-medium max-w-[120px] truncate">{slot.file_name}</span>
+                    <span className="flex items-center gap-0.5 text-xs text-emerald-600 shrink-0">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {slot.autoFilledCount} filled
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeTechSpec(commodity)}
+                      aria-label={`Remove spec sheet for ${commodity}`}
+                      className="text-emerald-400 hover:text-emerald-700 ml-0.5 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleBulkFill(commodity)}
+                    title={`Demo: auto-fills ${DEMO_BY_COMMODITY[commodity].length} sample components for ${commodity}`}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    Load Spec Sheet
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => addRow(commodity)}
+                  className={`flex items-center gap-1 text-xs font-semibold border px-3 py-1.5 rounded-lg transition-colors ${meta.addBtn}`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Component
+                </button>
+              </div>
             </div>
 
-            {errors.components && (
-              <div className="px-5 py-2 bg-red-50 border-b border-red-100 flex items-center gap-1.5 text-xs text-red-600">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {errors.components}
-              </div>
-            )}
-
-            {/* Column labels */}
-            <div className="grid grid-cols-[40px_1fr_144px_1fr_32px] gap-3 px-5 py-2 bg-slate-50 border-b border-slate-100">
+            {/* Column headers */}
+            <div className="grid grid-cols-[40px_1fr_1.8fr_28px] gap-3 px-5 py-2 border-b border-slate-100 bg-slate-50/50">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ID</span>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Component Name</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Commodity</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Spec Link (optional)</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Spec Link & Attachment</span>
               <span />
             </div>
 
             {/* Rows */}
             <div className="divide-y divide-slate-100">
-              {componentRows.map(row => (
-                <div key={row.id} className="grid grid-cols-[40px_1fr_144px_1fr_32px] gap-3 px-5 py-2.5 items-center">
-                  <span className="text-xs font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-center">{row.id}</span>
+              {rows.length === 0 ? (
+                <div className="px-5 py-5 text-sm text-slate-400 italic">
+                  No components yet — click "Add Component" or load a spec sheet.
+                </div>
+              ) : rows.map(row => (
+                <div
+                  key={row.id}
+                  className="grid grid-cols-[40px_1fr_1.8fr_28px] gap-3 px-5 py-2.5 items-center hover:bg-slate-50/50 transition-colors"
+                >
+                  {/* ID chip */}
+                  <span
+                    aria-label={`Component ID ${row.id}`}
+                    className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded text-center select-none"
+                  >
+                    {row.id}
+                  </span>
 
+                  {/* Component Name */}
                   <input
+                    id={`name-${commodity.replace(/\s+/g, "-")}-${row.id}`}
                     type="text"
                     autoComplete="off"
                     placeholder="e.g. Core Insert"
                     value={row.name}
-                    onChange={e => updateRow(row.id, "name", e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    onChange={e => updateRow(commodity, row.id, "name", e.target.value)}
+                    aria-label={`Component name for ${row.id}`}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 hover:border-slate-300 transition-colors"
                   />
 
-                  <select
-                    value={row.commodity}
-                    onChange={e => updateRow(row.id, "commodity", e.target.value as NTDCommodity)}
-                    className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                  >
-                    {NTD_COMMODITIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  {/* Spec Link + Attachment */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <input
+                      id={`spec-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                      type="text"
+                      autoComplete="off"
+                      placeholder="Drive / SharePoint URL"
+                      value={row.specLink}
+                      onChange={e => updateRow(commodity, row.id, "specLink", e.target.value)}
+                      aria-label={`Spec link for component ${row.id}`}
+                      className="flex-1 min-w-0 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 hover:border-slate-300 placeholder:text-slate-300 transition-colors"
+                    />
 
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    placeholder="Drive / SharePoint URL"
-                    value={row.specLink}
-                    onChange={e => updateRow(row.id, "specLink", e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-300"
-                  />
+                    {/* Attachment button — label wraps hidden file input */}
+                    <label
+                      htmlFor={`attach-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                      title="Attach a local file (filename saved for reference)"
+                      className={`flex items-center gap-1 shrink-0 cursor-pointer px-2 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        row.attachmentName
+                          ? "bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100"
+                          : "bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                      <span className="max-w-[72px] truncate">
+                        {row.attachmentName || "Attach"}
+                      </span>
+                      <input
+                        id={`attach-${commodity.replace(/\s+/g, "-")}-${row.id}`}
+                        type="file"
+                        className="sr-only"
+                        aria-label={`Attach file to component ${row.id}`}
+                        onChange={e => {
+                          const name = e.target.files?.[0]?.name ?? ""
+                          updateRow(commodity, row.id, "attachmentName", name)
+                        }}
+                      />
+                    </label>
 
+                    {/* Clear attachment */}
+                    {row.attachmentName && (
+                      <button
+                        type="button"
+                        onClick={() => updateRow(commodity, row.id, "attachmentName", "")}
+                        aria-label={`Remove attachment from component ${row.id}`}
+                        className="shrink-0 text-violet-300 hover:text-violet-600 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Delete row */}
                   <button
                     type="button"
-                    onClick={() => removeComponentRow(row.id)}
-                    disabled={componentRows.length === 1}
-                    className="flex items-center justify-center text-slate-300 hover:text-red-400 disabled:opacity-0 transition-colors"
+                    onClick={() => removeRow(commodity, row.id)}
+                    aria-label={`Remove component ${row.id} from ${commodity}`}
+                    className="flex items-center justify-center text-slate-300 hover:text-red-400 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -292,20 +468,32 @@ export default function NTDNewPage() {
               ))}
             </div>
           </div>
+        )
+      })}
 
-          {/* Submit */}
-          <div className="flex items-center justify-between">
-            <Link href="/ntd" className="text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</Link>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-colors"
-            >
-              {submitting ? "Creating..." : "Create NTD Record →"}
-            </button>
-          </div>
+      {/* ── Submit footer ── */}
+      <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/ntd"
+            className="text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            Cancel
+          </Link>
+          <span className="text-xs text-slate-400">
+            {namedComponents} of {totalComponents} component{totalComponents !== 1 ? "s" : ""} named
+          </span>
         </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 active:bg-blue-950 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-colors shadow-sm"
+        >
+          {submitting ? "Creating…" : "Create NTD Record →"}
+        </button>
       </div>
+
     </div>
   )
 }

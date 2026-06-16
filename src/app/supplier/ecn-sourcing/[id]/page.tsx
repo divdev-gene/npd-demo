@@ -14,6 +14,7 @@ import {
 import {
   CheckCircle, CheckCircle2, UploadCloud, Truck, Mail, Tag, AlertCircle, Clock, Package,
 } from "lucide-react"
+import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
 type SubmissionRecord = {
   dispatchDate: string
@@ -341,21 +342,7 @@ export default function EcnSourcingPage() {
   const itemName     = npd?.itemName ?? npdId
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3">
-        <div className="max-w-3xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain" />
-            <div className="h-5 w-px bg-slate-200" />
-            <span className="text-sm font-bold text-slate-700">ECN Supplier Portal</span>
-          </div>
-          <span className="text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-3 py-1">
-            Supplier Portal
-          </span>
-        </div>
-      </header>
-
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <SupplierPortalShell portalLabel="ECN / Sourcing">
 
         {/* NPD summary card */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
@@ -1177,7 +1164,6 @@ export default function EcnSourcingPage() {
           </div>
         )}
 
-      </main>
-    </div>
+    </SupplierPortalShell>
   )
 }

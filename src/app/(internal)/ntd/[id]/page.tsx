@@ -5,13 +5,13 @@ import Link from "next/link"
 import {
   CheckCircle2, Circle, ChevronRight, ArrowLeft, Wrench,
   AlertTriangle, ExternalLink, Plus, Trash2, Copy, Check,
-  Users, Clock, Package, Building2, Paperclip, X, FileSpreadsheet
+  Users, Clock, Package, Building2, Paperclip, X, FileSpreadsheet, GitMerge
 } from "lucide-react"
 import {
-  getNTDRecord, getNTDInitiation, getNTDSpec, setNTDSpec,
+  getNTDRecord, getNTDInitiation, setNTDInitiation, getNTDSpec, setNTDSpec,
   getNTDRFQ, setNTDRFQ, getNTDQuotation, setNTDQuotation,
   getNTDSelection, setNTDSelection, getNTDHandoff, setNTDHandoff,
-  getNTDDFM, getNTDMould, getNTDMfg, setNTDMfg, getNTDTrials,
+  getNTDDFM, getNTDMould, getNTDMfg, setNTDMfg, getNTDTrials, setNTDTrials,
   getNTDStage11, setNTDStage11, advanceNTDStage, saveNTDRecord,
   appendActivity, getMouldSubStage, getDFMProgress, getMouldProgress,
   getTrialProgress, getStage11CurrentSubstep, isNTDComplete,
@@ -20,9 +20,11 @@ import {
   allInspectionsSubmitted,
 } from "@/lib/ntd"
 import { VENDOR_CATALOG } from "@/lib/mockData"
+import { NTD_COMMODITIES, type NTDCommodity, type PriceCategory, type ComponentCategorySelection } from "@/types/ntd"
 import type { NTDRecord, NTDStage, NTDRole, NTDRFQData, NTDMfgData, NTDStage2Query } from "@/types/ntd"
 import { ActivityFeed } from "@/components/ntd/ActivityFeed"
 import { VersionedFileInput } from "@/components/ntd/VersionedFileInput"
+import ComponentMergePanel from "@/components/ntd/ComponentMergePanel"
 
 const STAGE_NAMES: Record<number, string> = {
   1: "Initiation", 2: "Spec & Sign-off", 3: "RFQ Dispatch", 4: "Quotation Review",
@@ -121,6 +123,11 @@ export default function NTDDetailPage() {
   // Per-commodity mfg update text (commodity → update note)
   const [mfgV2Updates, setMfgV2Updates] = useState<Record<string, string>>({})
 
+  // Stage 2 — per-commodity spec attachments (tracks filename of newly attached spec)
+  const [s2SpecAttachments, setS2SpecAttachments] = useState<Partial<Record<NTDCommodity, string>>>({})
+  // Stage 2 — per-commodity merge selection
+  const [mergeSelections, setMergeSelections] = useState<Partial<Record<NTDCommodity, Set<string>>>>({})
+
   // Stage 2 query
   const [queryText, setQueryText] = useState("")
   const [queryResponseText, setQueryResponseText] = useState<Record<string, string>>({})
@@ -198,6 +205,7 @@ export default function NTDDetailPage() {
   const specData = getNTDSpec(id)
   const rfqData = getNTDRFQ(id)
   const quotationData = getNTDQuotation(id)
+  // category_selections now live inside ntd_quotation_{id}[vendorId].category_selections
   const selectionData = getNTDSelection(id)
   const handoffData = getNTDHandoff(id)
   const dfmData = getNTDDFM(id)
@@ -214,6 +222,21 @@ export default function NTDDetailPage() {
   const mouldProgress = getMouldProgress(id)
   const trialProgress = getTrialProgress(id)
   const complete = isNTDComplete(id)
+
+  // ── Stage 10 — Mark samples received (R&D action) ──
+  const handleMarkSamplesReceivedMain = (trialNo: number) => {
+    const fresh = getNTDTrials(id)
+    if (!fresh) return
+    const updated = {
+      ...fresh,
+      trials: fresh.trials.map(t => t.trial_no === trialNo
+        ? { ...t, status: "samples_received" as const, samples_received_at: new Date().toISOString() }
+        : t)
+    }
+    setNTDTrials(id, updated)
+    appendActivity(id, currentRole, ntdRole, 10, "samples_received", `Samples received for Trial T${trialNo}`, { trial_no: trialNo })
+    reload()
+  }
 
   // ── Demo advance/revert ──
   const demoAdvance = () => {
@@ -234,17 +257,66 @@ export default function NTDDetailPage() {
 
   // ── Stage 2 sign-off (sourcing only) ──
   const handleSpecSignOff = () => {
+    const now = new Date().toISOString()
     const existing = specData ?? {
-      spec_sheet: createVersionedFile("Spec Sheet", specSheet, currentRole),
-      comparisons: comparisons.map(c => ({ row_id: c.id, vendor_name: c.vendor_name, spec_doc_link: c.spec_doc_link, notes: c.notes })),
+      spec_sheet: createVersionedFile("Spec Sheet", "", currentRole),
+      comparisons: [],
       queries: [],
       sourcing_signed: false, sourcing_signed_by: "", sourcing_signed_at: "",
     }
-    const now = new Date().toISOString()
     const updated = { ...existing, sourcing_signed: true, sourcing_signed_by: currentRole, sourcing_signed_at: now }
     setNTDSpec(id, updated)
     appendActivity(id, currentRole, ntdRole, 2, "stage_complete", "Stage 2 sourcing sign-off — advancing to RFQ Dispatch")
     advanceNTDStage(id, 3, currentRole, ntdRole)
+    reload()
+  }
+
+  // ── Stage 2: sourcing attaches updated spec → refreshes that commodity's components ──
+  const handleUpdateSpecComponents = (commodity: NTDCommodity, fileName?: string) => {
+    if (!initData) return
+    const UPDATED_DEMO: Record<NTDCommodity, string[]> = {
+      "Sheet Metal": ["Core Insert", "Cavity Plate", "Punch Tool"],
+      "Plastics":    ["Ejector Pin", "Runner System", "Sprue Bush"],
+      "EPS":         ["Guide Pillar", "Return Pin"],
+    }
+    const names = UPDATED_DEMO[commodity]
+    const otherComps = initData.components.filter(c => c.commodity !== commodity)
+    const newComps = names.map(name => ({ componentId: "", name, commodity }))
+    let counter = 1
+    const reIndexed = [...otherComps, ...newComps].map(c => ({ ...c, componentId: `C${String(counter++).padStart(2, "0")}` }))
+    const updatedSheets = {
+      ...(initData.tech_spec_sheets ?? {}),
+      [commodity]: {
+        file_name: fileName ?? `TechSpec_${commodity.replace(/\s+/g, "")}_v2.xlsx`,
+        link: "", uploaded_at: new Date().toISOString(), uploaded_by: currentRole,
+      },
+    }
+    setNTDInitiation(id, { ...initData, components: reIndexed, tech_spec_sheets: updatedSheets })
+    setS2SpecAttachments(prev => { const n = { ...prev }; delete n[commodity]; return n })
+    appendActivity(id, currentRole, ntdRole, 2, "file_uploaded",
+      `Sourcing uploaded updated ${commodity} spec sheet${fileName ? ` (${fileName})` : ""} — component list refreshed`)
+    reload()
+  }
+
+  // ── Stage 2: toggle merge selection for a component ──
+  const toggleMergeSelect = (commodity: NTDCommodity, componentId: string) => {
+    setMergeSelections(prev => {
+      const cur = new Set(prev[commodity] ?? [])
+      if (cur.has(componentId)) cur.delete(componentId)
+      else if (cur.size < 3) cur.add(componentId)
+      return { ...prev, [commodity]: cur }
+    })
+  }
+
+  // ── Stage 2: toggle semi-progression flag per commodity ──
+  const handleToggleSemiProgression = (commodity: NTDCommodity) => {
+    if (!initData) return
+    const current = initData.semi_progression?.[commodity] ?? false
+    const updated: typeof initData = {
+      ...initData,
+      semi_progression: { ...(initData.semi_progression ?? {}), [commodity]: !current },
+    }
+    setNTDInitiation(id, updated)
     reload()
   }
 
@@ -433,7 +505,8 @@ export default function NTDDetailPage() {
   // ── Stage 6 handoff ──
   const handleSubmitHandoff = () => {
     // Use components from initiation data (already have commodity field)
-    const initComps = initData?.components ?? []
+    // Exclude merged components — only active ones go to handoff
+    const initComps = (initData?.components ?? []).filter(c => c.status !== "merged")
     // Merge with any name overrides from local state
     const comps = initComps.length > 0
       ? initComps
@@ -574,7 +647,7 @@ export default function NTDDetailPage() {
           {initData && (
             <p className="text-[11px] text-slate-400">
               Submitted by {initData.submitted_by}
-              {initData.tech_spec_sheet && ` · Tech Spec: ${initData.tech_spec_sheet.file_name}`}
+              {initData.tech_spec_sheets && Object.keys(initData.tech_spec_sheets).length > 0 && ` · ${Object.keys(initData.tech_spec_sheets).length} spec sheet(s)`}
               {initData.part_specs.length > 0 && ` · ${initData.part_specs.length} spec file(s)`}
             </p>
           )}
@@ -586,20 +659,22 @@ export default function NTDDetailPage() {
             <p className="text-xs text-slate-500 italic">{initData.notes}</p>
           )}
           <div className="flex flex-wrap gap-3">
-            {initData.tech_spec_sheet && (
-              initData.tech_spec_sheet.link.startsWith("http") ? (
-                <a href={initData.tech_spec_sheet.link} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors">
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
-                  {initData.tech_spec_sheet.file_name}
-                  <span className="text-slate-400 ml-1">· master spec</span>
-                </a>
-              ) : (
-                <span className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
-                  {initData.tech_spec_sheet.file_name}
-                  <span className="text-slate-400 ml-1">· master spec</span>
-                </span>
+            {initData.tech_spec_sheets && Object.entries(initData.tech_spec_sheets).map(([commodity, sheet]) =>
+              sheet && (
+                sheet.link.startsWith("http") ? (
+                  <a key={commodity} href={sheet.link} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors">
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+                    {sheet.file_name}
+                    <span className="text-slate-400 ml-1">· {commodity}</span>
+                  </a>
+                ) : (
+                  <span key={commodity} className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+                    {sheet.file_name}
+                    <span className="text-slate-400 ml-1">· {commodity}</span>
+                  </span>
+                )
               )
             )}
             {initData.part_specs.map(f => {
@@ -623,142 +698,217 @@ export default function NTDDetailPage() {
     </div>
   )
 
-  // Stage 2 — Spec Sheet, Query & Sourcing Sign-off
+  // Stage 2 — Component Review & Sourcing Sign-off
   if (stage >= 1) {
     const s2Queries = specData?.queries ?? []
     const hasOpenQuery = s2Queries.some(q => !q.resolved)
     cards.push(
-      <StageCard key="s2" stageNum={2} stage={stage} colorClass="border-teal-500" title="Spec Sheet & Sign-off"
+      <StageCard key="s2" stageNum={2} stage={stage} colorClass="border-teal-500" title="Component Review & Sign-off"
         doneLabel={specData?.sourcing_signed ? `Approved by ${specData.sourcing_signed_by}` : undefined}>
-        <div className="space-y-5">
+        <div className="space-y-6">
 
-          {/* ── Spec sheet + vendor comparisons ── */}
-          {!specData ? (
-            isSourcing ? (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    Spec Sheet Link <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    {specSheetFileName ? (
-                      <div className="flex-1 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-                        <Paperclip className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <span className="text-sm text-blue-700 truncate flex-1">{specSheetFileName}</span>
-                        <button type="button" onClick={() => { setSpecSheet(""); setSpecSheetFileName("") }}
-                          className="text-slate-400 hover:text-slate-600 shrink-0"><X className="w-3.5 h-3.5" /></button>
+          {/* ── Per-commodity component tables ── */}
+          {initData?.components && initData.components.length > 0 ? (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Components <span className="ml-1 font-normal text-slate-400 normal-case">({initData.components.length} total)</span>
+              </p>
+              {NTD_COMMODITIES.map(commodity => {
+                const comps = initData.components.filter(c => c.commodity === commodity && c.status !== "merged")
+                if (comps.length === 0 && !(initData.components.some(c => c.commodity === commodity))) return null
+                const currentSheet = initData.tech_spec_sheets?.[commodity]
+                const pendingFile = s2SpecAttachments[commodity]
+                const canEdit = isSourcing && !specData?.sourcing_signed
+                const specInputId = `spec-file-${commodity.replace(/\s+/g, "-").toLowerCase()}`
+                const mergeLocked = !isSourcing || !!specData?.sourcing_signed || stage >= 3
+                const commoditySelected = mergeSelections[commodity] ?? new Set<string>()
+                const isSP = initData.semi_progression?.[commodity] ?? false
+                return (
+                  <div key={commodity} className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+
+                    {/* ── Commodity header row ── */}
+                    <div className="flex flex-wrap items-center gap-y-2 gap-x-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
+                      {/* Left: commodity identity */}
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <span className="text-sm font-bold text-slate-800 leading-none">{commodity}</span>
+                        <span className="shrink-0 text-[10px] bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded-full">
+                          {comps.length} {comps.length !== 1 ? "components" : "component"}
+                        </span>
+                        {isSP && (
+                          <span className="shrink-0 text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">SP</span>
+                        )}
                       </div>
-                    ) : (
-                      <input type="text" autoComplete="off" value={specSheet} onChange={e => { setSpecSheet(e.target.value); setSpecSheetFileName("") }}
-                        placeholder="Drive / SharePoint link"
-                        className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
-                    )}
-                    <label className="cursor-pointer flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-500 hover:text-slate-700 text-sm font-medium px-3 py-2 rounded-lg transition-colors shrink-0"
-                      title="Attach a file">
-                      <Paperclip className="w-3.5 h-3.5" />
-                      <input type="file" className="sr-only"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) readFileAsDataURL(f, (url, name) => { setSpecSheet(url); setSpecSheetFileName(name) }) }} />
-                    </label>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Vendor Comparisons</p>
-                    <button
-                      onClick={() => setComparisons(prev => [...prev, { id: String(Date.now()), vendor_name: "", spec_doc_link: "", notes: "" }])}
-                      className="text-xs text-teal-700 hover:text-teal-900 flex items-center gap-1 font-medium">
-                      <Plus className="w-3 h-3" /> Add Row
-                    </button>
-                  </div>
-                  {comparisons.length === 0 && (
-                    <p className="text-xs text-slate-400 italic px-1">No comparisons added yet — optional</p>
-                  )}
-                  {comparisons.map(c => (
-                    <div key={c.id} className="flex gap-2 items-start bg-slate-50 rounded-lg p-2">
-                      <input type="text" autoComplete="off" placeholder="Vendor name" value={c.vendor_name}
-                        onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, vendor_name: e.target.value } : x))}
-                        className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
-                      <input type="text" autoComplete="off" placeholder="Spec doc link" value={c.spec_doc_link}
-                        onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, spec_doc_link: e.target.value } : x))}
-                        className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
-                      <input type="text" autoComplete="off" placeholder="Notes" value={c.notes}
-                        onChange={e => setComparisons(prev => prev.map(x => x.id === c.id ? { ...x, notes: e.target.value } : x))}
-                        className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400" />
-                      <button onClick={() => setComparisons(prev => prev.filter(x => x.id !== c.id))}
-                        className="p-1 text-slate-300 hover:text-red-400 transition-colors mt-0.5">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {/* Right: semi-progression toggle + spec sheet controls */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        {/* Semi-progression toggle */}
+                        {isSourcing && (
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none" title={stage >= 3 ? "Locked after RFQ dispatch" : "Enable semi-progression pricing for this commodity"}>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={isSP}
+                              disabled={stage >= 3}
+                              onClick={() => handleToggleSemiProgression(commodity)}
+                              className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed ${isSP ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-slate-200"}`}
+                            >
+                              <span className={`inline-block h-3.5 w-3.5 translate-y-px rounded-full bg-white shadow transition-transform ${isSP ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                            </button>
+                            <span className="text-[11px] font-medium text-slate-600">Semi-Progression</span>
+                          </label>
+                        )}
+                        {/* Spec sheet controls */}
+                        <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
+                          {currentSheet ? (
+                            <span className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg font-medium">
+                              <FileSpreadsheet className="w-3.5 h-3.5 text-teal-500 shrink-0" aria-hidden="true" />
+                              <span className="max-w-[140px] truncate">{currentSheet.file_name}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">No spec attached</span>
+                          )}
+                          {canEdit && (
+                            <label
+                              htmlFor={specInputId}
+                              className="cursor-pointer flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors select-none"
+                              aria-label={`${currentSheet ? "Update" : "Attach"} spec sheet for ${commodity}`}
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                              {currentSheet ? "Update Spec" : "Attach Spec"}
+                              <input
+                                id={specInputId}
+                                type="file"
+                                accept=".xlsx,.xls,.csv"
+                                className="sr-only"
+                                onChange={e => {
+                                  const f = e.target.files?.[0]
+                                  if (f) setS2SpecAttachments(prev => ({ ...prev, [commodity]: f.name }))
+                                  e.target.value = ""
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                <p className="text-sm text-amber-800">Awaiting sourcing to prepare the spec sheet.</p>
-              </div>
-            )
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Spec Sheet</p>
-                <VersionedFileInput
-                  file={specData.spec_sheet}
-                  slotName="Spec Sheet"
-                  role={ntdRole}
-                  readOnly={!isSourcing}
-                  onUpload={link => handleSpecFileAction("upload", link)}
-                  onRevise={(link, note) => handleSpecFileAction("revise", link, note)}
-                  onAddComment={() => {}}
-                  onResolveComment={() => {}}
-                />
-              </div>
-              {specData.comparisons.length > 0 && (
-                <div>
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Vendor Comparisons</p>
-                  <div className="space-y-1">
-                    {specData.comparisons.map(c => (
-                      <div key={c.row_id} className="flex items-center gap-3 text-xs text-slate-700 bg-slate-50 rounded-lg px-3 py-2">
-                        <span className="font-medium min-w-[120px] text-slate-800">{c.vendor_name || "—"}</span>
-                        {c.spec_doc_link ? (
-                          <a href={c.spec_doc_link} target="_blank" rel="noopener noreferrer"
-                            className="text-blue-700 hover:underline flex items-center gap-0.5">
-                            <ExternalLink className="w-2.5 h-2.5" /> Doc
-                          </a>
-                        ) : <span className="text-slate-400">No doc</span>}
-                        {c.notes && <span className="text-slate-400">— {c.notes}</span>}
+
+                    {/* ── Pending file confirmation bar ── */}
+                    {canEdit && pendingFile && (
+                      <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-violet-50 border-b border-violet-200">
+                        <Paperclip className="w-4 h-4 text-violet-500 shrink-0" aria-hidden="true" />
+                        <span className="flex-1 min-w-0 text-sm font-medium text-violet-800 truncate">{pendingFile}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateSpecComponents(commodity, pendingFile)}
+                            className="text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 active:bg-teal-800 px-4 py-1.5 rounded-lg transition-colors"
+                          >
+                            Apply →
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setS2SpecAttachments(prev => { const n = { ...prev }; delete n[commodity]; return n })}
+                            aria-label="Discard pending spec file"
+                            className="p-1.5 text-violet-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <X className="w-4 h-4" aria-hidden="true" />
+                          </button>
+                        </div>
                       </div>
-                    ))}
+                    )}
+
+                    {/* ── Column headers ── */}
+                    <div className={`grid gap-3 px-4 py-2 bg-slate-50/60 border-b border-slate-100 ${isSourcing && !mergeLocked ? "grid-cols-[24px_52px_1fr]" : "grid-cols-[52px_1fr]"}`}>
+                      {isSourcing && !mergeLocked && (
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider" aria-hidden="true" />
+                      )}
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ID</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Component Name</span>
+                    </div>
+
+                    {/* ── Component rows ── */}
+                    <div className="divide-y divide-slate-100 bg-white">
+                      {comps.map(c => {
+                        const isChecked = commoditySelected.has(c.componentId)
+                        return (
+                          <div
+                            key={c.componentId}
+                            className={`grid gap-3 px-4 py-3 items-center transition-colors ${isSourcing && !mergeLocked ? "grid-cols-[24px_52px_1fr]" : "grid-cols-[52px_1fr]"} ${isChecked ? "bg-indigo-50" : "hover:bg-slate-50/60"}`}
+                          >
+                            {isSourcing && !mergeLocked && (
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleMergeSelect(commodity, c.componentId)}
+                                aria-label={`Select ${c.name} for merge`}
+                                className="h-3.5 w-3.5 rounded border-slate-300 accent-indigo-600 cursor-pointer"
+                              />
+                            )}
+                            <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded text-center">{c.componentId}</span>
+                            <span className="text-sm text-slate-700 font-medium">{c.name}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* ── Merge panel (sourcing only, pre-sign-off, pre-stage-3) ── */}
+                    {isSourcing && !mergeLocked && (
+                      <div className="px-4 py-3 bg-slate-50/40 border-t border-slate-100">
+                        <ComponentMergePanel
+                          ntdId={id}
+                          commodity={commodity}
+                          selectedIds={commoditySelected}
+                          onClearSelection={() => setMergeSelections(prev => ({ ...prev, [commodity]: new Set() }))}
+                          onUpdate={reload}
+                          currentRole={currentRole}
+                          locked={mergeLocked}
+                        />
+                        {commoditySelected.size === 0 && (
+                          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400">
+                            <GitMerge className="h-3 w-3" />
+                            Check 2–3 components to merge them into one.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <Clock className="w-4 h-4 text-amber-500 shrink-0" aria-hidden="true" />
+              <p className="text-sm text-amber-800">No components found from Stage 1 initiation.</p>
             </div>
           )}
 
           {/* ── Query thread ── */}
           {s2Queries.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Queries
-                {hasOpenQuery && <span className="ml-1.5 bg-amber-100 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">{s2Queries.filter(q => !q.resolved).length} open</span>}
-              </p>
+            <div className="space-y-2 border-t border-slate-100 pt-5">
+              <div className="flex items-center gap-2 mb-3">
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Queries</p>
+                {hasOpenQuery && (
+                  <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    {s2Queries.filter(q => !q.resolved).length} open
+                  </span>
+                )}
+              </div>
               {s2Queries.map(q => (
                 <div key={q.query_id}
-                  className={`rounded-xl border p-3 space-y-2 ${q.resolved ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-start justify-between gap-2">
+                  className={`rounded-xl border p-4 space-y-3 ${q.resolved ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                  <div className="flex items-start justify-between gap-3">
                     <div className="space-y-0.5 flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-800">{q.text}</p>
-                      <p className="text-[10px] text-slate-400">Raised by {q.raised_by} · {new Date(q.raised_at).toLocaleString()}</p>
+                      <p className="text-sm font-semibold text-slate-800 leading-snug">{q.text}</p>
+                      <p className="text-[11px] text-slate-400 mt-1">Raised by {q.raised_by} · {new Date(q.raised_at).toLocaleString()}</p>
                     </div>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${q.resolved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${q.resolved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                       {q.resolved ? "Resolved" : "Open"}
                     </span>
                   </div>
                   {q.resolved && q.response && (
-                    <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2">
-                      <p className="text-[10px] font-bold text-emerald-600 uppercase mb-0.5">R&D Response</p>
-                      <p className="text-xs text-slate-700">{q.response}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">by {q.resolved_by} · {new Date(q.resolved_at!).toLocaleString()}</p>
+                    <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2.5">
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">R&D Response</p>
+                      <p className="text-sm text-slate-700">{q.response}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">by {q.resolved_by} · {new Date(q.resolved_at!).toLocaleString()}</p>
                     </div>
                   )}
                   {!q.resolved && isRnd && (
@@ -768,68 +918,74 @@ export default function NTDDetailPage() {
                         onChange={e => setQueryResponseText(prev => ({ ...prev, [q.query_id]: e.target.value }))}
                         placeholder="Type your response..."
                         rows={2}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                        aria-label="Response to query"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
                       />
                       <button onClick={() => handleResolveQuery(q.query_id)}
-                        className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-lg transition-colors">
+                        className="text-sm font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg transition-colors">
                         Respond & Resolve
                       </button>
                     </div>
                   )}
                   {!q.resolved && !isRnd && (
-                    <p className="text-[11px] text-amber-700 italic">Awaiting R&D response...</p>
+                    <p className="text-xs text-amber-700 italic">Awaiting R&D response...</p>
                   )}
                 </div>
               ))}
             </div>
           )}
 
-          {/* ── Raise query (sourcing) ── */}
-          {isSourcing && specData && !specData.sourcing_signed && (
-            <div className="space-y-2 border-t border-slate-100 pt-4">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Raise a Query to R&D</p>
+          {/* ── Raise query (sourcing only) ── */}
+          {isSourcing && !specData?.sourcing_signed && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+                <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">Raise a Query to R&D</p>
+              </div>
               <div className="flex gap-2">
+                <label htmlFor="s2-query-input" className="sr-only">Query text</label>
                 <input
+                  id="s2-query-input"
                   type="text"
                   value={queryText}
                   onChange={e => setQueryText(e.target.value)}
-                  placeholder="Type your query..."
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  placeholder="Describe your query or concern…"
+                  className="flex-1 rounded-lg border border-amber-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-slate-400"
                 />
                 <button onClick={handleRaiseQuery} disabled={!queryText.trim()}
-                  className="flex items-center gap-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors whitespace-nowrap">
-                  <AlertTriangle className="w-3.5 h-3.5" /> Raise Query
+                  className="flex items-center gap-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-lg transition-colors whitespace-nowrap">
+                  <AlertTriangle className="w-4 h-4" aria-hidden="true" /> Raise Query
                 </button>
               </div>
             </div>
           )}
 
           {/* ── Sourcing sign-off ── */}
-          <div className={`rounded-xl border px-4 py-3 transition-colors ${specData?.sourcing_signed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sourcing Approval</p>
+          <div className={`rounded-xl border px-5 py-4 transition-colors ${specData?.sourcing_signed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">Sourcing Approval</p>
             {specData?.sourcing_signed ? (
               <div>
-                <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Approved by {specData.sourcing_signed_by}
+                <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Approved by {specData.sourcing_signed_by}
                 </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(specData.sourcing_signed_at).toLocaleString()}</p>
+                <p className="text-xs text-slate-400 mt-1">{new Date(specData.sourcing_signed_at).toLocaleString()}</p>
               </div>
             ) : isSourcing ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {hasOpenQuery && (
-                  <p className="text-xs text-amber-700 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Resolve all open queries before approving.
+                  <p className="text-sm text-amber-700 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" /> Resolve all open queries before approving.
                   </p>
                 )}
                 <button
                   onClick={handleSpecSignOff}
-                  disabled={(!specData && !specSheet.trim()) || hasOpenQuery}
-                  className="text-xs font-semibold bg-teal-700 hover:bg-teal-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-lg transition-colors">
-                  {!specData ? "Save & Approve →" : "Approve & Advance to Stage 3 →"}
+                  disabled={hasOpenQuery}
+                  className="flex items-center gap-1.5 text-xs font-semibold bg-teal-700 hover:bg-teal-800 active:bg-teal-900 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-lg transition-colors">
+                  Approve &amp; Advance to Stage 3 →
                 </button>
               </div>
             ) : (
-              <p className="text-xs text-slate-400 italic">Awaiting sourcing approval</p>
+              <p className="text-sm text-slate-400 italic">Awaiting sourcing approval</p>
             )}
           </div>
 
@@ -951,118 +1107,315 @@ export default function NTDDetailPage() {
   if (stage >= 3) cards.push(
     <StageCard key="s4" stageNum={4} stage={stage} colorClass="border-amber-500" title="Quotation & Negotiation"
       doneLabel={quotationData ? `${Object.values(quotationData).filter(v => v.status === "finalized").length} finalized` : undefined}>
-      <div className="space-y-4">
-        {rfqData && Object.entries(rfqData.vendors).map(([vid, vendor]) => {
+      <div className="space-y-5">
+        {rfqData && NTD_COMMODITIES.map(commodity => {
+          const commodityVendors = Object.entries(rfqData.vendors).filter(([, v]) => v.commodity === commodity)
+          if (commodityVendors.length === 0) return null
+
+          const finalizedCount = commodityVendors.filter(([vid]) => quotationData?.[vid]?.status === "finalized").length
+          const quoteCount = commodityVendors.filter(([vid]) => quotationData?.[vid]?.quotation).length
+
+          return (
+            <div key={commodity} className="space-y-2">
+              {/* Commodity section header */}
+              <div className="flex items-center gap-3 px-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full">
+                  {commodity}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {finalizedCount}/{commodityVendors.length} finalized · {quoteCount} quoted
+                </span>
+                <div className="flex-1 h-px bg-slate-100" />
+              </div>
+
+              {/* Vendor cards for this commodity */}
+              {commodityVendors.map(([vid, vendor]) => {
           const q = quotationData?.[vid]
           const isFinalized = q?.status === "finalized"
-          // Last vendor message with a counter offer
           const lastVendorCounter = [...(q?.thread ?? [])].reverse().find(m => m.author_type === "vendor" && m.counter_offer)
           const lastInternalCounter = [...(q?.thread ?? [])].reverse().find(m => m.author_type === "internal" && m.counter_offer)
           const vendorAwaitingResponse = q?.thread.length && q.thread[q.thread.length - 1].author_type === "vendor"
+          const rfqUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/rfq/ntd/${id}/${vendor.token}`
 
           return (
-            <div key={vid} className={`border rounded-xl overflow-hidden ${isFinalized ? "border-emerald-200" : "border-slate-200"}`}>
-              {/* Vendor header */}
-              <div className={`flex items-center justify-between px-4 py-3 ${isFinalized ? "bg-emerald-50" : "bg-slate-50"}`}>
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-slate-800">{vendor.vendor_name}</p>
-                  {vendorAwaitingResponse && !isFinalized && (
-                    <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full animate-pulse">
-                      Vendor replied
-                    </span>
-                  )}
-                </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+            <div key={vid} className={`rounded-xl border overflow-hidden ${isFinalized ? "border-emerald-200" : "border-slate-200"}`}>
+
+              {/* ── Header ── */}
+              <div className={`flex items-center gap-2 px-3 py-2 border-b ${isFinalized ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100"}`}>
+                <p className="font-semibold text-slate-800 text-sm truncate flex-1">{vendor.vendor_name}</p>
+                {vendorAwaitingResponse && !isFinalized && (
+                  <span className="shrink-0 text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full animate-pulse">
+                    Vendor replied
+                  </span>
+                )}
+                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
                   isFinalized ? "bg-emerald-100 text-emerald-700"
                   : q?.status === "negotiating" ? "bg-amber-100 text-amber-700"
                   : q?.status === "quotation_received" ? "bg-blue-100 text-blue-700"
                   : "bg-slate-100 text-slate-500"}`}>
                   {isFinalized ? "Finalized ✓" : q?.status === "negotiating" ? "Negotiating" : q?.status === "quotation_received" ? "Quote received" : "Awaiting quote"}
                 </span>
+                <div className="shrink-0 flex items-center gap-1 text-[9px] text-slate-400 font-medium pl-1 border-l border-slate-200">
+                  <span className="hidden sm:inline">RFQ link</span>
+                  <CopyButton text={rfqUrl} />
+                </div>
               </div>
 
-              <div className="px-4 py-3 space-y-3">
-                {/* Quotation summary */}
-                {q?.quotation ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-slate-50 rounded-lg px-3 py-2">
-                      <p className="text-[10px] text-slate-400 uppercase">Quote</p>
-                      <p className="text-sm font-bold text-slate-800">{q.quotation.currency} {q.quotation.amount.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg px-3 py-2">
-                      <p className="text-[10px] text-slate-400 uppercase">Lead Time</p>
-                      <p className="text-sm font-bold text-slate-800">{q.quotation.lead_time_days}d</p>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg px-3 py-2">
-                      <p className="text-[10px] text-slate-400 uppercase">Doc</p>
-                      {q.quotation.doc_link
-                        ? <a href={q.quotation.doc_link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1"><ExternalLink className="w-3 h-3" />View</a>
-                        : <p className="text-xs text-slate-400">—</p>}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 italic">No quotation submitted yet. Share the RFQ link for the vendor to submit.</p>
-                )}
+              {/* ── Body: two-column split ── */}
+              <div className="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] divide-x divide-slate-100">
 
-                {/* Negotiation thread */}
-                {q?.thread && q.thread.length > 0 && (
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-2">
-                    {q.thread.map(msg => (
-                      <div key={msg.message_id}
-                        className={`rounded-lg px-3 py-2 text-xs w-fit max-w-[85%] ${msg.author_type === "internal" ? "bg-blue-900 text-white ml-auto" : "bg-white border border-slate-200 text-slate-800"}`}>
-                        <p className={`text-[9px] font-bold mb-0.5 ${msg.author_type === "internal" ? "text-blue-200" : "text-slate-400"}`}>
-                          {msg.author_type === "internal" ? `Sourcing — ${msg.author_name}` : `Vendor — ${vendor.vendor_name}`}
-                        </p>
-                        {msg.text}
-                        {msg.counter_offer && (
-                          <p className={`mt-1 text-[10px] font-bold ${msg.author_type === "internal" ? "text-blue-200" : "text-amber-700"}`}>
-                            Counter offer: {q.quotation?.currency ?? "₹"} {msg.counter_offer.toLocaleString()}
-                          </p>
-                        )}
-                        <p className={`text-[8px] mt-0.5 ${msg.author_type === "internal" ? "text-blue-300" : "text-slate-400"}`}>
-                          {new Date(msg.created_at).toLocaleTimeString()}
-                        </p>
+                {/* Left — quote summary + per-component category selection */}
+                <div className="p-3 space-y-2">
+                  {q?.quotation ? (
+                    <>
+                      {/* Lead time + doc */}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div className="bg-slate-50 rounded-lg px-2.5 py-2">
+                          <p className="text-[9px] text-slate-400 uppercase tracking-wide">Lead time</p>
+                          <p className="text-sm font-bold text-slate-800 leading-tight">{q.quotation.lead_time_days}d</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-lg px-2.5 py-2">
+                          <p className="text-[9px] text-slate-400 uppercase tracking-wide">Currency</p>
+                          <p className="text-sm font-bold text-slate-800 leading-tight">{q.quotation.currency}</p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
 
-                {/* Sourcing action area */}
-                {isSourcing && !isFinalized && (
-                  <div className="space-y-3 border-t border-slate-100 pt-3">
-                    {/* Accept vendor counter if they replied with a price */}
-                    {lastVendorCounter && (
-                      <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-                        <div>
-                          <p className="text-xs font-semibold text-amber-900">Vendor counter offer</p>
-                          <p className="text-sm font-bold text-amber-800 mt-0.5">
-                            {q?.quotation?.currency ?? "₹"} {lastVendorCounter.counter_offer!.toLocaleString()}
+                      {/* Per-component pricing table with inline category selection for sourcing */}
+                      {q.quotation.component_prices && (() => {
+                        const vendorComps = (initData?.components ?? []).filter(c => c.commodity === vendor.commodity && c.status !== "merged")
+                        if (vendorComps.length === 0) return null
+                        const hasSP = initData?.semi_progression?.[vendor.commodity as NTDCommodity] ?? false
+                        const catSels = q.category_selections ?? {}
+
+                        const categoryLabel: Record<PriceCategory, string> = { stage: "Stage", progression: "Prog.", semi_progression: "Semi" }
+
+                        const selectedTotal = vendorComps.reduce((sum, comp) => {
+                          const sel = catSels[comp.componentId]
+                          if (!sel) return sum
+                          const cp = q.quotation!.component_prices![comp.componentId]
+                          if (!cp) return sum
+                          return sum + (sel.selected_category === "stage" ? (cp.stage ?? 0)
+                            : sel.selected_category === "progression" ? (cp.progression ?? 0)
+                            : (cp.semi_progression ?? 0))
+                        }, 0)
+
+                        const allSelected = vendorComps.every(c => !!catSels[c.componentId])
+
+                        return (
+                          <div className="space-y-1.5">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">
+                              Quoted Prices {isSourcing && <span className="text-amber-500">— select category per component</span>}
+                            </p>
+                            <div className="rounded-lg border border-slate-100 overflow-hidden">
+                              <table className="w-full text-[10px]">
+                                <thead>
+                                  <tr className="border-b border-slate-100 bg-slate-50">
+                                    <th className="px-2 py-1.5 text-left font-semibold text-slate-400 w-[30%]">Comp</th>
+                                    <th className="px-2 py-1.5 text-right font-bold text-blue-600 border-l border-blue-50">Stage</th>
+                                    <th className="px-2 py-1.5 text-right font-bold text-amber-600 border-l border-amber-50">Prog.</th>
+                                    {hasSP && <th className="px-2 py-1.5 text-right font-bold text-indigo-600 border-l border-indigo-50">Semi</th>}
+                                    <th className="px-2 py-1.5 text-center font-bold text-emerald-600 border-l border-slate-100 w-[80px]">
+                                      {isSourcing ? "Apply" : "Applied"}
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                  {vendorComps.map(comp => {
+                                    const cp = q.quotation!.component_prices![comp.componentId]
+                                    const sel = catSels[comp.componentId]
+                                    const appliedPrice = sel && cp
+                                      ? sel.selected_category === "stage" ? (cp.stage ?? 0)
+                                      : sel.selected_category === "progression" ? (cp.progression ?? 0)
+                                      : (cp.semi_progression ?? 0)
+                                      : null
+
+                                    return (
+                                      <tr key={comp.componentId} className={`hover:bg-slate-50 ${sel ? "bg-emerald-50/30" : ""}`}>
+                                        <td className="px-2 py-1.5">
+                                          <span className="font-mono text-[9px] font-bold text-slate-400 mr-1">{comp.componentId}</span>
+                                          <span className="text-slate-700 truncate">{comp.name}</span>
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-600 border-l border-blue-50">
+                                          {cp ? (cp.stage ?? 0).toLocaleString() : "—"}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-600 border-l border-amber-50">
+                                          {cp ? (cp.progression ?? 0).toLocaleString() : "—"}
+                                        </td>
+                                        {hasSP && (
+                                          <td className="px-2 py-1.5 text-right tabular-nums text-slate-600 border-l border-indigo-50">
+                                            {cp ? (cp.semi_progression ?? 0).toLocaleString() : "—"}
+                                          </td>
+                                        )}
+                                        <td className="px-2 py-1.5 border-l border-slate-100 text-center">
+                                          {isSourcing ? (
+                                            <select
+                                              value={sel?.selected_category ?? ""}
+                                              onChange={e => {
+                                                if (!e.target.value) return
+                                                const cat = e.target.value as PriceCategory
+                                                const price = cat === "stage" ? (cp?.stage ?? 0)
+                                                  : cat === "progression" ? (cp?.progression ?? 0)
+                                                  : (cp?.semi_progression ?? 0)
+                                                const existing = getNTDQuotation(id) ?? {}
+                                                const newSelections: Record<string, ComponentCategorySelection> = {
+                                                  ...(existing[vid]?.category_selections ?? {}),
+                                                  [comp.componentId]: { selected_category: cat, base_price: price, currency: q.quotation!.currency },
+                                                }
+                                                setNTDQuotation(id, {
+                                                  ...existing,
+                                                  [vid]: { ...existing[vid]!, category_selections: newSelections },
+                                                })
+                                                reload()
+                                              }}
+                                              className="text-[10px] rounded border border-slate-200 bg-white px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400 w-full"
+                                            >
+                                              <option value="">—</option>
+                                              <option value="stage">Stage</option>
+                                              <option value="progression">Prog.</option>
+                                              {hasSP && <option value="semi_progression">Semi</option>}
+                                            </select>
+                                          ) : (
+                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${sel ? "bg-emerald-100 text-emerald-700" : "text-slate-300"}`}>
+                                              {sel ? categoryLabel[sel.selected_category] : "—"}
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                                {allSelected && (
+                                  <tfoot>
+                                    <tr className="border-t-2 border-emerald-200 bg-emerald-50">
+                                      <td colSpan={hasSP ? 4 : 3} className="px-2 py-2 text-[10px] font-bold text-emerald-700 uppercase tracking-wide">
+                                        Selected Total
+                                      </td>
+                                      <td className="px-2 py-2 text-right border-l border-emerald-200">
+                                        <span className="text-sm font-bold text-emerald-800 tabular-nums">{q.quotation.currency} {selectedTotal.toLocaleString()}</span>
+                                      </td>
+                                    </tr>
+                                  </tfoot>
+                                )}
+                              </table>
+                            </div>
+                            {/* Auto-fill counter-price hint */}
+                            {allSelected && isSourcing && !isFinalized && (
+                              <button
+                                onClick={() => {
+                                  setCounterPrice(prev => ({ ...prev, [vid]: String(selectedTotal) }))
+                                  setCounterText(prev => ({ ...prev, [vid]: prev[vid] ?? `Negotiating on selected total: ${q.quotation!.currency} ${selectedTotal.toLocaleString()}` }))
+                                }}
+                                className="w-full text-[10px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg transition-colors text-left"
+                              >
+                                ↓ Use selected total ({q.quotation.currency} {selectedTotal.toLocaleString()}) as counter-price
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })()}
+
+                      {/* Quoted category totals (read-only reference) */}
+                      {(q.quotation.stage_price != null || q.quotation.progression_price != null) && (
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5 space-y-0.5">
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Quoted totals</p>
+                          {q.quotation.stage_price != null && (
+                            <div className="flex justify-between text-[10px]">
+                              <span className="text-slate-500">Stage</span>
+                              <span className="font-semibold text-slate-700">{q.quotation.currency} {q.quotation.stage_price.toLocaleString()}</span>
+                            </div>
+                          )}
+                          {q.quotation.progression_price != null && (
+                            <div className="flex justify-between text-[10px]">
+                              <span className="text-slate-500">Progression</span>
+                              <span className="font-semibold text-slate-700">{q.quotation.currency} {q.quotation.progression_price.toLocaleString()}</span>
+                            </div>
+                          )}
+                          {q.quotation.semi_progression_price != null && (
+                            <div className="flex justify-between text-[10px]">
+                              <span className="text-indigo-500">Semi-prog.</span>
+                              <span className="font-semibold text-indigo-700">{q.quotation.currency} {q.quotation.semi_progression_price.toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {q.quotation.doc_link
+                        ? <a href={q.quotation.doc_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:underline"><ExternalLink className="w-3 h-3" />Quote doc</a>
+                        : <p className="text-[10px] text-slate-400">No doc attached</p>}
+
+                      {isFinalized && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-semibold pt-0.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Finalized
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="py-3 space-y-1">
+                      <p className="text-[11px] text-slate-400 italic">No quote yet.</p>
+                      <p className="text-[10px] text-slate-400">Share RFQ link for vendor to submit.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right — thread + actions */}
+                <div className="p-3 flex flex-col gap-2">
+
+                  {/* Thread — capped height, scrolls internally */}
+                  {q?.thread && q.thread.length > 0 ? (
+                    <div className="max-h-28 overflow-y-auto space-y-1 rounded-lg border border-slate-100 bg-slate-50 p-1.5">
+                      {q.thread.map(msg => (
+                        <div key={msg.message_id}
+                          className={`rounded-md px-2.5 py-1.5 text-[10px] w-fit max-w-[90%] ${msg.author_type === "internal" ? "bg-blue-900 text-white ml-auto" : "bg-white border border-slate-200 text-slate-800"}`}>
+                          <p className={`text-[8px] font-bold mb-0.5 ${msg.author_type === "internal" ? "text-blue-200" : "text-slate-400"}`}>
+                            {msg.author_type === "internal" ? `Sourcing — ${msg.author_name}` : `Vendor — ${vendor.vendor_name}`}
+                          </p>
+                          <p className="leading-snug">{msg.text}</p>
+                          {msg.counter_offer && (
+                            <p className={`mt-0.5 text-[9px] font-bold ${msg.author_type === "internal" ? "text-blue-200" : "text-amber-700"}`}>
+                              Counter: {q.quotation?.currency ?? "₹"} {msg.counter_offer.toLocaleString()}
+                            </p>
+                          )}
+                          <p className={`text-[7px] mt-0.5 ${msg.author_type === "internal" ? "text-blue-300" : "text-slate-400"}`}>
+                            {new Date(msg.created_at).toLocaleTimeString()}
                           </p>
                         </div>
-                        <button
-                          onClick={() => handleAcceptVendorPrice(vid, vendor.vendor_name, lastVendorCounter.counter_offer!, q?.quotation?.currency ?? "INR")}
-                          className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors">
-                          Accept & Finalize
-                        </button>
-                      </div>
-                    )}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-400 text-center">
+                      No messages yet
+                    </div>
+                  )}
 
-                    {/* Counter offer input */}
+                  {/* Sourcing action area — always below thread, never hidden */}
+                  {isSourcing && !isFinalized && (
                     <div className="space-y-2">
-                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Send Counter / Message</p>
+                      {lastVendorCounter && (
+                        <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+                          <div>
+                            <p className="text-[9px] font-semibold text-amber-900">Vendor counter</p>
+                            <p className="text-xs font-bold text-amber-800">{q?.quotation?.currency ?? "₹"} {lastVendorCounter.counter_offer!.toLocaleString()}</p>
+                          </div>
+                          <button
+                            onClick={() => handleAcceptVendorPrice(vid, vendor.vendor_name, lastVendorCounter.counter_offer!, q?.quotation?.currency ?? "INR")}
+                            className="text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg transition-colors">
+                            Accept & Finalize
+                          </button>
+                        </div>
+                      )}
                       <textarea
                         value={counterText[vid] ?? ""}
                         onChange={e => setCounterText(prev => ({ ...prev, [vid]: e.target.value }))}
                         onFocus={pausePolling}
                         onBlur={resumePolling}
                         autoComplete="off"
-                        placeholder="Your message or negotiation note..."
+                        placeholder="Message or negotiation note…"
                         rows={2}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
                       />
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">₹</span>
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative flex-1">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">₹</span>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -1071,15 +1424,15 @@ export default function NTDDetailPage() {
                             onChange={e => setCounterPrice(prev => ({ ...prev, [vid]: e.target.value }))}
                             onFocus={pausePolling}
                             onBlur={resumePolling}
-                            placeholder="Counter price (optional)"
-                            className="w-full rounded-lg border border-slate-200 pl-6 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            placeholder="Counter price (opt.)"
+                            className="w-full rounded-lg border border-slate-200 pl-5 pr-2 py-1.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-amber-400"
                           />
                         </div>
                         <button
                           onClick={() => handleSendCounter(vid, vendor.vendor_name)}
                           disabled={!counterText[vid]?.trim()}
-                          className="text-xs font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors whitespace-nowrap">
-                          Send Counter
+                          className="text-[10px] font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                          Send
                         </button>
                         {q?.quotation && (
                           <button onClick={() => {
@@ -1088,26 +1441,23 @@ export default function NTDDetailPage() {
                             appendActivity(id, currentRole, ntdRole, 4, "quotation_submitted", `Quotation finalized for ${vendor.vendor_name}`, { vendor_id: vid })
                             reload()
                           }}
-                            className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors whitespace-nowrap">
-                            Finalize Quote
+                            className="text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                            Finalize
                           </button>
                         )}
                       </div>
                       {lastInternalCounter && (
-                        <p className="text-[10px] text-slate-400">
-                          Last counter sent: {q?.quotation?.currency ?? "₹"} {lastInternalCounter.counter_offer!.toLocaleString()} — awaiting vendor reply
+                        <p className="text-[9px] text-slate-400">
+                          Last sent: {q?.quotation?.currency ?? "₹"} {lastInternalCounter.counter_offer!.toLocaleString()} — awaiting vendor reply
                         </p>
                       )}
                     </div>
-                  </div>
-                )}
-
-                {isFinalized && (
-                  <div className="flex items-center gap-2 text-xs text-emerald-700 font-semibold pt-1">
-                    <CheckCircle2 className="w-4 h-4" /> Finalized at {q?.quotation?.currency} {q?.quotation?.amount?.toLocaleString()}
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
+            </div>
+          )
+        })}
             </div>
           )
         })}
@@ -1122,7 +1472,7 @@ export default function NTDDetailPage() {
     </StageCard>
   )
 
-  // Stage 5 — Supplier Selection
+  // Stage 5 — Supplier Selection (Excel comparison view per commodity)
   if (stage >= 4) cards.push(
     <StageCard key="s5" stageNum={5} stage={stage} colorClass="border-blue-500" title="Supplier Selection"
       doneLabel={selectionData?.sourcing_approved ? `${Object.keys(selectionData.selections ?? {}).length} supplier(s) selected` : undefined}>
@@ -1133,69 +1483,221 @@ export default function NTDDetailPage() {
         const currentSelections = selectionData?.selections ?? {}
 
         return (
-          <div className="space-y-5">
+          <div className="space-y-6">
             {activeCommodities.map(commodity => {
-              const finalizedVendorIds = Object.entries(vendors)
+              const commodityVendors = Object.entries(vendors)
                 .filter(([, v]) => v.commodity === commodity)
+              const finalizedVendors = commodityVendors
                 .filter(([vid]) => quotations[vid]?.status === "finalized")
-                .map(([vid, v]) => ({ vendorId: vid, vendorName: v.vendor_name }))
-
+              const commodityComponents = (initData?.components ?? [])
+                .filter(c => c.commodity === commodity && c.status !== "merged")
+              const hasSP = initData?.semi_progression?.[commodity as NTDCommodity] ?? false
               const selected = currentSelections[commodity]
 
               return (
-                <div key={commodity} className="border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">{commodity}</span>
+                <div key={commodity} className="rounded-xl border border-slate-200 overflow-hidden">
+                  {/* Commodity header */}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{commodity}</span>
+                      <span className="text-[10px] text-slate-400">{finalizedVendors.length} / {commodityVendors.length} vendors finalized</span>
+                    </div>
                     {selected && (
-                      <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
                         <CheckCircle2 className="w-3 h-3" /> {selected.vendor_name}
                       </span>
                     )}
                   </div>
-                  <div className="p-4">
-                    {finalizedVendorIds.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">No finalized vendors for this commodity yet</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {finalizedVendorIds.map(({ vendorId, vendorName }) => {
-                          const q = quotations[vendorId]?.quotation
-                          const isSelected = selected?.vendor_id === vendorId
-                          return (
-                            <div key={vendorId}
-                              className={`flex items-center justify-between rounded-lg border px-3 py-2.5 ${isSelected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"}`}>
-                              <div>
-                                <p className="text-xs font-semibold text-slate-800">{vendorName}</p>
-                                {q && (
-                                  <p className="text-[10px] text-slate-400">
-                                    {q.currency} {q.amount.toLocaleString()} · {q.lead_time_days}d lead time
-                                  </p>
-                                )}
+
+                  {finalizedVendors.length === 0 ? (
+                    <div className="px-4 py-4 text-xs text-slate-400 italic">No finalized vendors yet — complete Stage 4 negotiations first.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      {/* ── Excel-like comparison table ── */}
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          {/* Row 1: vendor name headers spanning their price columns */}
+                          <tr className="border-b border-slate-200">
+                            <th className="px-3 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wide bg-white border-r border-slate-100 w-[180px] sticky left-0 z-10">
+                              Component
+                            </th>
+                            {finalizedVendors.map(([vid, vendor]) => {
+                              const isSelected = selected?.vendor_id === vid
+                              const colSpan = hasSP ? 3 : 2
+                              return (
+                                <th key={vid} colSpan={colSpan}
+                                  className={`px-4 py-3 text-center font-bold border-l border-slate-200 ${isSelected ? "bg-emerald-50 text-emerald-800" : "bg-slate-50 text-slate-700"}`}>
+                                  <div className="flex items-center justify-center gap-1.5 mb-2">
+                                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                                    <span className="text-sm whitespace-nowrap">{vendor.vendor_name}</span>
+                                  </div>
+                                  {isSourcing && !selected && (
+                                    <button
+                                      onClick={() => handleSelectCommoditySupplier(commodity, vid, vendor.vendor_name)}
+                                      className="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-1.5 rounded-lg transition-colors">
+                                      Select Supplier
+                                    </button>
+                                  )}
+                                </th>
+                              )
+                            })}
+                          </tr>
+                          {/* Row 2: price category sub-headers */}
+                          <tr className="border-b-2 border-slate-200">
+                            <th className="px-3 py-1.5 bg-white border-r border-slate-100 sticky left-0 z-10">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] font-semibold text-slate-400 uppercase">Lead time</span>
                               </div>
-                              {isSourcing && !selected && (
-                                <button onClick={() => handleSelectCommoditySupplier(commodity, vendorId, vendorName)}
-                                  className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-lg transition-colors">
-                                  Select
-                                </button>
-                              )}
-                              {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
+                            </th>
+                            {finalizedVendors.map(([vid]) => {
+                              const q = quotations[vid]?.quotation
+                              const isSelected = selected?.vendor_id === vid
+                              const catSels = quotations[vid]?.category_selections ?? {}
+                              const allSelected = commodityComponents.every(c => !!catSels[c.componentId])
+                              const selectedTotal = allSelected ? commodityComponents.reduce((sum, comp) => {
+                                const sel = catSels[comp.componentId]
+                                if (!sel) return sum
+                                const cp = q?.component_prices?.[comp.componentId]
+                                if (!cp) return sum
+                                return sum + (sel.selected_category === "stage" ? (cp.stage ?? 0)
+                                  : sel.selected_category === "progression" ? (cp.progression ?? 0)
+                                  : (cp.semi_progression ?? 0))
+                              }, 0) : null
+
+                              return (
+                                <th key={vid} colSpan={hasSP ? 3 : 2}
+                                  className={`px-3 py-1.5 text-center border-l border-slate-200 ${isSelected ? "bg-emerald-50/60" : "bg-slate-50/60"}`}>
+                                  <div className="flex items-center justify-center gap-3 text-[9px]">
+                                    <span className="text-slate-500">{q ? `${q.lead_time_days}d` : "—"}</span>
+                                    {selectedTotal != null && (
+                                      <span className="font-bold text-emerald-700">{q?.currency} {selectedTotal.toLocaleString()} selected</span>
+                                    )}
+                                  </div>
+                                  {/* Sub-column labels */}
+                                  <div className={`grid ${hasSP ? "grid-cols-3" : "grid-cols-2"} gap-0 mt-1`}>
+                                    <span className="text-[8px] font-bold text-blue-600 uppercase text-center">Stage</span>
+                                    <span className="text-[8px] font-bold text-amber-600 uppercase text-center">Prog.</span>
+                                    {hasSP && <span className="text-[8px] font-bold text-indigo-600 uppercase text-center">Semi</span>}
+                                  </div>
+                                </th>
+                              )
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {commodityComponents.map(comp => (
+                            <tr key={comp.componentId} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="px-3 py-2 bg-white border-r border-slate-100 sticky left-0 z-10">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-[9px] font-bold text-slate-300">{comp.componentId}</span>
+                                  <span className="font-medium text-slate-700 truncate max-w-[130px]">{comp.name}</span>
+                                </div>
+                              </td>
+                              {finalizedVendors.map(([vid]) => {
+                                const q = quotations[vid]?.quotation
+                                const cp = q?.component_prices?.[comp.componentId]
+                                const catSel = quotations[vid]?.category_selections?.[comp.componentId]
+                                const isSelected = selected?.vendor_id === vid
+                                const isVendorSelected = selected?.vendor_id === vid
+
+                                const cellBase = `px-2.5 py-2 text-right tabular-nums border-l`
+                                const highlight = isVendorSelected ? "bg-emerald-50/40" : "bg-white"
+
+                                const appliedHighlight = (cat: PriceCategory) =>
+                                  catSel?.selected_category === cat
+                                    ? "font-bold text-emerald-700 bg-emerald-50"
+                                    : "text-slate-600"
+
+                                return (
+                                  <React.Fragment key={vid}>
+                                    <td className={`${cellBase} border-blue-50 ${highlight} ${appliedHighlight("stage")}`}>
+                                      {cp ? (cp.stage ?? 0).toLocaleString() : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    <td className={`${cellBase} border-amber-50 ${highlight} ${appliedHighlight("progression")}`}>
+                                      {cp ? (cp.progression ?? 0).toLocaleString() : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    {hasSP && (
+                                      <td className={`${cellBase} border-indigo-50 ${highlight} ${appliedHighlight("semi_progression")}`}>
+                                        {cp ? (cp.semi_progression ?? 0).toLocaleString() : <span className="text-slate-300">—</span>}
+                                      </td>
+                                    )}
+                                  </React.Fragment>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                        {/* Totals footer */}
+                        <tfoot>
+                          <tr className="border-t-2 border-slate-200">
+                            <td className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide bg-slate-50 border-r border-slate-100 sticky left-0 z-10">
+                              Subtotals
+                            </td>
+                            {finalizedVendors.map(([vid]) => {
+                              const q = quotations[vid]?.quotation
+                              const isSelected = selected?.vendor_id === vid
+                              const bg = isSelected ? "bg-emerald-50" : "bg-slate-50"
+                              return (
+                                <React.Fragment key={vid}>
+                                  <td className={`px-2.5 py-2 text-right border-l border-blue-100 ${bg}`}>
+                                    <span className="text-[11px] font-bold text-blue-700 tabular-nums">
+                                      {q?.stage_price != null ? q.stage_price.toLocaleString() : "—"}
+                                    </span>
+                                  </td>
+                                  <td className={`px-2.5 py-2 text-right border-l border-amber-100 ${bg}`}>
+                                    <span className="text-[11px] font-bold text-amber-700 tabular-nums">
+                                      {q?.progression_price != null ? q.progression_price.toLocaleString() : "—"}
+                                    </span>
+                                  </td>
+                                  {hasSP && (
+                                    <td className={`px-2.5 py-2 text-right border-l border-indigo-100 ${bg}`}>
+                                      <span className="text-[11px] font-bold text-indigo-700 tabular-nums">
+                                        {q?.semi_progression_price != null ? q.semi_progression_price.toLocaleString() : "—"}
+                                      </span>
+                                    </td>
+                                  )}
+                                </React.Fragment>
+                              )
+                            })}
+                          </tr>
+                          <tr className="border-t border-slate-200">
+                            <td className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wide bg-slate-50 border-r border-slate-100 sticky left-0 z-10">
+                              Grand Total
+                            </td>
+                            {finalizedVendors.map(([vid]) => {
+                              const q = quotations[vid]?.quotation
+                              const isSelected = selected?.vendor_id === vid
+                              const colSpan = hasSP ? 3 : 2
+                              return (
+                                <td key={vid} colSpan={colSpan}
+                                  className={`px-3 py-2 text-center border-l border-slate-200 ${isSelected ? "bg-emerald-100" : "bg-slate-50"}`}>
+                                  <span className={`text-sm font-bold tabular-nums ${isSelected ? "text-emerald-800" : "text-slate-800"}`}>
+                                    {q ? `${q.currency} ${q.amount.toLocaleString()}` : "—"}
+                                  </span>
+                                  {q && <span className="ml-1 text-[9px] text-slate-400">{q.lead_time_days}d</span>}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )
             })}
 
+            {/* R&D acknowledgement gate */}
             {selectionData?.sourcing_approved && !selectionData.rnd_acknowledged && isRnd && (
               <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-4 space-y-3">
                 <p className="text-sm font-semibold text-indigo-800">Acknowledge Supplier Selections</p>
                 <div className="space-y-1">
                   {Object.entries(selectionData.selections ?? {}).map(([commodity, sel]) => (
-                    <p key={commodity} className="text-xs text-slate-700">
-                      <span className="font-semibold text-slate-500">{commodity}:</span> {sel.vendor_name}
-                    </p>
+                    <div key={commodity} className="flex items-center gap-2 text-xs">
+                      <span className="font-semibold text-slate-500 w-24 shrink-0">{commodity}</span>
+                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                      <span className="text-slate-700">{sel.vendor_name}</span>
+                    </div>
                   ))}
                 </div>
                 <button onClick={handleRndAcknowledge}
@@ -1237,20 +1739,24 @@ export default function NTDDetailPage() {
           {!handoffData?.submitted_by ? isRnd ? (
             <div className="space-y-4">
               {/* Component preview from initiation data */}
-              {initData?.components && initData.components.length > 0 ? (
+              {initData?.components && initData.components.filter(c => c.status !== "merged").length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Components ({initData.components.length})</p>
+                  {(() => { const activeComps = initData.components.filter(c => c.status !== "merged"); return (
+                  <>
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Components ({activeComps.length})</p>
                   <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-800">Component list is locked from Stage 1 and cannot be changed.</p>
                   </div>
-                  {initData.components.map(c => (
+                  {activeComps.map(c => (
                     <div key={c.componentId} className="flex gap-2 items-center text-xs text-slate-700">
                       <span className="font-bold text-slate-400 w-10">{c.componentId}</span>
                       <span className="flex-1">{c.name}</span>
                       <span className="text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{c.commodity}</span>
                     </div>
                   ))}
+                  </>
+                  )})()}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1496,6 +2002,46 @@ export default function NTDDetailPage() {
                       </span>
                     </div>
 
+                    {/* Supplier portal link — shown until timeline submitted */}
+                    {commStatus === "not_started" && (() => {
+                      const portalUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/supplier/ntd/${id}?commodity=${encodeURIComponent(commodity)}`
+                      return (
+                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Supplier Portal</p>
+                            <p className="text-xs text-slate-500 truncate">{portalUrl}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <a href={portalUrl} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                              <ExternalLink className="w-3 h-3" /> Open
+                            </a>
+                            <CopyButton text={portalUrl} />
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Delivery timeline phases (from supplier submission) */}
+                    {commData && (commData.phases ?? []).length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supplier Delivery Timeline</p>
+                        {commData.phases!.map(p => (
+                          <div key={p.name} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-1.5 border border-slate-100">
+                            <span className="text-slate-600">{p.name}</span>
+                            <span className="font-bold text-slate-800">{p.days} days</span>
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between text-xs bg-blue-50 rounded-lg px-3 py-1.5 border border-blue-200">
+                          <span className="font-bold text-blue-700">Total · Expected Delivery</span>
+                          <span className="font-black text-blue-900">
+                            {commData.phases!.reduce((s, p) => s + p.days, 0)}d
+                            {commData.eta_date ? ` · ${new Date(commData.eta_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : ""}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Completion strip */}
                     {commStatus === "complete" && commData && (
                       <div className="flex items-center gap-2 text-xs text-emerald-700">
@@ -1560,6 +2106,7 @@ export default function NTDDetailPage() {
     <StageCard key="s10" stageNum={10} stage={stage} colorClass="border-orange-500" title="Trials"
       doneLabel={trialsData?.stage_complete ? `All ${trialProgress.total} components passed` : undefined}>
       <div className="space-y-3">
+        {/* Summary row */}
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-slate-600">{trialProgress.passed} / {trialProgress.total} components passed (cumulative)</p>
@@ -1572,6 +2119,91 @@ export default function NTDDetailPage() {
             </Link>
           )}
         </div>
+
+        {/* Per-trial dispatch / received cards */}
+        {stage === 10 && trialsData && trialsData.trials.length > 0 && (
+          <div className="space-y-2">
+            {trialsData.trials.map(t => {
+              const isPending     = t.status === "pending"
+              const isDispatched  = t.status === "samples_dispatched"
+              const isReceived    = ["samples_received", "testing", "complete"].includes(t.status)
+              return (
+                <div key={t.trial_no} className={`rounded-xl border p-3.5 flex items-center justify-between gap-3 ${
+                  isReceived   ? "border-indigo-200 bg-indigo-50" :
+                  isDispatched ? "border-blue-200 bg-blue-50" :
+                  "border-slate-200 bg-slate-50"
+                }`}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                      isReceived ? "bg-indigo-600 text-white" :
+                      isDispatched ? "bg-blue-600 text-white" :
+                      "bg-slate-300 text-slate-600"
+                    }`}>T{t.trial_no}</div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        {isReceived   ? (t.status === "complete" ? "Complete" : "Samples Received") :
+                         isDispatched ? "Samples Dispatched by Supplier" :
+                         "Awaiting Supplier Dispatch"}
+                      </p>
+                      {isDispatched && t.samples_dispatched_at && (
+                        <p className="text-[10px] text-blue-500">
+                          Dispatched {new Date(t.samples_dispatched_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        </p>
+                      )}
+                      {isReceived && t.samples_received_at && (
+                        <p className="text-[10px] text-indigo-500">
+                          Received {new Date(t.samples_received_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* R&D action: mark received */}
+                  {isDispatched && isRnd && (
+                    <button
+                      onClick={() => handleMarkSamplesReceivedMain(t.trial_no)}
+                      className="flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Mark Received
+                    </button>
+                  )}
+
+                  {isPending && (
+                    <span className="text-[10px] text-slate-400 italic shrink-0">Awaiting supplier</span>
+                  )}
+                  {isReceived && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                      t.status === "complete" && t.result === "all_pass" ? "bg-emerald-100 text-emerald-700" :
+                      t.status === "complete" ? "bg-red-100 text-red-700" :
+                      "bg-indigo-100 text-indigo-700"
+                    }`}>
+                      {t.status === "complete" ? (t.result === "all_pass" ? "All Pass" : "Partial Fail") : "In Testing"}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Supplier portal link */}
+        {stage === 10 && (() => {
+          const supplierUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/supplier/ntd/${id}`
+          return (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Supplier Portal</p>
+                <p className="text-xs text-slate-500 truncate">{supplierUrl}</p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <a href={supplierUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                  <ExternalLink className="w-3 h-3" /> Open
+                </a>
+                <CopyButton text={supplierUrl} />
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </StageCard>
   )

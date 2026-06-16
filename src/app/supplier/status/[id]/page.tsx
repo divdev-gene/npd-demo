@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { mockNPDs, VENDOR_STATUS_KEY, LIVE_QUOTATIONS_KEY, SPOC_CONTACTS, VENDOR_CATALOG, DEFAULT_RND_CONTACT, type NPDRecord, type VendorStatusResponse, type LiveQuotation } from "@/lib/mockData"
 import { CheckCircle2, Clock, AlertCircle, UserCircle, Mail, MessageSquare } from "lucide-react"
+import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
 export default function VendorStatusPage() {
   const params   = useParams()
@@ -113,20 +114,7 @@ export default function VendorStatusPage() {
       ? new Date(pendingCounter.sourcingCounterDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
       : ""
     return (
-      <div className="min-h-screen bg-slate-50">
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3">
-          <div className="max-w-2xl mx-auto flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain" />
-              <div className="h-5 w-px bg-slate-200" />
-              <span className="text-sm font-bold text-slate-700">Dispatch Date Negotiation</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
-              <Clock className="w-3.5 h-3.5" /> {npdId}
-            </div>
-          </div>
-        </header>
-        <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+      <SupplierPortalShell portalLabel="Dispatch Negotiation" maxWidth="2xl">
 
           {/* Context card */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-3">
@@ -207,8 +195,7 @@ export default function VendorStatusPage() {
               <p className="text-[11px] text-slate-400 text-center">This is your final response — no further negotiation rounds are available.</p>
             </form>
           </div>
-        </main>
-      </div>
+      </SupplierPortalShell>
     )
   }
 
@@ -342,21 +329,7 @@ export default function VendorStatusPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3">
-        <div className="max-w-2xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain" />
-            <div className="h-5 w-px bg-slate-200" />
-            <span className="text-sm font-bold text-slate-700">Dispatch Status Check</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
-            <Clock className="w-3.5 h-3.5" /> {npdId}
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+    <SupplierPortalShell portalLabel="Dispatch Status" maxWidth="2xl">
 
         {/* NPD info */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
@@ -480,7 +453,6 @@ export default function VendorStatusPage() {
             </div>
           </form>
         </div>
-      </main>
-    </div>
+    </SupplierPortalShell>
   )
 }

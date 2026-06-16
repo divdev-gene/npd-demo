@@ -41,6 +41,8 @@ export type FileComment = {
   resolved: boolean
   resolved_by?: string
   resolved_at?: string
+  attachment_link?: string            // optional Drive link or data URL shared with supplier
+  attachment_name?: string            // display name for the attachment
 }
 
 export type VersionedFile = {
@@ -122,6 +124,29 @@ export type NTDComponent = {
   componentId: string    // "C01", "C02"...
   name: string
   commodity: NTDCommodity
+  status?: "active" | "merged"   // merged = sourcing merged it into another component
+  merged_into?: string           // componentId of the merged-result component
+}
+
+// ─── Component Merge ─────────────────────────────────────────
+// Written by sourcing at Stage 2. Append-only per merge action.
+
+export type NTDMergeRecord = {
+  merge_id: string
+  source_ids: string[]          // componentIds being merged (2-3)
+  result_id: string             // new componentId for the merged component
+  result_name: string           // name given to the merged component
+  commodity: NTDCommodity       // all sources must share same commodity
+  merged_by: string
+  merged_at: string
+  split?: {                     // populated if sourcing later splits
+    split_by: string
+    split_at: string
+  }
+}
+
+export type NTDMergesData = {
+  records: NTDMergeRecord[]
 }
 
 // ─── Master NTD Record ────────────────────────────────────────
@@ -150,12 +175,13 @@ export type NTDInitiationData = {
   notes: string
   components: NTDComponent[]          // captured at creation; commodity-tagged
   part_specs: VersionedFile[]
-  tech_spec_sheet?: {                  // flat (not VersionedFile) — creation-time doc, no revision history needed
+  tech_spec_sheets?: Partial<Record<NTDCommodity, {
     file_name: string
     link: string                       // Drive/SharePoint URL or base64 data URL
     uploaded_at: string
     uploaded_by: string
-  }
+  }>>
+  semi_progression?: Partial<Record<NTDCommodity, boolean>>  // per-commodity semi-progression flag
   submitted_by: string
   submitted_at: string
 }
@@ -209,6 +235,23 @@ export type NTDRFQData = {
   }
 }
 
+// ─── Stage 4 — Component Category Selection (sourcing-internal) ──
+// Sourcing picks which price category applies per (vendor, component).
+// NEVER read by the vendor portal — internal-only key.
+
+export type PriceCategory = "stage" | "progression" | "semi_progression"
+
+export type ComponentCategorySelection = {
+  selected_category: PriceCategory
+  base_price: number     // vendor's quoted price for that category at selection time
+  currency: string
+}
+
+export type NTDCompNegotiationStore = Record<
+  string, // vendorId
+  Record<string, ComponentCategorySelection> // componentId
+>
+
 // ─── Stage 4 — Quotation & Negotiations ───────────────────────
 
 export type RFQMessage = {
@@ -221,11 +264,19 @@ export type RFQMessage = {
 }
 
 export type VendorQuotation = {
-  amount: number
+  amount: number                      // grand total = sum of all component row totals
   currency: string
   lead_time_days: number
   doc_link: string
   notes: string
+  stage_price?: number                // sum of stage prices across all components
+  progression_price?: number          // sum of progression prices across all components
+  semi_progression_price?: number     // sum of semi-progression prices (only when flag is on)
+  component_prices?: Record<string, { // per-component breakdown; key = componentId
+    stage: number
+    progression: number
+    semi_progression?: number
+  }>
   submitted_at: string
   last_updated_at: string
 }
@@ -235,6 +286,7 @@ export type NTDQuotationData = {
     quotation?: VendorQuotation
     thread: RFQMessage[]
     status: "sent" | "quotation_received" | "negotiating" | "finalized"
+    category_selections?: Record<string, ComponentCategorySelection>  // componentId → sourcing's chosen category
   }
 }
 
@@ -345,6 +397,11 @@ export type MfgUpdate = {
   posted_by_role: string
 }
 
+export type MfgPhase = {
+  name: string
+  days: number
+}
+
 export type NTDMfgData = {
   mfg_start_date: string
   eta_date: string
@@ -352,6 +409,7 @@ export type NTDMfgData = {
   status: "not_started" | "in_progress" | "complete"
   completed_by: string
   completed_at: string
+  phases?: MfgPhase[]   // delivery timeline breakdown from supplier
 }
 
 // ─── Stage 10 — Trials ────────────────────────────────────────

@@ -119,7 +119,7 @@ export default function DFMPage() {
         } else if (file) {
           if (action === "revise") file = addFileVersion(file, String(data.link), currentRole, data.note ? String(data.note) : undefined)
           if (action === "approve") file = approveFile(file, currentRole)
-          if (action === "comment") file = addFileComment(file, currentRole, ntdRole, String(data.text), Boolean(data.req))
+          if (action === "comment") file = addFileComment(file, currentRole, ntdRole, String(data.text), Boolean(data.req), data.attachmentLink as string | undefined, data.attachmentName as string | undefined)
           if (action === "resolve") file = resolveComment(file, String(data.cid), currentRole)
         }
         const updatedComp: NTDDFMComponent = { ...comp, [slot]: file ?? comp[slot] }

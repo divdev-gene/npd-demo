@@ -11,10 +11,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Wrench, FileEdit, Globe, ShieldCheck, Repeat, Hammer, RefreshCw, Package,
   ChevronRight, ArrowLeft, Mail, CheckCircle, Check,
-  Link2, User, Plus, Trash2, ChevronDown, ChevronUp
+  Link2, User, Plus, Trash2, ChevronDown, ChevronUp,
+  TrendingDown, BarChart2, Truck, Target
 } from "lucide-react"
 import { useNPDs } from "@/lib/npdContext"
-import { getStageName, REJECTED_PARTS_KEY, DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD, VENDOR_CATALOG, ECN_STAGE1_KEY, NPD_BUNDLE_KEY } from "@/lib/mockData"
+import { getStageName, REJECTED_PARTS_KEY, DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD, VENDOR_CATALOG, ECN_STAGE1_KEY, NPD_BUNDLE_KEY, AS_STAGE1_KEY, type ASStage1Data } from "@/lib/mockData"
 
 type BundleItem = {
   id: string
@@ -37,12 +38,11 @@ const makeBundleItem = (id: string): BundleItem => ({
 })
 
 const WORK_TYPES = [
-  { id: "NCD",          title: "New Component Development", short: "NCD",  desc: "Brand new component. Full end-to-end lifecycle.",          icon: Wrench,      tat: 45, stages: 11 },
-  { id: "NPD",          title: "New Product Development",   short: "NPD",  desc: "New product development. Full end-to-end lifecycle.",      icon: Package,     tat: 45, stages: 11 },
-  { id: "ECN",          title: "Engineering Change Notice",  short: "ECN",  desc: "Change to existing component. Abbreviated flow.",          icon: FileEdit,    tat: 30, stages: 10 },
-  { id: "NTD",          title: "New Tool Development",       short: "NTD",  desc: "New tooling / die / fixture development request.",         icon: Hammer,      tat: 45, stages: 10 },
-  { id: "Compliance",   title: "Compliance / Regulatory",    short: "COMP", desc: "BIS, QCO, etc. Document-centric flow.",                    icon: ShieldCheck, tat: 30, stages: 6  },
-  { id: "ALT_SUPPLIER", title: "Alternative Supplier",       short: "AS",   desc: "Qualify an alternative vendor for an existing component.", icon: RefreshCw,   tat: 30, stages: 6  },
+  { id: "NCD",          title: "New Component Development", short: "NCD",  desc: "Brand new component. Full end-to-end lifecycle.",          icon: Wrench,    tat: 45, stages: 11 },
+  { id: "NPD",          title: "New Product Development",   short: "NPD",  desc: "New product development. Full end-to-end lifecycle.",      icon: Package,   tat: 45, stages: 11 },
+  { id: "ECN",          title: "Engineering Change Notice", short: "ECN",  desc: "Change to existing component. Abbreviated flow.",          icon: FileEdit,  tat: 30, stages: 10 },
+  { id: "NTD",          title: "New Tool Development",      short: "NTD",  desc: "New tooling / die / fixture development request.",         icon: Hammer,    tat: 45, stages: 10 },
+  { id: "ALT_SUPPLIER", title: "Alternative Supplier",      short: "AS",   desc: "Qualify an alternative vendor for an existing component.", icon: RefreshCw, tat: 30, stages: 8  },
 ]
 
 const SPOC_NAME_MAP: Record<string, string> = {
@@ -64,7 +64,7 @@ const SPOC_DISPLAY_MAP: Record<string, string> = {
 }
 
 const TAT_MAP: Record<string, number> = {
-  "NCD": 45, "NPD": 45, "ECN": 30, "NTD": 45, "Compliance": 30, "ALT_SUPPLIER": 30,
+  "NCD": 45, "NPD": 45, "ECN": 30, "NTD": 45, "ALT_SUPPLIER": 30,
 }
 
 const WORK_TYPE_LABEL: Record<string, string> = {
@@ -72,9 +72,15 @@ const WORK_TYPE_LABEL: Record<string, string> = {
   "NPD":          "New Product Development (NPD)",
   "ECN":          "Engineering Change Notice (ECN)",
   "NTD":          "New Tool Development (NTD)",
-  "Compliance":   "Compliance / Regulatory",
   "ALT_SUPPLIER": "Alternative Supplier (AS)",
 }
+
+const AS_CHANGE_OBJECTIVES = [
+  { id: "Cost Innovation",          label: "Cost Innovation",          icon: TrendingDown, desc: "Drive unit cost reduction" },
+  { id: "Capacity Expansion",       label: "Capacity Expansion",       icon: BarChart2,    desc: "Scale supply capacity" },
+  { id: "Compliance & Regulatory",  label: "Compliance & Regulatory",  icon: ShieldCheck,  desc: "Meet regulatory requirements" },
+  { id: "New Supply",               label: "New Supply",               icon: Truck,        desc: "Establish a new supply source" },
+]
 
 const STEPS = [
   { n: 1, label: "Type of Work" },
@@ -107,6 +113,20 @@ export default function NewRequestWizard() {
   const [remarks, setRemarks]               = useState("")
   const [drawingFile, setDrawingFile]       = useState(false)
   const [existingPartNumber, setExistingPartNumber] = useState("")
+  const [changeObjective, setChangeObjective]       = useState("")
+  // AS-specific Stage 1 state
+  type CostRow = { id: string; label: string; oldPrice: string; newPrice: string }
+  const [asCostChecklist, setAsCostChecklist] = useState<CostRow[]>([{ id: "row-1", label: "", oldPrice: "", newPrice: "" }])
+  const [asCapacityLocation, setAsCapacityLocation] = useState("")
+  const [asCapacityNBO, setAsCapacityNBO]           = useState("")
+  const [asCompliancePAS, setAsCompliancePAS]       = useState("")
+  const [asComplianceDM, setAsComplianceDM]         = useState("")
+  const [asNewSupplyDetails, setAsNewSupplyDetails] = useState("")
+  const [asCustomerSpecific, setAsCustomerSpecific] = useState(false)
+  const [asCustomerGrade, setAsCustomerGrade]       = useState("")
+  const [asSupplierName, setAsSupplierName]         = useState("")
+  const [asReason, setAsReason]                     = useState("")
+  const [asDocsLink, setAsDocsLink]                 = useState("")
   const [rejectedParts, setRejectedParts] = useState<Array<{ npdId: string; partNumber: string; itemName: string; rejectedAt: string }>>([])
   // NPD bundle items
   const [bundleItems, setBundleItems] = useState<BundleItem[]>([makeBundleItem("item-1")])
@@ -139,7 +159,7 @@ export default function NewRequestWizard() {
   const selectedType = WORK_TYPES.find(t => t.id === typeOfWork)
   const isRndUser = pocRole === "rnd_user" || pocRole === "rnd_head"
   const SOURCING_ROLES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit Kumar", "Varun Joshi", "Rohan Desai", "sourcing_head"]
-  const SOURCING_TYPE_IDS = ["Compliance", "ALT_SUPPLIER"]
+  const SOURCING_TYPE_IDS = ["ALT_SUPPLIER"]
   const isSourcingUser = SOURCING_ROLES.includes(pocRole)
   const isTypeAllowed = (typeId: string) => {
     if (pocRole === "super_admin") return true
@@ -153,13 +173,16 @@ export default function NewRequestWizard() {
 
   const handleConfirmDispatch = () => {
     const year = new Date().getFullYear()
+    const workTypeLabel = WORK_TYPE_LABEL[typeOfWork] || typeOfWork
+    const isECN    = workTypeLabel === "Engineering Change Notice (ECN)"
+    const isAltSup = workTypeLabel.includes("Alternative Supplier")
+    const idPrefix = isECN ? "ECN" : isAltSup ? "AS" : "NPD"
     const maxSeq = npds.reduce((max, n) => {
-      const m = n.id.match(/NPD-FY-\d+-(\d+)$/)
+      const m = n.id.match(new RegExp(`^${idPrefix}-FY-\\d+-(\\d+)$`))
       const num = m ? parseInt(m[1], 10) : 0
       return Math.max(max, num)
     }, 0)
-    const newId = `NPD-FY-${year}-${String(maxSeq + 1).padStart(4, "0")}`
-    const workTypeLabel = WORK_TYPE_LABEL[typeOfWork] || typeOfWork
+    const newId = `${idPrefix}-FY-${year}-${String(maxSeq + 1).padStart(4, "0")}`
     const raisedBy = localStorage.getItem("poc_role") || "rnd_user"
     const devTat  = Number(tatDevelopment) || 0
     const prodTat = Number(tatProduction)  || 0
@@ -194,10 +217,17 @@ export default function NewRequestWizard() {
         isBundle: true,
       })
 
+      // Compute NCD sequential base (independent from NPD sequence)
+      const maxNcdSeq = npds.reduce((max, n) => {
+        const m = n.id.match(/NCD-FY-\d+-(\d+)$/)
+        const num = m ? parseInt(m[1], 10) : 0
+        return Math.max(max, num)
+      }, 0)
+
       // Create child NCD records + collect their IDs
       const childIds: string[] = []
       bundleItems.forEach((item, idx) => {
-        const childId = `${newId}-NCD-${String(idx + 1).padStart(2, "0")}`
+        const childId = `NCD-FY-${year}-${String(maxNcdSeq + idx + 1).padStart(4, "0")}`
         childIds.push(childId)
         const effCommodity = item.commodity === "Others" && item.customCommodity.trim()
           ? item.customCommodity.trim() : item.commodity
@@ -240,10 +270,9 @@ export default function NewRequestWizard() {
       return
     }
 
-    // ── Single-record path (NCD, ECN, Compliance, ALT_SUPPLIER, NTD) ─────
-    const isECN = workTypeLabel === "Engineering Change Notice (ECN)"
-    const isAltSup = workTypeLabel.includes("Alternative Supplier")
-    const startStage = isECN || isAltSup ? 1 : workTypeLabel === "Compliance / Regulatory" ? 3 : 2
+    // ── Single-record path (NCD, ECN, ALT_SUPPLIER, NTD) ─────────────────
+    // AS starts at stage 2 — Stage 1 data is collected in the wizard itself
+    const startStage = isECN ? 1 : 2
     addNPD({
       id: newId,
       itemName: isECN ? (ecnPartName || "ECN Component") : (itemName || "New Component"),
@@ -257,7 +286,7 @@ export default function NewRequestWizard() {
       tatDaysRemaining: effectiveTat,
       totalTat: effectiveTat,
       spoc: isECN ? "Rohan Desai" : (SPOC_NAME_MAP[commodity] || "General Sourcing"),
-      supplier: isECN ? ecnSupplier : "Pending Assignment",
+      supplier: isECN ? ecnSupplier : isAltSup ? asSupplierName.trim() : "Pending Assignment",
       priority: priorityLabel,
       gradeA: false,
       tqrScore: null,
@@ -281,6 +310,38 @@ export default function NewRequestWizard() {
       const all: Record<string, typeof entry> = raw ? JSON.parse(raw) : {}
       all[newId] = entry
       localStorage.setItem(ECN_STAGE1_KEY, JSON.stringify(all))
+    }
+    if (isAltSup) {
+      const objectiveDetails: ASStage1Data["objectiveDetails"] = {}
+      if (changeObjective === "Cost Innovation") {
+        objectiveDetails.checklist = asCostChecklist
+          .filter(r => r.label.trim())
+          .map(r => ({ label: r.label.trim(), oldPrice: Number(r.oldPrice) || 0, newPrice: Number(r.newPrice) || 0 }))
+      } else if (changeObjective === "Capacity Expansion") {
+        objectiveDetails.location = asCapacityLocation.trim() || undefined
+        objectiveDetails.newBusinessOrder = asCapacityNBO.trim() || undefined
+      } else if (changeObjective === "Compliance & Regulatory") {
+        objectiveDetails.pasQcoReference = asCompliancePAS.trim() || undefined
+        objectiveDetails.dmNotification = asComplianceDM.trim() || undefined
+      } else if (changeObjective === "New Supply") {
+        objectiveDetails.newSupplyDetails = asNewSupplyDetails.trim() || undefined
+      }
+      const asEntry: ASStage1Data = {
+        supplierName: asSupplierName.trim(),
+        reason: asReason.trim(),
+        docsLink: asDocsLink.trim() || undefined,
+        submittedBy: raisedBy,
+        submittedAt: Date.now(),
+        changeObjective,
+        objectiveDetails: Object.keys(objectiveDetails).length ? objectiveDetails : undefined,
+        customerSpecific: { enabled: asCustomerSpecific, grade: asCustomerSpecific ? asCustomerGrade.trim() || undefined : undefined },
+      }
+      const rawAs = localStorage.getItem(AS_STAGE1_KEY)
+      const allAs: Record<string, ASStage1Data> = rawAs ? JSON.parse(rawAs) : {}
+      allAs[newId] = asEntry
+      localStorage.setItem(AS_STAGE1_KEY, JSON.stringify(allAs))
+      router.push(`/npd/${newId}`)
+      return
     }
     router.push('/archive')
   }
@@ -306,7 +367,7 @@ export default function NewRequestWizard() {
     : typeOfWork === "NCD"
     ? (!!itemName && commodityValid && !!productLine && !!driveLink && !!drawingFile && !!sampleQty && !!priority && tatValid && !!manufacturingLocation && (!hasRevision || (hasRevision && cplAttached)))
     : typeOfWork === "ALT_SUPPLIER"
-    ? (!!itemName && !!productLine && !!driveLink && !!drawingFile && !!priority && tatValid && !!manufacturingLocation && !!existingPartNumber.trim())
+    ? (!!itemName && !!productLine && !!driveLink && !!drawingFile && !!priority && tatValid && !!manufacturingLocation && !!existingPartNumber.trim() && !!changeObjective && !!asSupplierName.trim() && !!asReason.trim())
     : (!!itemName && commodityValid && !!productLine && !!driveLink && !!drawingFile && !!priority && tatValid && !!manufacturingLocation)
 
   // ── Step 1 ────────────────────────────────────────────────────────────────
@@ -512,7 +573,7 @@ export default function NewRequestWizard() {
                     <th className="w-[130px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Revision No</th>
                     <th className="w-[120px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">CPL Sheet <span className="text-red-400 text-[9px]">*if rev</span></th>
                     <th className="w-[200px] px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-left">Remarks</th>
-                    <th className="w-10 px-2 py-2.5"></th>
+                    <th className="sticky right-0 z-10 bg-slate-50 w-10 px-2 py-2.5"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -618,7 +679,7 @@ export default function NewRequestWizard() {
                             className="w-full rounded-md border border-input bg-white px-2 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
                         </td>
                         {/* Delete */}
-                        <td className="px-2 py-3 text-center">
+                        <td className="sticky right-0 z-10 bg-white px-2 py-3 text-center">
                           {bundleItems.length > 1 && (
                             <button onClick={() => removeBundleItem(item.id)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
@@ -922,13 +983,69 @@ export default function NewRequestWizard() {
                 Total project TAT: <strong className="text-slate-700">{Number(tatDevelopment) + Number(tatProduction)} days</strong>
               </p>
             )}
+
+            {/* AS: Existing Part Number + Supplier Details — placed in left column to balance the layout */}
+            {typeOfWork === "ALT_SUPPLIER" && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Existing Part Number <span className="text-red-500">*</span></Label>
+                  <Input
+                    placeholder="e.g. AMB-PT-2024-0042"
+                    value={existingPartNumber}
+                    onChange={e => setExistingPartNumber(e.target.value)}
+                    className="bg-white"
+                  />
+                </div>
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 space-y-3">
+                  <div className="flex items-center gap-2 pb-2 border-b border-amber-100">
+                    <span className="w-1.5 h-4 rounded-full bg-amber-500 inline-block" />
+                    <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Supplier Details</h3>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Proposed Supplier Name <span className="text-red-500">*</span></Label>
+                    <Input
+                      placeholder="e.g. ABC Components Ltd."
+                      value={asSupplierName}
+                      onChange={e => setAsSupplierName(e.target.value)}
+                      className="bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Reason for Alternative <span className="text-red-500">*</span></Label>
+                    <textarea
+                      rows={3}
+                      placeholder="e.g. Current supplier lead time too high, cost reduction opportunity…"
+                      value={asReason}
+                      onChange={e => setAsReason(e.target.value)}
+                      className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Supporting Documents Link</Label>
+                    <div className="relative">
+                      <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input
+                        placeholder="https://drive.google.com/…"
+                        type="url"
+                        value={asDocsLink}
+                        onChange={e => setAsDocsLink(e.target.value)}
+                        className="pl-9 bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Right: Technical Documents */}
+          {/* Right: Technical Documents / Change Details */}
           <div className="space-y-5">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
               <span className="w-1.5 h-4 rounded-full bg-amber-500 inline-block" />
-              <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Technical Documents</h3>
+              <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                {typeOfWork === "ALT_SUPPLIER" ? "Change Details" : "Technical Documents"}
+              </h3>
             </div>
 
             <div className="space-y-1.5">
@@ -1117,15 +1234,221 @@ export default function NewRequestWizard() {
 
             {/* ALT_SUPPLIER-specific fields */}
             {typeOfWork === "ALT_SUPPLIER" && (
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-gray-600">Existing Part Number <span className="text-red-500">*</span></Label>
-                <Input
-                  placeholder="e.g. AMB-PT-2024-0042"
-                  value={existingPartNumber}
-                  onChange={e => setExistingPartNumber(e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
+              <>
+                {/* Change Objective card picker */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-slate-400" />
+                    Change Objective <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {AS_CHANGE_OBJECTIVES.map(obj => {
+                      const Icon = obj.icon
+                      const selected = changeObjective === obj.id
+                      return (
+                        <button
+                          key={obj.id}
+                          type="button"
+                          onClick={() => setChangeObjective(obj.id)}
+                          className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-all ${
+                            selected
+                              ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className={`mt-0.5 rounded-md p-1.5 ${selected ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
+                            <Icon className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <p className={`text-xs font-semibold ${selected ? "text-blue-800" : "text-slate-700"}`}>{obj.label}</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">{obj.desc}</p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Cost Innovation checklist */}
+                {changeObjective === "Cost Innovation" && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Cost Breakdown Checklist</Label>
+                    <div className="rounded-lg border border-slate-200 overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="px-3 py-2 text-left font-semibold text-slate-500 w-[38%]">Item</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-500 w-[22%]">Old Price (₹)</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-500 w-[22%]">New Price (₹)</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-500 w-[14%]">% Change</th>
+                            <th className="px-3 py-2 w-[4%]" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {asCostChecklist.map((row, i) => {
+                            const old = Number(row.oldPrice) || 0
+                            const nw  = Number(row.newPrice) || 0
+                            const pct = old > 0 ? ((nw - old) / old) * 100 : null
+                            return (
+                              <tr key={row.id} className="bg-white">
+                                <td className="px-2 py-1.5">
+                                  <Input
+                                    placeholder="e.g. Raw Material"
+                                    value={row.label}
+                                    onChange={e => setAsCostChecklist(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))}
+                                    className="h-7 text-xs bg-transparent border-slate-200"
+                                  />
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    placeholder="0"
+                                    value={row.oldPrice}
+                                    onChange={e => setAsCostChecklist(prev => prev.map((r, j) => j === i ? { ...r, oldPrice: e.target.value } : r))}
+                                    className="h-7 text-xs bg-transparent border-slate-200"
+                                  />
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    placeholder="0"
+                                    value={row.newPrice}
+                                    onChange={e => setAsCostChecklist(prev => prev.map((r, j) => j === i ? { ...r, newPrice: e.target.value } : r))}
+                                    className="h-7 text-xs bg-transparent border-slate-200"
+                                  />
+                                </td>
+                                <td className="px-2 py-1.5 font-semibold">
+                                  {pct !== null ? (
+                                    <span className={pct < 0 ? "text-emerald-600" : pct > 0 ? "text-red-500" : "text-slate-400"}>
+                                      {pct > 0 ? "+" : ""}{pct.toFixed(2)}%
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300">—</span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => setAsCostChecklist(prev => prev.filter((_, j) => j !== i))}
+                                    disabled={asCostChecklist.length <= 1}
+                                    className="text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAsCostChecklist(prev => [...prev, { id: `row-${Date.now()}`, label: "", oldPrice: "", newPrice: "" }])}
+                      className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Item
+                    </button>
+                  </div>
+                )}
+
+                {/* Capacity Expansion sub-fields */}
+                {changeObjective === "Capacity Expansion" && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Location</Label>
+                      <Input
+                        placeholder="e.g. Jhajjar Plant 1"
+                        value={asCapacityLocation}
+                        onChange={e => setAsCapacityLocation(e.target.value)}
+                        className="bg-white"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">New Business Order</Label>
+                      <textarea
+                        rows={3}
+                        placeholder="Describe the new business order or volume requirement…"
+                        value={asCapacityNBO}
+                        onChange={e => setAsCapacityNBO(e.target.value)}
+                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Compliance & Regulatory sub-fields */}
+                {changeObjective === "Compliance & Regulatory" && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">PAS / QCO Reference</Label>
+                      <Input
+                        placeholder="e.g. IS 1239, QCO-2024-0078"
+                        value={asCompliancePAS}
+                        onChange={e => setAsCompliancePAS(e.target.value)}
+                        className="bg-white"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">DM Notification by Supplier</Label>
+                      <textarea
+                        rows={3}
+                        placeholder="Paste or summarise the supplier's DM notification…"
+                        value={asComplianceDM}
+                        onChange={e => setAsComplianceDM(e.target.value)}
+                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* New Supply sub-fields */}
+                {changeObjective === "New Supply" && (
+                  <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Details</Label>
+                    <textarea
+                      rows={4}
+                      placeholder="Describe the new supply addition — geography, volume, risk mitigation rationale…"
+                      value={asNewSupplyDetails}
+                      onChange={e => setAsNewSupplyDetails(e.target.value)}
+                      className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                    />
+                  </div>
+                )}
+
+                {/* Customer Specific toggle */}
+                <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Customer Specific</Label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setAsCustomerSpecific(false); setAsCustomerGrade("") }}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${!asCustomerSpecific ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-100"}`}
+                      >No</button>
+                      <button
+                        type="button"
+                        onClick={() => setAsCustomerSpecific(true)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${asCustomerSpecific ? "bg-blue-600 text-white" : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-100"}`}
+                      >Yes</button>
+                    </div>
+                  </div>
+                  {asCustomerSpecific && (
+                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Grade</Label>
+                      <Input
+                        placeholder="e.g. Godrej, Hero, Voltas"
+                        value={asCustomerGrade}
+                        onChange={e => setAsCustomerGrade(e.target.value)}
+                        className="bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+
+              </>
             )}
           </div>
         </div>
@@ -1226,9 +1549,10 @@ export default function NewRequestWizard() {
           { label: "TAT Prod",      value: tatProduction ? `${tatProduction}d` : "—" },
           { label: "Total TAT",     value: (tatDevelopment && tatProduction) ? `${Number(tatDevelopment) + Number(tatProduction)} days` : "—" },
         ] : [
-          { label: "Item",        value: itemName || "—" },
-          { label: "Category",    value: effectiveCommodity || "—" },
-          { label: "SPOC",        value: SPOC_NAME_MAP[commodity] || "—" },
+          { label: "Item",             value: itemName || "—" },
+          ...(typeOfWork !== "ALT_SUPPLIER" ? [{ label: "Category", value: effectiveCommodity || "—" }] : []),
+          ...(typeOfWork !== "ALT_SUPPLIER" ? [{ label: "SPOC", value: SPOC_NAME_MAP[commodity] || "—" }] : []),
+          ...(typeOfWork === "ALT_SUPPLIER" ? [{ label: "Change Objective", value: changeObjective || "—" }] : []),
           { label: "Priority",    value: `${priority} — ${priority === "P1" ? "Critical" : priority === "P2" ? "High" : "Normal"}` },
           { label: "Plant",       value: manufacturingLocation || "—" },
           { label: "TAT Dev",     value: tatDevelopment ? `${tatDevelopment}d` : "—" },
@@ -1290,6 +1614,9 @@ export default function NewRequestWizard() {
                 {driveLink && <p><strong>Drawing Link:</strong> <span className="text-blue-600 underline">{driveLink}</span></p>}
                 {hasRevision && prevPartNo && <p><strong>Previous Part No:</strong> {prevPartNo}</p>}
                 {typeOfWork === "ALT_SUPPLIER" && existingPartNumber && <p><strong>Existing Part No.:</strong> {existingPartNumber}</p>}
+                {typeOfWork === "ALT_SUPPLIER" && changeObjective && <p><strong>Change Objective:</strong> {changeObjective}</p>}
+                {typeOfWork === "ALT_SUPPLIER" && asSupplierName && <p><strong>Proposed Supplier:</strong> {asSupplierName}</p>}
+                {typeOfWork === "ALT_SUPPLIER" && asReason && <p><strong>Reason:</strong> {asReason}</p>}
                 {remarks && <p><strong>Remarks:</strong> {remarks}</p>}
               </>
             )}
@@ -1315,14 +1642,14 @@ export default function NewRequestWizard() {
 
   // ── Shell ─────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-5xl mx-auto py-6">
-      <div className="mb-8">
+    <div className="max-w-7xl mx-auto pb-4">
+      <div className="mb-3">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Create New Request</h1>
         <p className="text-sm text-slate-500 mt-1">Initiate a new component development or change request for sourcing allocation.</p>
       </div>
 
       {/* Stepper */}
-      <div className="flex items-start mb-8">
+      <div className="flex items-start mb-4">
         {STEPS.map((s, i) => (
           <div key={s.n} className="flex items-start">
             <div className="flex flex-col items-center">
@@ -1342,7 +1669,7 @@ export default function NewRequestWizard() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
         {step === 1 && renderStep1()}
         {step === 2 && renderStep2()}
         {step === 3 && renderStep3()}

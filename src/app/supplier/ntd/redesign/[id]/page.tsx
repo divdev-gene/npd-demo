@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import {
   CheckCircle2, ExternalLink, Upload, AlertTriangle, RefreshCcw, FileText,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Paperclip, X,
 } from "lucide-react"
 import {
   getNTDRecord, getNTDHandoff, getNTDDFM, getNTDMould, setNTDMould,
@@ -17,8 +17,15 @@ export default function SupplierRedesignPortal() {
   const params = useParams()
   const id = params.id as string
 
-  const [uploads, setUploads] = useState<Record<string, { mould_3d: string; mfa_ppt: string }>>({})
+  const [uploads, setUploads] = useState<Record<string, { mould_3d: string; mfa_ppt: string; mould3dFileName?: string; mfaPptFileName?: string }>>({})
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({})
+
+  const readFileAsDataURL = (file: File, onDone: (dataUrl: string, name: string) => void) => {
+    if (file.size > 8 * 1024 * 1024) { alert("File too large (max 8 MB). Use a Drive link instead."); return }
+    const reader = new FileReader()
+    reader.onload = () => onDone(reader.result as string, file.name)
+    reader.readAsDataURL(file)
+  }
   const [dfmOpen, setDfmOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -267,23 +274,47 @@ export default function SupplierRedesignPortal() {
                   <div className="px-5 py-5 space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-slate-600 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Mould 3D Design Link <span className="text-red-500">*</span>
+                        <Upload className="w-3 h-3" /> Mould 3D Design <span className="text-red-500">*</span>
                       </label>
-                      <input type="text" autoComplete="off"
-                        placeholder="Drive / SharePoint link to 3D file"
-                        value={up.mould_3d}
-                        onChange={e => setUploads(prev => ({ ...prev, [comp.componentId]: { ...prev[comp.componentId] ?? { mould_3d: "", mfa_ppt: "" }, mould_3d: e.target.value } }))}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                      <div className="flex gap-2">
+                        {up.mould3dFileName ? (
+                          <div className="flex-1 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                            <Paperclip className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                            <span className="text-sm text-blue-700 truncate flex-1">{up.mould3dFileName}</span>
+                            <button type="button" onClick={() => setUploads(prev => ({ ...prev, [comp.componentId]: { ...prev[comp.componentId], mould_3d: "", mould3dFileName: "" } }))}><X className="w-3.5 h-3.5 text-slate-400" /></button>
+                          </div>
+                        ) : (
+                          <input type="text" autoComplete="off" placeholder="Drive / SharePoint link to 3D file" value={up.mould_3d}
+                            onChange={e => setUploads(prev => ({ ...prev, [comp.componentId]: { ...prev[comp.componentId] ?? { mould_3d: "", mfa_ppt: "" }, mould_3d: e.target.value, mould3dFileName: "" } }))}
+                            className="flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                        )}
+                        <label className="cursor-pointer flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-500 hover:text-slate-700 px-3 py-2.5 rounded-lg transition-colors shrink-0" title="Attach file">
+                          <Paperclip className="w-3.5 h-3.5" />
+                          <input type="file" className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAsDataURL(f, (url, name) => setUploads(prev => ({ ...prev, [comp.componentId]: { ...prev[comp.componentId] ?? { mould_3d: "", mfa_ppt: "" }, mould_3d: url, mould3dFileName: name } }))) }} />
+                        </label>
+                      </div>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-slate-600 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> MFA Report (PPT) Link <span className="text-red-500">*</span>
+                        <Upload className="w-3 h-3" /> MFA Report (PPT) <span className="text-red-500">*</span>
                       </label>
-                      <input type="text" autoComplete="off"
-                        placeholder="Drive / SharePoint link to PPT file"
-                        value={up.mfa_ppt}
-                        onChange={e => setUploads(prev => ({ ...prev, [comp.componentId]: { ...prev[comp.componentId] ?? { mould_3d: "", mfa_ppt: "" }, mfa_ppt: e.target.value } }))}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                      <div className="flex gap-2">
+                        {up.mfaPptFileName ? (
+                          <div className="flex-1 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                            <Paperclip className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                            <span className="text-sm text-blue-700 truncate flex-1">{up.mfaPptFileName}</span>
+                            <button type="button" onClick={() => setUploads(prev => ({ ...prev, [comp.componentId]: { ...prev[comp.componentId], mfa_ppt: "", mfaPptFileName: "" } }))}><X className="w-3.5 h-3.5 text-slate-400" /></button>
+                          </div>
+                        ) : (
+                          <input type="text" autoComplete="off" placeholder="Drive / SharePoint link to PPT file" value={up.mfa_ppt}
+                            onChange={e => setUploads(prev => ({ ...prev, [comp.componentId]: { ...prev[comp.componentId] ?? { mould_3d: "", mfa_ppt: "" }, mfa_ppt: e.target.value, mfaPptFileName: "" } }))}
+                            className="flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                        )}
+                        <label className="cursor-pointer flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-500 hover:text-slate-700 px-3 py-2.5 rounded-lg transition-colors shrink-0" title="Attach file">
+                          <Paperclip className="w-3.5 h-3.5" />
+                          <input type="file" className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAsDataURL(f, (url, name) => setUploads(prev => ({ ...prev, [comp.componentId]: { ...prev[comp.componentId] ?? { mould_3d: "", mfa_ppt: "" }, mfa_ppt: url, mfaPptFileName: name } }))) }} />
+                        </label>
+                      </div>
                     </div>
                     <button
                       onClick={() => handleUpload(comp.componentId)}

@@ -19,12 +19,13 @@ import {
   ECN_PRICE_ESTIMATION_KEY, ECN_DQA_TESTS_KEY, ECN_HEAD_APPROVAL_KEY, NCD_PP_PRICING_KEY,
   ECN_NEGOTIATION_KEY, ECN_INITIAL_QUOTE_KEY,
   ECN_PLANT_EVAL_KEY, AS_PLANT_EVAL_KEY,
-  AS_STAGE1_KEY, AS_RND_APPROVAL_KEY,
+  AS_STAGE1_KEY, AS_RND_APPROVAL_KEY, type ASStage1Data,
   DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD,
   getTestsByCategory, getTotalTestDays,
   type NPDRecord, type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse, type PushNotification, type TestResult,
 } from "@/lib/mockData"
 import { useNPDs } from "@/lib/npdContext"
+import { downloadMISReport } from "@/lib/reportGenerator"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -366,11 +367,9 @@ export default function NpdDetailView() {
   const [ncdPpLeadTime,         setNcdPpLeadTime]          = useState("")
 
   // ── Alt Supplier-specific state ───────────────────────────────────────────
-  const [asStage1Data,    setAsStage1Data]    = useState<null | { supplierName: string; reason: string; docsLink?: string; submittedBy: string; submittedAt: number }>(null)
+  const [asStage1Data,    setAsStage1Data]    = useState<ASStage1Data | null>(null)
   const [asRndApproval,   setAsRndApproval]   = useState<null | { approvedBy: string; approvedAt: number; note?: string }>(null)
-  const [asSupplierName,  setAsSupplierName]  = useState("")
-  const [asReason,        setAsReason]        = useState("")
-  const [asDocsLink,      setAsDocsLink]      = useState("")
+
   const [asRndRemarks,    setAsRndRemarks]    = useState("")
 
   // Derived from state — declared early so useEffect closures below can reference it safely
@@ -1761,6 +1760,8 @@ export default function NpdDetailView() {
     const allDone = children.length > 0 && doneCount === children.length
     const TAT_COLOR: Record<string, string> = { green: "#10b981", amber: "#f59e0b", red: "#ef4444", black: "#dc2626" }
     const isSpoc = SPOC_NAMES.includes(currentRole)
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [bundleDownloading, setBundleDownloading] = useState(false)
 
     return (
       <div className="space-y-6 max-w-[1200px] mx-auto animate-in fade-in duration-300">
@@ -1800,6 +1801,29 @@ export default function NpdDetailView() {
               <p className="text-sm font-semibold text-emerald-800">All sub-requests complete — NPD closed.</p>
             </div>
           )}
+
+          {/* Actions */}
+          <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-2">
+            <Link href={`/report/${npd.id}`}>
+              <Button variant="outline" size="sm" className="h-8 text-xs border-slate-200 text-slate-700 hover:bg-slate-50 gap-1.5">
+                <FileText className="w-3.5 h-3.5" /> View Report
+              </Button>
+            </Link>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-slate-900 hover:bg-slate-800 text-white gap-1.5"
+              disabled={bundleDownloading || children.length === 0}
+              onClick={() => {
+                setBundleDownloading(true)
+                downloadMISReport([npd], `NPD_Bundle_${npd.id}.xlsx`, npds)
+                  .catch(console.error)
+                  .finally(() => setBundleDownloading(false))
+              }}
+            >
+              <Download className="w-3.5 h-3.5" />
+              {bundleDownloading ? "Generating…" : `Download .xlsx (${children.length} sheet${children.length !== 1 ? "s" : ""})`}
+            </Button>
+          </div>
         </div>
 
         {/* Sub-request grid */}
@@ -1835,11 +1859,17 @@ export default function NpdDetailView() {
                       <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Stage</p>
                       <p className="text-xs text-slate-600 truncate">{getStageName(child.stage, child.typeOfWork)}</p>
                     </div>
-                    <div className="shrink-0">
-                      {isDone ? (
+                    <div className="shrink-0 flex items-center gap-2">
+                      {isDone && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
                           <CheckCircle2 className="w-3 h-3" /> Done
                         </span>
+                      )}
+                      {isDone ? (
+                        <Link href={`/npd/${child.id}`}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full hover:bg-slate-100 transition-colors">
+                          Open →
+                        </Link>
                       ) : dimmed ? (
                         <span className="text-[11px] text-slate-300 italic px-3">—</span>
                       ) : (
@@ -2070,6 +2100,12 @@ export default function NpdDetailView() {
               <span className="text-slate-400">Reason</span>
               <span className="font-semibold text-slate-800 max-w-[200px] text-right">{asStage1Data.reason}</span>
             </div>
+            {asStage1Data.changeObjective && (
+              <div className="flex justify-between text-xs border-b border-slate-100 pb-1">
+                <span className="text-slate-400">Objective</span>
+                <span className="font-semibold text-slate-800">{asStage1Data.changeObjective}</span>
+              </div>
+            )}
             {asStage1Data.docsLink && (
               <div className="flex justify-between text-xs border-b border-slate-100 pb-1">
                 <span className="text-slate-400">Docs Link</span>
@@ -5369,60 +5405,12 @@ export default function NpdDetailView() {
             </div>
           ))}
         </div>
-        {isActive && !asStage1Data && isSpocOrSourcing && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
-            <p className="text-xs font-semibold text-amber-800">Submit Alternate Supplier Request</p>
-            <div className="space-y-2">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Proposed Supplier Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. ABC Components Ltd."
-                  value={asSupplierName}
-                  onChange={e => setAsSupplierName(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Reason for Alternate Sourcing *</label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Current supplier lead time too high, cost reduction opportunity…"
-                  value={asReason}
-                  onChange={e => setAsReason(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-slate-400"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Supporting Docs Link (optional)</label>
-                <input
-                  type="text"
-                  placeholder="https://drive.google.com/…"
-                  value={asDocsLink}
-                  onChange={e => setAsDocsLink(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
-              </div>
-            </div>
-            <button
-              disabled={!asSupplierName.trim() || !asReason.trim()}
-              onClick={() => {
-                const entry = { supplierName: asSupplierName.trim(), reason: asReason.trim(), docsLink: asDocsLink.trim() || undefined, submittedBy: currentRole, submittedAt: Date.now() }
-                const all: Record<string, typeof entry> = JSON.parse(localStorage.getItem(AS_STAGE1_KEY) ?? "{}")
-                all[npdId] = entry
-                localStorage.setItem(AS_STAGE1_KEY, JSON.stringify(all))
-                setAsStage1Data(entry)
-                updateNPD(npdId, { stage: 2, stageName: getStageName(2, npd.typeOfWork), supplier: asSupplierName.trim() })
-                setActiveStage(2)
-              }}
-              className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5"
-            ><CheckCircle className="w-3.5 h-3.5" />Submit to R&D for Approval</button>
-          </div>
-        )}
         {(isDone || asStage1Data) && asStage1Data && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs border-b border-slate-100 pb-1"><span className="text-slate-400">Proposed Supplier</span><span className="font-semibold text-slate-800">{asStage1Data.supplierName}</span></div>
             <div className="flex justify-between text-xs border-b border-slate-100 pb-1"><span className="text-slate-400">Reason</span><span className="font-semibold text-slate-800 max-w-[200px] text-right">{asStage1Data.reason}</span></div>
+            {asStage1Data.changeObjective && <div className="flex justify-between text-xs border-b border-slate-100 pb-1"><span className="text-slate-400">Objective</span><span className="font-semibold text-slate-800">{asStage1Data.changeObjective}</span></div>}
+            {asStage1Data.customerSpecific?.enabled && <div className="flex justify-between text-xs border-b border-slate-100 pb-1"><span className="text-slate-400">Customer Grade</span><span className="font-semibold text-slate-800">{asStage1Data.customerSpecific.grade || "—"}</span></div>}
             {asStage1Data.docsLink && <div className="flex justify-between text-xs"><span className="text-slate-400">Docs</span><span className="font-semibold text-blue-700">{asStage1Data.docsLink}</span></div>}
             <p className="text-[10px] text-slate-400 mt-1">Submitted by {asStage1Data.submittedBy} · {new Date(asStage1Data.submittedAt).toLocaleString("en-IN")}</p>
           </div>

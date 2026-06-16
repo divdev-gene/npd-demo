@@ -1,6 +1,5 @@
 import { Sidebar } from "@/components/Sidebar"
 import { TopNav } from "@/components/TopNav"
-import { Tour } from "@/components/Tour"
 import { LoginGate } from "@/components/LoginGate"
 import { NPDProvider } from "@/lib/npdContext"
 
@@ -13,7 +12,6 @@ export default function InternalLayout({
     <NPDProvider>
       <LoginGate>
         <div className="flex h-screen overflow-hidden" style={{ background: "#F2F4F7" }}>
-          <Tour />
           <Sidebar />
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopNav />

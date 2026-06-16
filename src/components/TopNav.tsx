@@ -20,6 +20,14 @@ const ROLE_GROUPS = [
       { value: "Priya Rajan",  name: "Priya Rajan",  area: "Electronics & Electrical" },
       { value: "Amit Kumar",   name: "Amit Kumar",   area: "Compressors & Motors" },
       { value: "Varun Joshi",  name: "Varun Joshi",  area: "Packaging & Others" },
+      { value: "Rohan Desai", name: "Rohan Desai",  area: "Others" },
+    ]
+  },
+  {
+    label: "DQA Testers",
+    roles: [
+      { value: "dqa_engineer", name: "Arjun Mehta",  area: "DQA Testing" },
+      { value: "dqa_lead",     name: "Seema Pillai", area: "DQA Lead" },
     ]
   },
   {
@@ -176,7 +184,7 @@ export function TopNav() {
           </button>
 
           {showRolePicker && (
-            <div className="absolute right-0 mt-2 w-60 rounded-xl bg-white shadow-2xl shadow-slate-200/80 ring-1 ring-slate-100 overflow-hidden z-50">
+            <div className="absolute right-0 mt-2 w-60 rounded-xl bg-white shadow-2xl shadow-slate-200/80 ring-1 ring-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-3 py-2.5 border-b border-slate-100 bg-slate-50">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Switch Persona</p>
               </div>
@@ -225,14 +233,14 @@ export function TopNav() {
           >
             <Bell className="h-4 w-4" />
             {(unreadCount > 0 || (displayNotifs === null && FALLBACK_NOTIFS.length > 0)) && (
-              <span className="absolute top-1 right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold border-[1.5px] border-white leading-none">
+              <span className="absolute top-1 right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold border-[1.5px] border-white leading-none animate-in zoom-in-75 duration-200">
                 {unreadCount > 0 ? (unreadCount > 9 ? "9+" : unreadCount) : FALLBACK_NOTIFS.length}
               </span>
             )}
           </button>
 
           {showNotifs && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl bg-white shadow-2xl shadow-slate-200/80 ring-1 ring-slate-100 overflow-hidden z-50">
+            <div className="absolute right-0 mt-2 w-80 rounded-xl bg-white shadow-2xl shadow-slate-200/80 ring-1 ring-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <p className="text-[13px] font-bold text-slate-900">Notifications</p>

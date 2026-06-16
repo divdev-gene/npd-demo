@@ -5,6 +5,11 @@ import {
   ENQUIRY_SENT_KEY, PART_ASSIGNMENT_KEY, PLANT_ACCEPTANCE_KEY,
   PLANT_SUPPLIER_RESP_KEY, RND_EVAL_KEY, LIVE_QUOTATIONS_KEY,
   DEFAULT_RND_CONTACT,
+  ECN_STAGE1_KEY, ECN_RND_APPROVAL_KEY, ECN_NEGOTIATION_KEY,
+  ECN_SOURCING_DISPATCH_KEY, ECN_PRICE_ESTIMATION_KEY,
+  ECN_DQA_TESTS_KEY, ECN_HEAD_APPROVAL_KEY, ECN_PLANT_EVAL_KEY,
+  ECN_INITIAL_QUOTE_KEY,
+  AS_STAGE1_KEY, AS_RND_APPROVAL_KEY, AS_PLANT_EVAL_KEY,
 } from "./mockData"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,7 +35,7 @@ export const MIS_HEADERS = [
   "Desired Qty",
   "Trigger Request",
   "Allocation to NPD",
-  "RFQ Date",
+  "Enquiry Date",
   "Trigger Acceptance",
   "Allocated Supplier",
   "Supplier Name",
@@ -155,11 +160,294 @@ export function buildNPDRow(npd: NPDRecord): (string | number)[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ECN 46-column MIS headers
+// ─────────────────────────────────────────────────────────────────────────────
+export const ECN_MIS_HEADERS = [
+  // Section 1: ECN Details (1-8)
+  "ECN ID", "Request Date", "Manufacturing Plant", "Sample Location",
+  "Owner / SPOC", "Internal / External", "Product Line", "Change Description",
+  // Section 2: Part & Specs (9-15)
+  "ECN Part Number", "Drawing / Spec Sheet", "Revision No.",
+  "Part Name", "Part Category", "Spec Sheet Link", "Existing Supplier",
+  // Section 3: TAT & Approval (16-21)
+  "TAT (Days)", "Sample Qty", "Type of Work", "R&D SPOC",
+  "Stage 1 Submitted At", "Stage 2 R&D Approved At",
+  // Section 4: Supplier & Negotiation (22-30)
+  "Supplier Name", "Supplier (Confirmed)", "Supplier Email",
+  "Stage 2 Negotiation Status", "Negotiation Final Price",
+  "Stage 3 Dispatch ETA", "Tool / Jig Required", "Lead Time (Days)", "Dispatch Sample Qty",
+  // Section 5: Delivery (31-35)
+  "Stage 3 Dispatch Date", "TAT Elapsed (Days)", "Sample Arrival Date",
+  "Current Stage", "R&D Contact",
+  // Section 6: Testing (36-41)
+  "Stage 4 Test Start", "R&D Test Summary", "Test Categories",
+  "Stage 4 Overall Result", "Stage 5 DQA Submitted At", "Stage 5 DQA Result",
+  // Section 7: Head Approval (42-44)
+  "Stage 6 Verdict", "Stage 6 Approval Date", "Stage 6 Remarks",
+  // Section 8: Closure (45-46)
+  "Stage 7 Plant Eval Submitted", "Stage 7 Eval Result",
+]
+
+const ECN_COL_WIDTHS = [
+  14, 14, 22, 20, 18, 16, 22, 30, 16, 28,
+  12, 26, 22, 20, 24, 14, 12, 22, 18, 22,
+  24, 22, 24, 20, 24, 20, 14, 14, 14, 26,
+  16, 20, 18, 22, 26, 18, 20, 22, 18, 20,
+  22, 18, 20, 20, 18,
+]
+// Pad to 46 if needed
+while (ECN_COL_WIDTHS.length < 46) ECN_COL_WIDTHS.push(16)
+
+const ECN_SECTIONS: [number, number, string, string][] = [
+  [1,  8,  "ECN Details",           "FF6366F1"],
+  [9,  15, "Part & Specs",          "FF3B82F6"],
+  [16, 21, "TAT & Approval",        "FF0891B2"],
+  [22, 30, "Supplier & Negotiation","FF059669"],
+  [31, 35, "Delivery",              "FFF59E0B"],
+  [36, 41, "Testing",               "FFEC4899"],
+  [42, 44, "Head Approval",         "FF7C3AED"],
+  [45, 46, "Closure",               "FF64748B"],
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AS 46-column MIS headers
+// ─────────────────────────────────────────────────────────────────────────────
+export const AS_MIS_HEADERS = [
+  // Section 1: AS Details (1-8)
+  "AS ID", "Request Date", "Location", "Sample Location",
+  "Owner / SPOC", "Internal / External", "Product Line", "Reason for Qualification",
+  // Section 2: Part & Specs (9-15)
+  "Existing Part Number", "Drawing Link", "Revision No.",
+  "Item Name", "Item Category", "Spec Sheet", "Proposed Supplier",
+  // Section 3: TAT & Approval (16-21)
+  "TAT (Days)", "Sample Qty", "Type of Work", "R&D SPOC",
+  "Stage 2 R&D Approved At", "Stage 3 Negotiation Accepted At",
+  // Section 4: Supplier & Negotiation (22-30)
+  "Proposed Supplier", "Supplier (Confirmed)", "Supplier Email",
+  "Stage 3 Negotiation Status", "Final Accepted Price",
+  "Initial Quote Submitted At", "Tool / Jig Required", "Lead Time (Days)", "Sample Qty",
+  // Section 5: Delivery (31-35)
+  "Stage 3 Dispatch Date", "TAT Elapsed (Days)", "Sample Arrival Date",
+  "Current Stage", "R&D Contact",
+  // Section 6: Testing (36-41)
+  "Stage 4 Test Start", "R&D Test Summary", "Test Categories",
+  "Stage 4 Overall Result", "Stage 5 DQA Submitted At", "Stage 5 DQA Result",
+  // Section 7: Head Approval (42-44)
+  "Stage 6 Verdict", "Stage 6 Approval Date", "Stage 6 Remarks",
+  // Section 8: Closure (45-46)
+  "Stage 7 Plant Eval Submitted", "Stage 7 Eval Result",
+]
+
+const AS_COL_WIDTHS = [
+  14, 14, 18, 18, 18, 16, 22, 32, 20, 24,
+  12, 26, 22, 14, 24, 14, 12, 22, 18, 24,
+  28, 24, 24, 20, 26, 22, 28, 14, 14, 12,
+  22, 18, 20, 22, 24, 18, 20, 22, 18, 22,
+  22, 18, 20, 22, 18,
+]
+while (AS_COL_WIDTHS.length < 46) AS_COL_WIDTHS.push(16)
+
+const AS_SECTIONS: [number, number, string, string][] = [
+  [1,  8,  "AS Details",            "FF6366F1"],
+  [9,  15, "Part & Specs",          "FF3B82F6"],
+  [16, 21, "TAT & Approval",        "FF0891B2"],
+  [22, 30, "Supplier & Negotiation","FF059669"],
+  [31, 35, "Delivery",              "FFF59E0B"],
+  [36, 41, "Testing",               "FFEC4899"],
+  [42, 44, "Head Approval",         "FF7C3AED"],
+  [45, 46, "Closure",               "FF64748B"],
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ECN row builder
+// ─────────────────────────────────────────────────────────────────────────────
+export function buildECNRow(npd: NPDRecord): (string | number)[] {
+  const stage1     = readKey<Record<string, any>>(ECN_STAGE1_KEY, {})[npd.id]
+  const rndAppr    = readKey<Record<string, any>>(ECN_RND_APPROVAL_KEY, {})[npd.id]
+  const neg        = readKey<Record<string, any>>(ECN_NEGOTIATION_KEY, {})[npd.id]
+  const dispatch   = readKey<Record<string, any>>(ECN_SOURCING_DISPATCH_KEY, {})[npd.id]
+  const rndTests   = readKey<Record<string, any>>(ECN_PRICE_ESTIMATION_KEY, {})[npd.id]
+  const dqaTests   = readKey<Record<string, any>>(ECN_DQA_TESTS_KEY, {})[npd.id]
+  const headAppr   = readKey<Record<string, any>>(ECN_HEAD_APPROVAL_KEY, {})[npd.id]
+  const plantEval  = readKey<Record<string, any>>(ECN_PLANT_EVAL_KEY, {})[npd.id]
+
+  const negFinalPrice = neg?.rounds?.length
+    ? (() => { const last = [...neg.rounds].reverse().find(r => r.by === "supplier") ?? neg.rounds[neg.rounds.length - 1]; return `${last.currency ?? ""} ${last.price ?? ""}`.trim() })()
+    : "—"
+
+  const rndOverall = rndTests?.results
+    ? (Object.values(rndTests.results).every(v => String(v).toLowerCase().includes("pass") || String(v).toLowerCase() === "ok") ? "Pass" : "Fail")
+    : "—"
+
+  const dqaOverall = dqaTests?.results
+    ? (dqaTests.results.every((r: any) => r.pass) ? "Pass" : "Fail")
+    : "—"
+
+  const plantResult = plantEval?.results
+    ? (Object.values(plantEval.results).every(v => String(v).toLowerCase().includes("pass") || String(v).toLowerCase() === "ok") ? "Pass" : "Partial / Review")
+    : "—"
+
+  const elapsed = dispatch ? String(npd.totalTat - Math.max(0, npd.tatDaysRemaining)) : "—"
+
+  return [
+    // Section 1: ECN Details (1-8)
+    npd.id,
+    todayStr(),
+    npd.manufacturingLocation ?? npd.rAndDDivision,
+    npd.rAndDDivision,
+    npd.spoc,
+    "Internal",
+    npd.productLine,
+    npd.ecnChangeDescription ?? npd.remarks ?? "—",
+    // Section 2: Part & Specs (9-15)
+    npd.ecnPartNumber ?? "—",
+    "—",
+    "—",
+    npd.ecnPartName ?? npd.itemName,
+    npd.itemCategory ?? "—",
+    "—",
+    npd.supplier ?? "—",
+    // Section 3: TAT & Approval (16-21)
+    String(npd.totalTat) + " days",
+    "—",
+    npd.typeOfWork,
+    DEFAULT_RND_CONTACT.name,
+    stage1?.submittedAt ? new Date(stage1.submittedAt).toLocaleDateString("en-IN") : "—",
+    rndAppr?.approvedAt ? new Date(rndAppr.approvedAt).toLocaleDateString("en-IN") : "—",
+    // Section 4: Supplier & Negotiation (22-30)
+    npd.supplier ?? "—",
+    npd.supplier ?? "—",
+    "—",
+    neg ? (neg.status === "accepted" ? "Accepted" : "Pending") : "—",
+    negFinalPrice,
+    dispatch?.dispatchDate ? dispatch.dispatchDate : "—",
+    "No",
+    String(npd.totalTat),
+    "—",
+    // Section 5: Delivery (31-35)
+    dispatch?.dispatchDate ?? "—",
+    elapsed,
+    dispatch?.submittedAt ? new Date(dispatch.submittedAt).toLocaleDateString("en-IN") : "—",
+    npd.stageName,
+    DEFAULT_RND_CONTACT.name,
+    // Section 6: Testing (36-41)
+    rndTests?.startedAt ? new Date(rndTests.startedAt).toLocaleDateString("en-IN") : "—",
+    rndTests ? `${Object.keys(rndTests.results ?? {}).length} tests` : "—",
+    "Dimensional, Material, Functional",
+    rndOverall,
+    dqaTests?.submittedAt ? new Date(dqaTests.submittedAt).toLocaleDateString("en-IN") : "—",
+    dqaOverall,
+    // Section 7: Head Approval (42-44)
+    headAppr ? "Approved" : npd.stage >= 6 ? "Pending" : "—",
+    headAppr?.approvedAt ? new Date(headAppr.approvedAt).toLocaleDateString("en-IN") : "—",
+    headAppr?.note ?? "—",
+    // Section 8: Closure (45-46)
+    plantEval?.submittedAt ? new Date(plantEval.submittedAt).toLocaleDateString("en-IN") : "—",
+    plantResult,
+  ]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AS row builder
+// ─────────────────────────────────────────────────────────────────────────────
+export function buildASRow(npd: NPDRecord): (string | number)[] {
+  const stage1     = readKey<Record<string, any>>(AS_STAGE1_KEY, {})[npd.id]
+  const rndAppr    = readKey<Record<string, any>>(AS_RND_APPROVAL_KEY, {})[npd.id]
+  const initQuote  = readKey<Record<string, any>>(ECN_INITIAL_QUOTE_KEY, {})[npd.id]
+  const neg        = readKey<Record<string, any>>(ECN_NEGOTIATION_KEY, {})[npd.id]
+  const rndTests   = readKey<Record<string, any>>(ECN_PRICE_ESTIMATION_KEY, {})[npd.id]
+  const dqaTests   = readKey<Record<string, any>>(ECN_DQA_TESTS_KEY, {})[npd.id]
+  const headAppr   = readKey<Record<string, any>>(ECN_HEAD_APPROVAL_KEY, {})[npd.id]
+  const plantEval  = readKey<Record<string, any>>(AS_PLANT_EVAL_KEY, {})[npd.id]
+
+  const supplierName = stage1?.supplierName ?? npd.supplier ?? "—"
+
+  const finalPrice = neg?.rounds?.length
+    ? (() => { const last = [...neg.rounds].reverse().find(r => r.by === "sourcing") ?? neg.rounds[neg.rounds.length - 1]; return `${last.currency ?? ""} ${last.price ?? ""}`.trim() })()
+    : initQuote ? `${initQuote.currency ?? ""} ${initQuote.price ?? ""}`.trim()
+    : "—"
+
+  const negAcceptedAt = neg?.approvedAt
+    ? new Date(neg.approvedAt).toLocaleDateString("en-IN")
+    : "—"
+
+  const rndOverall = rndTests?.results
+    ? (Object.values(rndTests.results).every(v => String(v).toLowerCase().includes("pass") || String(v).toLowerCase() === "ok") ? "Pass" : "Fail")
+    : "—"
+
+  const dqaOverall = dqaTests?.results
+    ? (dqaTests.results.every((r: any) => r.pass) ? "Pass" : "Fail")
+    : "—"
+
+  const plantResult = plantEval?.results
+    ? (Object.values(plantEval.results).every(v => String(v).toLowerCase().includes("pass") || String(v).toLowerCase() === "ok") ? "Pass" : "Partial / Review")
+    : "—"
+
+  return [
+    // Section 1: AS Details (1-8)
+    npd.id,
+    todayStr(),
+    npd.rAndDDivision,
+    npd.rAndDDivision,
+    npd.spoc,
+    "Internal",
+    npd.productLine,
+    stage1?.reason ?? "—",
+    // Section 2: Part & Specs (9-15)
+    npd.ecnPartNumber ?? "—",
+    stage1?.docsLink ?? "—",
+    "—",
+    npd.itemName,
+    npd.itemCategory ?? "—",
+    "—",
+    supplierName,
+    // Section 3: TAT & Approval (16-21)
+    String(npd.totalTat) + " days",
+    "—",
+    npd.typeOfWork,
+    DEFAULT_RND_CONTACT.name,
+    rndAppr?.approvedAt ? new Date(rndAppr.approvedAt).toLocaleDateString("en-IN") : "—",
+    negAcceptedAt,
+    // Section 4: Supplier & Negotiation (22-30)
+    supplierName,
+    supplierName,
+    "—",
+    neg ? (neg.status === "accepted" ? "Accepted" : "Pending") : initQuote ? "Quote Received" : "—",
+    finalPrice,
+    initQuote?.submittedAt ? new Date(initQuote.submittedAt).toLocaleDateString("en-IN") : "—",
+    "No",
+    String(npd.totalTat),
+    "—",
+    // Section 5: Delivery (31-35)
+    "—",
+    neg ? String(npd.totalTat - Math.max(0, npd.tatDaysRemaining)) : "—",
+    "—",
+    npd.stageName,
+    DEFAULT_RND_CONTACT.name,
+    // Section 6: Testing (36-41)
+    rndTests?.startedAt ? new Date(rndTests.startedAt).toLocaleDateString("en-IN") : "—",
+    rndTests ? `${Object.keys(rndTests.results ?? {}).length} tests` : "—",
+    "Dimensional, Material, Functional",
+    rndOverall,
+    dqaTests?.submittedAt ? new Date(dqaTests.submittedAt).toLocaleDateString("en-IN") : "—",
+    dqaOverall,
+    // Section 7: Head Approval (42-44)
+    headAppr ? "Approved" : npd.stage >= 6 ? "Pending" : "—",
+    headAppr?.approvedAt ? new Date(headAppr.approvedAt).toLocaleDateString("en-IN") : "—",
+    headAppr?.note ?? "—",
+    // Section 8: Closure (45-46)
+    plantEval?.submittedAt ? new Date(plantEval.submittedAt).toLocaleDateString("en-IN") : "—",
+    plantResult,
+  ]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main export — ExcelJS loaded dynamically to avoid Next.js perf API conflict
 // ─────────────────────────────────────────────────────────────────────────────
 export async function downloadMISReport(
   npds: NPDRecord[],
   filename = "NPD_Sourcing_Tracker_MIS.xlsx",
+  allNpds?: NPDRecord[],
 ) {
   // Dynamic import keeps exceljs out of the module-level bundle and avoids
   // the "Performance.measure RootPage negative timestamp" error in Next.js.
@@ -222,6 +510,7 @@ export async function downloadMISReport(
   })
 
   const W = 20   // total columns used in summary
+
   sum.columns = Array.from({ length: W }, (_, i) => ({ key: `c${i + 1}`, width: i === 0 || i === 4 || i === 8 || i === 12 || i === 16 ? 3 : 14 }))
 
   const active      = npds.filter(n => n.stage < 8).length
@@ -257,7 +546,7 @@ export async function downloadMISReport(
   sc(sum.getCell(5, 1), { v: "  KEY PERFORMANCE INDICATORS", bg: "FFF8FAFC", bold: true, size: 8, color: "FF94A3B8" })
   sum.getCell(5, 1).border = { bottom: { style: "thin", color: { argb: "FFE2E8F0" } } }
 
-  // Rows 6-9 — KPI cards (col layout: A=margin, B-D=card1, E=gap, F-H=card2, I=gap, J-L=card3, M=gap, N-P=card4)
+  // Rows 6-9 — KPI cards
   sum.getRow(6).height = 16; sum.getRow(7).height = 44; sum.getRow(8).height = 16; sum.getRow(9).height = 6
 
   const kpis = [
@@ -330,125 +619,209 @@ export async function downloadMISReport(
   sc(sum.getCell(19, 1), { v: `Amber Enterprises India Limited  ·  NPD Sourcing Tracker MIS  ·  FY 2025–26  ·  ${todayStr()}`, bg: "FFF1F5F9", size: 8, color: "FF94A3B8", hAlign: "center", italic: true })
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 2 — DETAILED REPORT (all 46 MIS columns)
+  // Shared helper: builds a full MIS detail sheet for any set of NPD records
   // ══════════════════════════════════════════════════════════════════════════
-  const det = wb.addWorksheet("Detailed Report", {
-    properties: { tabColor: { argb: "FF10B981" } },
-    views: [{ state: "frozen", ySplit: 5, xSplit: 1 }],
-    pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1 },
-  })
+  function addMISSheet(
+    sheetName: string,
+    tabColor: string,
+    sheetNpds: NPDRecord[],
+    subtitle?: string,
+    headers?: string[],
+    colWidths?: number[],
+    sectionDefs?: [number, number, string, string][],
+    rowBuilder?: (npd: NPDRecord) => (string | number)[],
+  ) {
+    const hdrs    = headers    ?? MIS_HEADERS
+    const widths  = colWidths  ?? MIS_COL_WIDTHS
+    const sects   = sectionDefs ?? SECTIONS
+    const builder = rowBuilder  ?? buildNPDRow
 
-  const N = MIS_HEADERS.length   // 46
-
-  det.columns = MIS_HEADERS.map((_, i) => ({ key: `c${i + 1}`, width: MIS_COL_WIDTHS[i] ?? 16 }))
-
-  // Row 1 — company title
-  det.getRow(1).height = 30
-  det.mergeCells(1, 1, 1, N)
-  sc(det.getCell(1, 1), { v: "AMBER ENTERPRISES INDIA LIMITED", bg: "FF0F172A", bold: true, size: 14, color: "FFFFFFFF", hAlign: "center" })
-
-  // Row 2 — report title
-  det.getRow(2).height = 20
-  det.mergeCells(2, 1, 2, N)
-  sc(det.getCell(2, 1), { v: "NPD SOURCING TRACKER & MIS REPORT — FY 2025–26", bg: "FF1E293B", size: 11, color: "FF94A3B8", hAlign: "center" })
-
-  // Row 3 — meta
-  det.getRow(3).height = 16
-  det.mergeCells(3, 1, 3, N)
-  sc(det.getCell(3, 1), { v: `Generated: ${todayStr()}   ·   Total Records: ${npds.length}`, bg: "FFF1F5F9", size: 9, color: "FF64748B", hAlign: "center", italic: true })
-
-  // Row 4 — section colour band
-  det.getRow(4).height = 14
-  SECTIONS.forEach(([c1, c2, label, hdrBg]) => {
-    det.mergeCells(4, c1, 4, c2)
-    sc(det.getCell(4, c1), { v: label.toUpperCase(), bg: hdrBg, bold: true, size: 8, color: "FFFFFFFF", hAlign: "center", border: thinBorder("FF00000022") })
-    for (let c = c1 + 1; c <= c2; c++) { det.getCell(4, c).fill = solid(hdrBg); det.getCell(4, c).border = thinBorder("FF00000022") }
-  })
-
-  // Row 5 — column headers (colour-matched to section)
-  det.getRow(5).height = 36
-  const sectionFor = (col: number) => SECTIONS.find(([c1, c2]) => col >= c1 && col <= c2)
-  // Slightly lightened header bg per section
-  const HEADER_BG: Record<string, string> = {
-    "FF6366F1": "FF4338CA", "FF3B82F6": "FF2563EB", "FF0891B2": "FF0E7490",
-    "FF059669": "FF047857", "FFF59E0B": "FFD97706", "FFEC4899": "FFDB2777",
-    "FF7C3AED": "FF6D28D9", "FF64748B": "FF475569",
-  }
-  MIS_HEADERS.forEach((hdr, i) => {
-    const col = i + 1
-    const sec = sectionFor(col)
-    const bg  = sec ? (HEADER_BG[sec[3]] ?? "FF1E293B") : "FF1E293B"
-    sc(det.getCell(5, col), {
-      v: hdr, bg, bold: true, size: 8, color: "FFFFFFFF",
-      hAlign: "center", wrap: true,
-      border: { top: { style: "medium", color: { argb: "FF374151" } }, bottom: { style: "medium", color: { argb: "FF374151" } }, left: thinBorder().left, right: thinBorder().right },
+    const det = wb.addWorksheet(sheetName, {
+      properties: { tabColor: { argb: tabColor } },
+      views: [{ state: "frozen", ySplit: 5, xSplit: 1 }],
+      pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1 },
     })
-  })
 
-  // Auto-filter on header row
-  det.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: N } }
+    const N = hdrs.length   // 46
 
-  // Data rows
-  const VERDICT_STYLE: Record<string, { bg: string; color: string }> = {
-    "Approved":     { bg: "FFD1FAE5", color: "FF065F46" },
-    "Not Approved": { bg: "FFFEE2E2", color: "FF991B1B" },
-    "Pending":      { bg: "FFFEF3C7", color: "FF92400E" },
-  }
+    det.columns = hdrs.map((_, i) => ({ key: `c${i + 1}`, width: widths[i] ?? 16 }))
 
-  npds.forEach((npd, i) => {
-    const r      = 6 + i
-    const isEven = i % 2 === 0
-    const rowBg  = isEven ? "FFFFFFFF" : "FFF8FAFC"
-    const values = buildNPDRow(npd)
-    det.getRow(r).height = 18
+    // Row 1 — company title
+    det.getRow(1).height = 30
+    det.mergeCells(1, 1, 1, N)
+    sc(det.getCell(1, 1), { v: "AMBER ENTERPRISES INDIA LIMITED", bg: "FF0F172A", bold: true, size: 14, color: "FFFFFFFF", hAlign: "center" })
 
-    values.forEach((val, vi) => {
-      const col  = vi + 1
-      const cell = det.getCell(r, col)
-      const isEmpty = val === "—" || val === "" || val == null
+    // Row 2 — report title
+    det.getRow(2).height = 20
+    det.mergeCells(2, 1, 2, N)
+    const titleText = subtitle
+      ? `${sheetName.toUpperCase()}  —  ${subtitle}`
+      : "NPD SOURCING TRACKER & MIS REPORT — FY 2025–26"
+    sc(det.getCell(2, 1), { v: titleText, bg: "FF1E293B", size: 11, color: "FF94A3B8", hAlign: "center" })
 
-      cell.value  = val
-      cell.fill   = solid(rowBg)
-      cell.border = thinBorder()
-      cell.alignment = { horizontal: col >= 16 && col <= 32 ? "center" : "left", vertical: "middle" }
-      cell.font   = { name: "Calibri", size: 10, bold: col === 1, color: { argb: isEmpty ? "FFCBD5E1" : col === 1 ? "FF4F46E5" : "FF1E293B" } }
+    // Row 3 — meta
+    det.getRow(3).height = 16
+    det.mergeCells(3, 1, 3, N)
+    sc(det.getCell(3, 1), { v: `Generated: ${todayStr()}   ·   Total Records: ${sheetNpds.length}`, bg: "FFF1F5F9", size: 9, color: "FF64748B", hAlign: "center", italic: true })
 
-      // Cost column — number format
-      if (col === 46 && typeof val === "number") {
-        cell.numFmt = '₹#,##0.00'
-        cell.alignment = { horizontal: "right", vertical: "middle" }
-      }
-
-      // Verdict column — conditional colour
-      if (col === 42 && !isEmpty) {
-        const vs = VERDICT_STYLE[String(val)]
-        if (vs) { cell.fill = solid(vs.bg); cell.font = { ...cell.font, bold: true, color: { argb: vs.color } } }
-      }
-
-      // Status column (34) — stage progress highlight
-      if (col === 34 && !isEmpty) {
-        cell.fill = solid(isEven ? "FFF0FDF4" : "FFE6FAF0")
-        cell.font = { name: "Calibri", size: 10, color: { argb: "FF047857" } }
-      }
+    // Row 4 — section colour band
+    det.getRow(4).height = 14
+    sects.forEach(([c1, c2, label, hdrBg]) => {
+      det.mergeCells(4, c1, 4, c2)
+      sc(det.getCell(4, c1), { v: label.toUpperCase(), bg: hdrBg, bold: true, size: 8, color: "FFFFFFFF", hAlign: "center", border: thinBorder("FF00000022") })
+      for (let c = c1 + 1; c <= c2; c++) { det.getCell(4, c).fill = solid(hdrBg); det.getCell(4, c).border = thinBorder("FF00000022") }
     })
-  })
 
-  // Total row at bottom
-  const totalR = 6 + npds.length
-  det.getRow(totalR).height = 22
-  det.mergeCells(totalR, 1, totalR, N)
-  sc(det.getCell(totalR, 1), {
-    v: `TOTAL  —  ${npds.length} record${npds.length !== 1 ? "s" : ""}   ·   ${active} Active   ·   ${gradeA} Grade A   ·   ${overdueAll} Overdue`,
-    bg: "FFF1F5F9", bold: true, size: 10, color: "FF374151",
-    border: { top: { style: "medium", color: { argb: "FF9CA3AF" } }, bottom: { style: "medium", color: { argb: "FF9CA3AF" } }, left: { style: "medium", color: { argb: "FF9CA3AF" } }, right: { style: "medium", color: { argb: "FF9CA3AF" } } },
-  })
-  for (let c = 2; c <= N; c++) {
-    det.getCell(totalR, c).fill   = solid("FFF1F5F9")
-    det.getCell(totalR, c).border = { top: { style: "medium", color: { argb: "FF9CA3AF" } }, bottom: { style: "medium", color: { argb: "FF9CA3AF" } }, right: { style: "medium", color: { argb: "FF9CA3AF" } } }
+    // Row 5 — column headers (colour-matched to section)
+    det.getRow(5).height = 36
+    const sectionFor = (col: number) => sects.find(([c1, c2]) => col >= c1 && col <= c2)
+    const HEADER_BG: Record<string, string> = {
+      "FF6366F1": "FF4338CA", "FF3B82F6": "FF2563EB", "FF0891B2": "FF0E7490",
+      "FF059669": "FF047857", "FFF59E0B": "FFD97706", "FFEC4899": "FFDB2777",
+      "FF7C3AED": "FF6D28D9", "FF64748B": "FF475569",
+    }
+    hdrs.forEach((hdr, i) => {
+      const col = i + 1
+      const sec = sectionFor(col)
+      const bg  = sec ? (HEADER_BG[sec[3]] ?? "FF1E293B") : "FF1E293B"
+      sc(det.getCell(5, col), {
+        v: hdr, bg, bold: true, size: 8, color: "FFFFFFFF",
+        hAlign: "center", wrap: true,
+        border: { top: { style: "medium", color: { argb: "FF374151" } }, bottom: { style: "medium", color: { argb: "FF374151" } }, left: thinBorder().left, right: thinBorder().right },
+      })
+    })
+
+    // Auto-filter on header row
+    det.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: N } }
+
+    // Data rows
+    const VERDICT_STYLE: Record<string, { bg: string; color: string }> = {
+      "Approved":     { bg: "FFD1FAE5", color: "FF065F46" },
+      "Not Approved": { bg: "FFFEE2E2", color: "FF991B1B" },
+      "Pending":      { bg: "FFFEF3C7", color: "FF92400E" },
+    }
+
+    sheetNpds.forEach((npd, i) => {
+      const r      = 6 + i
+      const isEven = i % 2 === 0
+      const rowBg  = isEven ? "FFFFFFFF" : "FFF8FAFC"
+      const values = builder(npd)
+      det.getRow(r).height = 18
+
+      values.forEach((val, vi) => {
+        const col  = vi + 1
+        const cell = det.getCell(r, col)
+        const isEmpty = val === "—" || val === "" || val == null
+
+        cell.value  = val
+        cell.fill   = solid(rowBg)
+        cell.border = thinBorder()
+        cell.alignment = { horizontal: col >= 16 && col <= 32 ? "center" : "left", vertical: "middle" }
+        cell.font   = { name: "Calibri", size: 10, bold: col === 1, color: { argb: isEmpty ? "FFCBD5E1" : col === 1 ? "FF4F46E5" : "FF1E293B" } }
+
+        // Cost column — number format
+        if (col === 46 && typeof val === "number") {
+          cell.numFmt = '₹#,##0.00'
+          cell.alignment = { horizontal: "right", vertical: "middle" }
+        }
+
+        // Verdict column — conditional colour
+        if (col === 42 && !isEmpty) {
+          const vs = VERDICT_STYLE[String(val)]
+          if (vs) { cell.fill = solid(vs.bg); cell.font = { ...cell.font, bold: true, color: { argb: vs.color } } }
+        }
+
+        // Status column (34) — stage progress highlight
+        if (col === 34 && !isEmpty) {
+          cell.fill = solid(isEven ? "FFF0FDF4" : "FFE6FAF0")
+          cell.font = { name: "Calibri", size: 10, color: { argb: "FF047857" } }
+        }
+      })
+    })
+
+    // Total row at bottom
+    const sheetActive   = sheetNpds.filter(n => n.stage < 8).length
+    const sheetGradeA   = sheetNpds.filter(n => n.gradeA).length
+    const sheetOverdue  = sheetNpds.filter(n => n.tatHealth === "black" || n.tatHealth === "red").length
+    const totalR = 6 + sheetNpds.length
+    det.getRow(totalR).height = 22
+    det.mergeCells(totalR, 1, totalR, N)
+    sc(det.getCell(totalR, 1), {
+      v: `TOTAL  —  ${sheetNpds.length} record${sheetNpds.length !== 1 ? "s" : ""}   ·   ${sheetActive} Active   ·   ${sheetGradeA} Grade A   ·   ${sheetOverdue} Overdue`,
+      bg: "FFF1F5F9", bold: true, size: 10, color: "FF374151",
+      border: { top: { style: "medium", color: { argb: "FF9CA3AF" } }, bottom: { style: "medium", color: { argb: "FF9CA3AF" } }, left: { style: "medium", color: { argb: "FF9CA3AF" } }, right: { style: "medium", color: { argb: "FF9CA3AF" } } },
+    })
+    for (let c = 2; c <= N; c++) {
+      det.getCell(totalR, c).fill   = solid("FFF1F5F9")
+      det.getCell(totalR, c).border = { top: { style: "medium", color: { argb: "FF9CA3AF" } }, bottom: { style: "medium", color: { argb: "FF9CA3AF" } }, right: { style: "medium", color: { argb: "FF9CA3AF" } } }
+    }
+
+    // Heavy outer box on the whole data table
+    outerBox(det, 4, 1, totalR, N, "FF9CA3AF", "medium")
   }
 
-  // Heavy outer box on the whole data table
-  outerBox(det, 4, 1, totalR, N, "FF9CA3AF", "medium")
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 2 — DETAILED REPORT (non-bundle NPDs only)
+  // ══════════════════════════════════════════════════════════════════════════
+  const detailNpds = npds.filter(n => !n.isBundle)
+  addMISSheet("Detailed Report", "FF10B981", detailNpds)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BUNDLE CHILD SHEETS — one sheet per NCD item for each NPD Bundle parent
+  // ══════════════════════════════════════════════════════════════════════════
+  const bundleParents = npds.filter(n => n.isBundle)
+
+  if (bundleParents.length > 0) {
+    // Resolve children: use allNpds if provided, otherwise read from localStorage
+    const sourceNpds: NPDRecord[] = allNpds ?? readKey<NPDRecord[]>("npd_records_v1", [])
+
+    const safeName = (str: string) =>
+      str.replace(/[\\/?*[\]:]/g, " ").trim().replace(/\s+/g, " ").slice(0, 31)
+
+    // Track used sheet names to avoid duplicates across multiple bundles
+    const usedNames = new Set<string>(["Summary", "Detailed Report"])
+
+    for (const bundle of bundleParents) {
+      const children = sourceNpds.filter(n => n.parentId === bundle.id)
+
+      children.forEach((child, idx) => {
+        // Build sheet name: prefer bundleItemName, fall back to child ID suffix
+        const itemLabel = child.bundleItemName?.trim() || child.id
+        let name = safeName(itemLabel)
+
+        // Deduplicate: append (2), (3)… if collision
+        if (usedNames.has(name)) {
+          let counter = 2
+          let candidate = safeName(`${itemLabel.slice(0, 27)} (${counter})`)
+          while (usedNames.has(candidate)) {
+            counter++
+            candidate = safeName(`${itemLabel.slice(0, 27)} (${counter})`)
+          }
+          name = candidate
+        }
+        usedNames.add(name)
+
+        const subtitle = `Bundle ${bundle.id}  ·  Item ${idx + 1} of ${children.length}`
+        addMISSheet(name, "FF8B5CF6", [child], subtitle)
+      })
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ECN REPORT sheet
+  // ══════════════════════════════════════════════════════════════════════════
+  const ecnNpds = npds.filter(n => n.typeOfWork === "Engineering Change Notice (ECN)")
+  if (ecnNpds.length > 0) {
+    addMISSheet("ECN Report", "FFF97316", ecnNpds, undefined, ECN_MIS_HEADERS, ECN_COL_WIDTHS, ECN_SECTIONS, buildECNRow)
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // AS REPORT sheet
+  // ══════════════════════════════════════════════════════════════════════════
+  const asNpds = npds.filter(n => n.typeOfWork?.includes("Alternative Supplier"))
+  if (asNpds.length > 0) {
+    addMISSheet("AS Report", "FF0D9488", asNpds, undefined, AS_MIS_HEADERS, AS_COL_WIDTHS, AS_SECTIONS, buildASRow)
+  }
 
   // ── Download ────────────────────────────────────────────────────────────────
   const buf  = await wb.xlsx.writeBuffer()

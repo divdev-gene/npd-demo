@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { mockNPDs, NDA_STATUS_KEY, type NPDRecord } from "@/lib/mockData"
 import { CheckCircle2, ShieldCheck, FileText, Building2, Mail } from "lucide-react"
+import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
 
 const NDA_TEXT = `NON-DISCLOSURE AGREEMENT
@@ -123,9 +124,8 @@ export default function SupplierNdaPage() {
     const sourcingEmailBody = `<p>Dear <strong>${npd?.spoc ?? "Sourcing Team"}</strong>,</p><p>This is to inform you that <strong>${vendorName}</strong> has successfully signed the Non-Disclosure Agreement.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">Vendor</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${vendorName}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Signed By</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${displayName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Signed At</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${signedAt}</td></tr></table><p>You may now proceed with sharing the project specifications with this vendor.</p><p>Regards,<br/><strong>${displayName}</strong><br/><span style="color:#64748b;font-size:12px">${vendorName}</span></p>`
 
     return (
-      <div className="min-h-screen bg-slate-50 py-8 px-4">
-        <div className="max-w-2xl mx-auto space-y-5">
-          {/* Confirmation card */}
+      <SupplierPortalShell portalLabel="NDA Signing" maxWidth="2xl">
+        {/* Confirmation card */}
           <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 text-center space-y-5">
             <div className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mx-auto">
               <CheckCircle2 className="w-9 h-9 text-emerald-600" />
@@ -175,14 +175,12 @@ export default function SupplierNdaPage() {
               <div className="px-5 py-4 text-sm text-slate-900 leading-relaxed bg-white [&_p]:mb-3 [&_strong]:font-semibold" dangerouslySetInnerHTML={{ __html: sourcingEmailBody }} />
             </div>
           </div>
-        </div>
-      </div>
+      </SupplierPortalShell>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <SupplierPortalShell portalLabel="NDA Signing" maxWidth="2xl">
 
         {/* Header */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
@@ -273,7 +271,6 @@ export default function SupplierNdaPage() {
             By clicking &quot;Sign NDA Digitally&quot; you are providing a legally binding digital signature. This action is recorded with a timestamp.
           </p>
         </div>
-      </div>
-    </div>
+    </SupplierPortalShell>
   )
 }

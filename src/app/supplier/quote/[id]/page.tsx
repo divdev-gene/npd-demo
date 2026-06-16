@@ -12,6 +12,7 @@ import {
   Clock, AlertTriangle, XCircle, Phone, Mail, CheckCircle,
   MessageSquare, ChevronDown, ChevronUp,
 } from "lucide-react"
+import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
 function getValidUntil(daysFromNow = 10) {
   const d = new Date()
@@ -346,23 +347,7 @@ export default function SupplierQuotePage() {
   const rndContact: ContactInfo  = DEFAULT_RND_CONTACT
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain" />
-            <div className="h-5 w-px bg-slate-200" />
-            <span className="text-sm font-bold text-slate-700">Vendor Feasibility Portal</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
-            <Clock className="w-3.5 h-3.5" />
-            Response Deadline: {validUntil}
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <SupplierPortalShell portalLabel="Vendor Feasibility" maxWidth="4xl">
 
         {/* NPD Hero */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
@@ -553,13 +538,7 @@ export default function SupplierQuotePage() {
                 Based on the provided specifications and documents, please confirm your capability to fulfil this requirement.
               </p>
             </div>
-            {queryHistory.length + (pendingRndReply ? 1 : 0) >= 2 && (
-              <div className="flex items-start gap-2 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2.5 text-xs text-slate-600">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400" />
-                <span>You have reached the maximum of 2 clarification rounds. Please confirm feasibility or indicate that you cannot manufacture.</span>
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setFeasibleChoice("yes")}
@@ -579,32 +558,6 @@ export default function SupplierQuotePage() {
                     Yes, we can proceed
                   </p>
                   <p className="text-xs text-slate-400 mt-0.5">Confirm dispatch date for sample submission</p>
-                </div>
-              </button>
-              <button
-                type="button"
-                disabled={queryHistory.length + (pendingRndReply ? 1 : 0) >= 2}
-                onClick={() => queryHistory.length < 2 && setFeasibleChoice("no")}
-                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-4 text-left transition-colors ${
-                  queryHistory.length + (pendingRndReply ? 1 : 0) >= 2
-                    ? "border-slate-200 bg-slate-100 opacity-40 cursor-not-allowed"
-                    : feasibleChoice === "no"
-                      ? "border-amber-400 bg-amber-50"
-                      : "border-slate-200 hover:border-slate-300 bg-slate-50"
-                }`}
-              >
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                  feasibleChoice === "no" ? "border-amber-500 bg-amber-500" : "border-slate-300"
-                }`}>
-                  {feasibleChoice === "no" && <MessageSquare className="w-3 h-3 text-white" />}
-                </div>
-                <div>
-                  <p className={`text-sm font-bold ${feasibleChoice === "no" ? "text-amber-800" : "text-slate-700"}`}>
-                    Need clarification
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {queryHistory.length + (pendingRndReply ? 1 : 0) >= 2 ? "Query limit reached" : "Raise a query before confirming feasibility"}
-                  </p>
                 </div>
               </button>
               <button
@@ -629,36 +582,15 @@ export default function SupplierQuotePage() {
                 </div>
               </button>
             </div>
-            {feasibleChoice === "no" && (
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700">
-                  Raise a Clarification Query <span className="text-slate-400 font-normal">(optional)</span>
-                </label>
-                <p className="text-xs text-slate-500">
-                  If you need more information from the R&amp;D team before confirming, describe your query below.
-                </p>
-                <textarea
-                  rows={3}
-                  placeholder="e.g. Please clarify the dimensional tolerance on the inner diameter…"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-red-400 focus:border-red-400 resize-none"
-                  value={supplierQuery}
-                  onChange={e => setSupplierQuery(e.target.value)}
-                />
-              </div>
-            )}
             <button
               type="button"
               onClick={handleGateSubmit}
               disabled={!feasibleChoice}
               className={`w-full disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-6 py-3 transition-colors ${
-                feasibleChoice === "cannot" ? "bg-red-700 hover:bg-red-600" :
-                feasibleChoice === "no"     ? "bg-amber-600 hover:bg-amber-500" :
-                "bg-emerald-700 hover:bg-emerald-600"
+                feasibleChoice === "cannot" ? "bg-red-700 hover:bg-red-600" : "bg-emerald-700 hover:bg-emerald-600"
               }`}
             >
-              {feasibleChoice === "cannot" ? "Confirm — Cannot Manufacture" :
-               feasibleChoice === "no"     ? "Submit Query" :
-               "Confirm Feasibility"}
+              {feasibleChoice === "cannot" ? "Confirm — Cannot Manufacture" : "Confirm Feasibility"}
             </button>
             <p className="text-xs text-slate-400 text-center">
               Your response will be used for planning sourcing and development timelines.
@@ -702,7 +634,6 @@ export default function SupplierQuotePage() {
             </form>
           </div>
         )}
-      </main>
-    </div>
+    </SupplierPortalShell>
   )
 }

@@ -105,12 +105,12 @@ function WelcomeStep() {
 function PipelineStep() {
   const stages = [
     { n: 1, label: "Request\nInitialisation", color: "#e0e7ff", text: "#3730a3" },
-    { n: 2, label: "Supplier Sourcing\n& Quotation",  color: "#dbeafe", text: "#1d4ed8" },
+    { n: 2, label: "Supplier Sourcing\n& Confirm",  color: "#dbeafe", text: "#1d4ed8" },
     { n: 3, label: "Supplier\nDispatch",      color: "#ede9fe", text: "#6d28d9" },
-    { n: 4, label: "RND\nEvaluation",         color: "#fef3c7", text: "#b45309" },
+    { n: 4, label: "Design and\nFeasibility", color: "#fef3c7", text: "#b45309" },
     { n: 5, label: "RND Testing\n& TQR",      color: "#fef3c7", text: "#b45309" },
     { n: 6, label: "RND\nApproval",           color: "#fde68a", text: "#92400e" },
-    { n: 7, label: "Sample Dispatch\n& R&D Acceptance", color: "#d1fae5", text: "#065f46" },
+    { n: 7, label: "PP Pricing",              color: "#d1fae5", text: "#065f46" },
     { n: 8, label: "NPD Summary\n& Closure",  color: "#dcfce7", text: "#166534" },
   ]
   return (
@@ -197,7 +197,7 @@ export function Tour() {
           features={[
             { label: "TAT Breach alerts", desc: "Auto-flagged when SLA is exceeded" },
             { label: "TQR verdicts",      desc: "R&D approval and rejection outcomes" },
-            { label: "Supplier activity", desc: "Quotation uploads and status updates" },
+            { label: "Supplier activity", desc: "Submission uploads and status updates" },
           ]}
           featuresRow
         />

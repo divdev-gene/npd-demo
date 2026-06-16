@@ -28,6 +28,8 @@ import type {
   NTDRedesignData,
   NTDStage11Data,
   NTDCommoditySelection,
+  NTDMergesData,
+  NTDCompNegotiationStore,
 } from "@/types/ntd"
 
 // ─── Key Builders ─────────────────────────────────────────────
@@ -48,6 +50,8 @@ export const NTD_KEYS = {
   trials:      (id: string) => `ntd_trials_${id}`,
   redesign:    (id: string) => `ntd_redesign_${id}`,
   stage11:     (id: string) => `ntd_stage11_${id}`,
+  merges:           (id: string) => `ntd_merges_${id}`,
+  compNegotiation:  (id: string) => `ntd_comp_negotiation_${id}`,
 } as const
 
 // ─── Generic Helpers ──────────────────────────────────────────
@@ -148,7 +152,9 @@ export function addFileComment(
   author: string,
   authorRole: NTDRole,
   text: string,
-  requiresRevision: boolean
+  requiresRevision: boolean,
+  attachmentLink?: string,
+  attachmentName?: string
 ): VersionedFile {
   const comment: FileComment = {
     comment_id: generateCommentId(),
@@ -158,6 +164,7 @@ export function addFileComment(
     created_at: new Date().toISOString(),
     requires_revision: requiresRevision,
     resolved: false,
+    ...(attachmentLink ? { attachment_link: attachmentLink, attachment_name: attachmentName } : {}),
   }
   return {
     ...file,
@@ -279,6 +286,13 @@ export const setNTDRedesign    = (id: string, d: NTDRedesignData) => lsSet(NTD_K
 
 export const getNTDStage11     = (id: string) => lsGet<NTDStage11Data>(NTD_KEYS.stage11(id))
 export const setNTDStage11     = (id: string, d: NTDStage11Data) => lsSet(NTD_KEYS.stage11(id), d)
+
+export const getNTDMerges           = (id: string) => lsGet<NTDMergesData>(NTD_KEYS.merges(id))
+export const setNTDMerges           = (id: string, d: NTDMergesData) => lsSet(NTD_KEYS.merges(id), d)
+
+// Sourcing's per-component category selections (INTERNAL ONLY — never read by vendor portal)
+export const getNTDCompNegotiation  = (id: string) => lsGet<NTDCompNegotiationStore>(NTD_KEYS.compNegotiation(id))
+export const setNTDCompNegotiation  = (id: string, d: NTDCompNegotiationStore) => lsSet(NTD_KEYS.compNegotiation(id), d)
 
 // ─── Stage Gate Logic ─────────────────────────────────────────
 

@@ -259,7 +259,7 @@ Please initiate Supplier Selection immediately.`}
                
                <div className="space-y-2 border-t pt-4">
                  <div className="flex items-center justify-between">
-                   <Label className="font-bold text-emerald-900">Bulk RFQ to Vendor</Label>
+                   <Label className="font-bold text-emerald-900">Bulk Enquiry to Vendor</Label>
                    <Button size="sm" onClick={saveRfqTemplate} className="bg-emerald-700 hover:bg-emerald-800 text-white h-7 text-xs">
                      {rfqSaved ? "Saved ✓" : <><Save className="w-3 h-3 mr-1" />Save Template</>}
                    </Button>

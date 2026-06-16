@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, Clock, AlertTriangle, CalendarDays, PackageOpen, Send, Check } from "lucide-react"
+import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
 export default function SupplierDispatchUpdatePage() {
   const params = useParams()
@@ -53,21 +54,7 @@ export default function SupplierDispatchUpdatePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-4">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/amber-logo.png" alt="Amber Logo" className="h-8 w-auto object-contain" />
-            <div className="h-6 w-px bg-slate-300"></div>
-            <span className="font-bold text-slate-800 tracking-tight">Supplier Operations</span>
-          </div>
-          <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 px-3 py-1">
-             Dispatch Health Check
-          </Badge>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <SupplierPortalShell portalLabel="Dispatch Update" maxWidth="4xl">
         
         <div className="text-center mb-8">
           <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-200 mb-4 border-none px-3 py-1 text-sm">{npdData.id}</Badge>
@@ -163,7 +150,6 @@ export default function SupplierDispatchUpdatePage() {
             </form>
           </CardContent>
         </Card>
-      </main>
-    </div>
+    </SupplierPortalShell>
   )
 }

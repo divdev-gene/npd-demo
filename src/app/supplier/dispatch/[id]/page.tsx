@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import { mockNPDs, SPOC_CONTACTS, VENDOR_CATALOG, DEFAULT_RND_CONTACT, type NPDRecord } from "@/lib/mockData"
+import { mockNPDs, SPOC_CONTACTS, VENDOR_CATALOG, DEFAULT_RND_CONTACT, MULTI_DISPATCH_KEY, type NPDRecord } from "@/lib/mockData"
 import {
   CheckCircle, CheckCircle2, UploadCloud, Truck, UserCircle, Mail,
 } from "lucide-react"
+import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
 const DISPATCH_SUBMITTED_KEY = "supplier_dispatch_submitted_v1"
 
@@ -39,16 +40,23 @@ export default function SupplierDispatchPage() {
   }, [npdId])
 
   const handleDispatch = () => {
+    const submittedAt = new Date().toLocaleString("en-IN")
+    const dispatchRecord = { vendorName, dispatchDate, docs: proofDoc ? [proofDoc] : [], submittedAt }
+
+    // Write to legacy key (backward compat)
     const raw = localStorage.getItem(DISPATCH_SUBMITTED_KEY)
-    const all: Record<string, { vendorName: string; dispatchDate: string; docs: string[]; submittedAt: string }> =
-      raw ? JSON.parse(raw) : {}
-    all[npdId] = {
-      vendorName,
-      dispatchDate,
-      docs: [proofDoc],
-      submittedAt: new Date().toLocaleString("en-IN"),
-    }
+    const all: Record<string, typeof dispatchRecord> = raw ? JSON.parse(raw) : {}
+    all[npdId] = dispatchRecord
     localStorage.setItem(DISPATCH_SUBMITTED_KEY, JSON.stringify(all))
+
+    // Write to multi-vendor key keyed by vendorName
+    const rawMulti = localStorage.getItem(MULTI_DISPATCH_KEY)
+    const allMulti: Record<string, Record<string, { dispatchDate: string; docs: string[]; submittedAt: string }>> =
+      rawMulti ? JSON.parse(rawMulti) : {}
+    if (!allMulti[npdId]) allMulti[npdId] = {}
+    allMulti[npdId][vendorName] = { dispatchDate, docs: dispatchRecord.docs, submittedAt }
+    localStorage.setItem(MULTI_DISPATCH_KEY, JSON.stringify(allMulti))
+
     setSubmitted(true)
   }
 
@@ -131,21 +139,7 @@ export default function SupplierDispatchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3">
-        <div className="max-w-3xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/amber-logo.png" alt="Amber" className="h-7 w-auto object-contain" />
-            <div className="h-5 w-px bg-slate-200" />
-            <span className="text-sm font-bold text-slate-700">Supplier Dispatch Portal</span>
-          </div>
-          <span className="text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-3 py-1">
-            Supplier Defence
-          </span>
-        </div>
-      </header>
-
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <SupplierPortalShell portalLabel="Sample Dispatch">
 
         {/* NPD summary */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
@@ -246,7 +240,6 @@ export default function SupplierDispatchPage() {
             </div>
           )}
         </div>
-      </main>
-    </div>
+    </SupplierPortalShell>
   )
 }

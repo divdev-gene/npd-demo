@@ -170,7 +170,7 @@ export default function ApprovalsPage() {
   ]
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
+    <div className="max-w-5xl mx-auto space-y-5 animate-in fade-in duration-300">
 
       {/* Header */}
       <div className="flex items-end justify-between">
@@ -219,7 +219,7 @@ export default function ApprovalsPage() {
 
       {/* ── MRN Tab ──────────────────────────────────────────────────────── */}
       {activeTab === "mrn" && (
-        <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between" style={{ background: "#FAFAFA" }}>
             <div className="flex items-center gap-2">
               <ClipboardList className="w-4 h-4 text-slate-500" />
@@ -318,7 +318,7 @@ export default function ApprovalsPage() {
 
       {/* ── Extensions Tab ───────────────────────────────────────────────── */}
       {activeTab === "extensions" && (
-        <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between" style={{ background: "#FAFAFA" }}>
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-500" />

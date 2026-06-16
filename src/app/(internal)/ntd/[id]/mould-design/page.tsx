@@ -203,7 +203,7 @@ export default function MouldDesignPage() {
               }
             }
           }
-          if (action === "comment") file = addFileComment(file, currentRole, ntdRole, String(data.text), Boolean(data.req))
+          if (action === "comment") file = addFileComment(file, currentRole, ntdRole, String(data.text), Boolean(data.req), data.attachmentLink as string | undefined, data.attachmentName as string | undefined)
           if (action === "resolve") file = resolveComment(file, String(data.cid), currentRole)
         }
         return { ...comp, [slot]: file ?? comp[slot] }
@@ -479,157 +479,179 @@ export default function MouldDesignPage() {
         })()}
       </div>
 
-      {/* Supplier portal link */}
-      <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2 flex-1">
-            <div className="flex items-center gap-2">
-              <Link2 className="w-4 h-4 text-blue-600" />
-              <h3 className="font-semibold text-slate-800 text-sm">Supplier Portal</h3>
+      {/* ── 8A Tab ────────────────────────────────────────────── */}
+      {activeSubStage === "8A" && (
+        <>
+          {/* Header card — progress + commodity chips (mirrors DFM) */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 mt-0.5">Component approval progress</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-slate-800">{approved} / {total}</p>
+                <p className="text-xs text-slate-400">Components Approved</p>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-500">Share this link with the supplier to submit Mould 3D and MFA PPT files for review.</p>
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-              <a href={`/supplier/ntd/${id}`} target="_blank" rel="noopener noreferrer"
-                className="flex-1 text-xs text-blue-700 font-mono truncate hover:underline">
-                /supplier/ntd/{id}
-              </a>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/supplier/ntd/${id}`)
-                  setCopied("main")
-                  setTimeout(() => setCopied(null), 2000)
-                }}
-                className="shrink-0 p-1 rounded hover:bg-blue-100 text-blue-500 hover:text-blue-700 transition-colors"
-                title="Copy link">
-                {copied === "main" ? <CheckIcon className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
+            <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-700 rounded-full transition-all duration-500"
+                style={{ width: total > 0 ? `${Math.round((approved / total) * 100)}%` : "0%" }} />
             </div>
-          </div>
-          <a href={`/supplier/ntd/${id}`} target="_blank" rel="noopener noreferrer"
-            className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-3 py-2 transition-colors mt-6">
-            Open Portal <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      </div>
-
-      {/* DFM Approved Files Reference */}
-      {dfmData && dfmData.components.some(c => c.final_status === "approved") && (
-        <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
-          <button
-            onClick={() => setDfmPanelOpen(p => !p)}
-            className="w-full flex items-center justify-between px-5 py-3.5 bg-emerald-50 hover:bg-emerald-100 transition-colors text-left"
-          >
-            <div className="flex items-center gap-2.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span className="text-sm font-semibold text-emerald-800">DFM Approved Files</span>
-              <span className="text-[10px] font-bold bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full">
-                {dfmData.components.filter(c => c.final_status === "approved").length} / {dfmData.components.length} components
-              </span>
-            </div>
-            {dfmPanelOpen
-              ? <ChevronUp className="w-4 h-4 text-emerald-600" />
-              : <ChevronDown className="w-4 h-4 text-emerald-600" />}
-          </button>
-
-          {dfmPanelOpen && (
-            <div className="p-5 space-y-3">
-              <p className="text-xs text-slate-500">Approved DFM files from Stage 7 — use these as reference for mould design.</p>
-              <div className="space-y-2">
-                {dfmData.components.filter(c => c.final_status === "approved").map(c => {
-                  const pptLink = c.ppt?.versions.find(v => v.version_no === c.ppt.current_version)?.link ?? ""
-                  const d3dLink = c.design_3d?.versions.find(v => v.version_no === c.design_3d.current_version)?.link ?? ""
-                  const rndDocs = (c.rnd_docs ?? [])
+            {/* Commodity chips */}
+            {commodities.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(["All", ...commodities] as string[]).map(c => {
+                  const isActive = selectedCommodity === c
+                  const counts = c === "All"
+                    ? { approved, total }
+                    : (commodityCounts[c] ?? { approved: 0, total: 0 })
+                  const isDone = c !== "All" && counts.approved === counts.total && counts.total > 0
                   return (
-                    <div key={c.componentId} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <p className="text-sm font-semibold text-slate-800">{c.componentId} — {c.name}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-3">
-                        {pptLink && (
-                          <a href={pptLink} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-xs text-blue-700 hover:underline font-medium bg-white border border-blue-200 rounded-lg px-3 py-1.5">
-                            <FileText className="w-3 h-3" /> DFM PPT v{c.ppt.current_version}
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                        {d3dLink && (
-                          <a href={d3dLink} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-xs text-blue-700 hover:underline font-medium bg-white border border-blue-200 rounded-lg px-3 py-1.5">
-                            <FileText className="w-3 h-3" /> 3D Design v{c.design_3d.current_version}
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                        {rndDocs.map(doc => {
-                          const docLink = doc.versions.find(v => v.version_no === doc.current_version)?.link ?? ""
-                          return docLink ? (
-                            <a key={doc.file_id} href={docLink} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-1.5 text-xs text-indigo-700 hover:underline font-medium bg-white border border-indigo-200 rounded-lg px-3 py-1.5">
-                              <FileText className="w-3 h-3" /> {doc.slot_name} v{doc.current_version}
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          ) : null
-                        })}
-                      </div>
-                    </div>
+                    <button key={c} onClick={() => setSelectedCommodity(c)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                        isActive
+                          ? "bg-blue-700 text-white border-blue-700"
+                          : isDone
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-400"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700"
+                      }`}>
+                      {c}
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                        isActive ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                      }`}>{counts.approved}/{counts.total}</span>
+                      {isDone && <CheckCircle2 className="w-3 h-3" />}
+                    </button>
                   )
                 })}
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+            {allComponentsApproved && (
+              <div className="mt-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <p className="font-semibold text-emerald-800">All components approved — proceed to 8B Joint Review.</p>
+              </div>
+            )}
+          </div>
 
-      {/* ── 8A Tab ────────────────────────────────────────────── */}
-      {activeSubStage === "8A" && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
-          {/* Commodity filter chips */}
-          {commodities.length > 1 && (
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setSelectedCommodity("All")}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                  selectedCommodity === "All"
-                    ? "bg-blue-900 text-white border-blue-900"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                }`}>
-                All
-                <span className="ml-1.5 opacity-70">{approved}/{total}</span>
-              </button>
-              {commodities.map(commodity => {
-                const counts = commodityCounts[commodity] ?? { approved: 0, total: 0 }
-                const isActive = selectedCommodity === commodity
-                const isDone = counts.approved === counts.total && counts.total > 0
-                return (
+          {/* Two-column layout: board + sidebar */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {/* Component board */}
+            <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <ComponentApprovalBoard
+                components={filteredMouldComponents}
+                mode="mould"
+                role={ntdRole}
+                onFileAction={handleFileAction}
+                onMouldReview={handleMouldReview}
+                showSLATimer
+                redesignRound={redesignRound}
+              />
+            </div>
+
+            {/* Sidebar */}
+            <div className="space-y-4">
+              {/* Supplier portal link */}
+              <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-blue-600" />
+                  <h3 className="font-semibold text-slate-800 text-sm">Supplier Portal</h3>
+                </div>
+                <p className="text-[11px] text-slate-500">Share this link with the supplier to submit Mould 3D and MFA PPT files for review.</p>
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                  <a href={`/supplier/ntd/${id}`} target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-xs text-blue-700 font-mono truncate hover:underline">
+                    /supplier/ntd/{id}
+                  </a>
                   <button
-                    key={commodity}
-                    onClick={() => setSelectedCommodity(commodity)}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                      isActive
-                        ? "bg-blue-900 text-white border-blue-900"
-                        : isDone
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-400"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                    }`}>
-                    {commodity}
-                    <span className="ml-1.5 opacity-80">{counts.approved}/{counts.total}</span>
-                    {isDone && <CheckCircle2 className="inline w-3 h-3 ml-1 -mt-0.5" />}
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/supplier/ntd/${id}`)
+                      setCopied("main")
+                      setTimeout(() => setCopied(null), 2000)
+                    }}
+                    className="shrink-0 p-1 rounded hover:bg-blue-100 text-blue-500 hover:text-blue-700 transition-colors"
+                    title="Copy link">
+                    {copied === "main" ? <CheckIcon className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
-                )
-              })}
-            </div>
-          )}
+                </div>
+                <a href={`/supplier/ntd/${id}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 w-full text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-3 py-2 transition-colors">
+                  Open Supplier Portal <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
 
-          <ComponentApprovalBoard
-            components={filteredMouldComponents}
-            mode="mould"
-            role={ntdRole}
-            onFileAction={handleFileAction}
-            onMouldReview={handleMouldReview}
-            showSLATimer
-            redesignRound={redesignRound}
-          />
-        </div>
+              {/* DFM Approved Files Reference */}
+              {dfmData && dfmData.components.some(c => c.final_status === "approved") && (
+                <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
+                  <button
+                    onClick={() => setDfmPanelOpen(p => !p)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-emerald-50 hover:bg-emerald-100 transition-colors text-left">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-xs font-semibold text-emerald-800">DFM Approved Files</span>
+                      <span className="text-[10px] font-bold bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full">
+                        {dfmData.components.filter(c => c.final_status === "approved").length}/{dfmData.components.length}
+                      </span>
+                    </div>
+                    {dfmPanelOpen ? <ChevronUp className="w-3.5 h-3.5 text-emerald-600" /> : <ChevronDown className="w-3.5 h-3.5 text-emerald-600" />}
+                  </button>
+                  {dfmPanelOpen && (
+                    <div className="p-4 space-y-2">
+                      {dfmData.components.filter(c => c.final_status === "approved").map(c => {
+                        const pptLink = c.ppt?.versions.find(v => v.version_no === c.ppt.current_version)?.link ?? ""
+                        const d3dLink = c.design_3d?.versions.find(v => v.version_no === c.design_3d.current_version)?.link ?? ""
+                        const rndDocs = c.rnd_docs ?? []
+                        return (
+                          <div key={c.componentId} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5 space-y-1.5">
+                            <p className="text-xs font-semibold text-slate-700">{c.componentId} — {c.name}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {pptLink && (
+                                <a href={pptLink} target="_blank" rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-[10px] text-blue-700 hover:underline font-medium bg-white border border-blue-200 rounded-lg px-2 py-1">
+                                  <FileText className="w-3 h-3" /> PPT v{c.ppt.current_version} <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                              {d3dLink && (
+                                <a href={d3dLink} target="_blank" rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-[10px] text-blue-700 hover:underline font-medium bg-white border border-blue-200 rounded-lg px-2 py-1">
+                                  <FileText className="w-3 h-3" /> 3D v{c.design_3d.current_version} <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                              {rndDocs.map(doc => {
+                                const docLink = doc.versions.find(v => v.version_no === doc.current_version)?.link ?? ""
+                                return docLink ? (
+                                  <a key={doc.file_id} href={docLink} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-[10px] text-indigo-700 hover:underline font-medium bg-white border border-indigo-200 rounded-lg px-2 py-1">
+                                    <FileText className="w-3 h-3" /> {doc.slot_name} <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                ) : null
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Status legend */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-2">
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status Guide</p>
+                {[
+                  { label: "Pending",           cls: "bg-slate-100 text-slate-600",   desc: "Awaiting supplier files" },
+                  { label: "Under Review",      cls: "bg-amber-100 text-amber-700",   desc: "Files submitted, reviewing" },
+                  { label: "Revision Required", cls: "bg-red-100 text-red-700",       desc: "Feedback sent to supplier" },
+                  { label: "Approved",          cls: "bg-emerald-100 text-emerald-700", desc: "Both reviewers approved ✓" },
+                ].map(s => (
+                  <div key={s.label} className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>{s.label}</span>
+                    <span className="text-[11px] text-slate-500">{s.desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── 8B Tab ────────────────────────────────────────────── */}
