@@ -14,6 +14,30 @@ import {
 } from "lucide-react"
 import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
+const PRICE_NEG_KEY = "price_negotiation_v1"
+
+type NegotiationRound = {
+  round: number
+  targetPrice: string
+  currency: "INR" | "USD" | "EUR"
+  sentAt: number
+  sentBy: string
+  supplierResponse?: {
+    price: string
+    currency: "INR" | "USD" | "EUR"
+    docs: string[]
+    submittedAt: number
+  }
+}
+
+type NegotiationRecord = {
+  rounds: NegotiationRound[]
+  approvedAt?: number
+  approvedBy?: string
+  finalPrice?: string
+  finalCurrency?: "INR" | "USD" | "EUR"
+}
+
 function getValidUntil(daysFromNow = 10) {
   const d = new Date()
   d.setDate(d.getDate() + daysFromNow)
@@ -30,6 +54,8 @@ export default function SupplierQuotePage() {
   const [feasible,        setFeasible]       = useState<"yes" | "no" | "cannot" | null>(null)
   const [supplierQuery,   setSupplierQuery]  = useState("")
   const [supplyDate,      setSupplyDate]     = useState("")
+  const [estimatedPrice,  setEstimatedPrice]  = useState("")
+  const [docAttached,     setDocAttached]     = useState(false)
   const [submitted,       setSubmitted]      = useState(false)
 
   // RND reply state (set when RND has replied to a previous query)
@@ -38,6 +64,30 @@ export default function SupplierQuotePage() {
   const [pendingQuery,        setPendingQuery]        = useState<string>("")
   const [queryHistory,        setQueryHistory]        = useState<Array<{ query: string; rndReply: string; rndReplyDoc?: string; repliedAt?: string }>>([])
   const [historyOpen,         setHistoryOpen]         = useState(false)
+
+  // Price negotiation state (round-based, matches ECN Sourcing pattern)
+  const [priceNegRecord, setPriceNegRecord] = useState<{
+    rounds: NegotiationRound[]
+    approvedAt?: number
+    approvedBy?: string
+    finalPrice?: string
+    finalCurrency?: "INR" | "USD" | "EUR"
+  } | null>(null)
+  const [negPrice, setNegPrice] = useState("")
+  const [negCurrency, setNegCurrency] = useState<"INR" | "USD" | "EUR">("INR")
+  const [negDocs, setNegDocs] = useState<string[]>([])
+  const [negSubmitted, setNegSubmitted] = useState(false)
+  const currSymbol = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+
+  // ── File helpers ──
+  const addFile = (setter: React.Dispatch<React.SetStateAction<string[]>>, current: string[]) => {
+    const names = ["quotation.pdf", "price_breakdown.xlsx", "material_spec.pdf", "capacity_report.pdf"]
+    const name = names[current.length % names.length]
+    setter(prev => [...prev, name])
+  }
+  const removeFile = (setter: React.Dispatch<React.SetStateAction<string[]>>, index: number) => {
+    setter(prev => prev.filter((_, i) => i !== index))
+  }
 
   const validUntil = getValidUntil(10)
 
@@ -56,11 +106,24 @@ export default function SupplierQuotePage() {
     const d = new Date(); d.setDate(d.getDate() + 7)
     setSupplyDate(d.toISOString().split("T")[0])
 
-    // Check if RND has replied to a previous query
     if (vendor) {
       const rawLive = localStorage.getItem(LIVE_QUOTATIONS_KEY)
       const allLive: Record<string, Record<string, LiveQuotation>> = rawLive ? JSON.parse(rawLive) : {}
       const existing = allLive[npdId]?.[vendor]
+
+      // Restore submission state if already submitted
+      if (existing?.feasible === true && existing?.formValues) {
+        setFeasible("yes")
+        setSupplyDate(existing.formValues.supplyDate || d.toISOString().split("T")[0])
+        setEstimatedPrice(existing.formValues.estimatedPrice || "")
+        setSubmitted(true)
+      } else if (existing?.feasible === false) {
+        setFeasible("no")
+        if (existing?.query) setSupplierQuery(existing.query)
+        setSubmitted(true)
+      }
+
+      // Check for existing RND reply
       if (existing?.feasible === false && existing?.rndReply) {
         setPendingRndReply(existing.rndReply)
         setPendingRndReplyDoc(existing.rndReplyDoc ?? "")
@@ -69,8 +132,35 @@ export default function SupplierQuotePage() {
       } else if (existing?.queryHistory && existing.queryHistory.length > 0) {
         setQueryHistory(existing.queryHistory)
       }
+
+      // Check for price negotiation request from sourcing
+      const rawNeg = localStorage.getItem(PRICE_NEG_KEY)
+      const allNeg: Record<string, Record<string, NegotiationRecord>> = rawNeg ? JSON.parse(rawNeg) : {}
+      const vendorNeg = allNeg[npdId]?.[vendor]
+      if (vendorNeg) {
+        setPriceNegRecord(vendorNeg)
+        const latest = vendorNeg.rounds[vendorNeg.rounds.length - 1]
+        if (latest?.supplierResponse) setNegSubmitted(true)
+      }
     }
   }, [npdId])
+
+  // Poll for incoming price negotiations
+  useEffect(() => {
+    if (!npdId || !vendorName) return
+    const interval = setInterval(() => {
+      const rawNeg = localStorage.getItem(PRICE_NEG_KEY)
+      if (!rawNeg) return
+      const allNeg: Record<string, Record<string, NegotiationRecord>> = JSON.parse(rawNeg)
+      const vendorNeg = allNeg[npdId]?.[vendorName]
+      if (vendorNeg) {
+        setPriceNegRecord(vendorNeg)
+        const latest = vendorNeg.rounds[vendorNeg.rounds.length - 1]
+        if (latest?.supplierResponse) setNegSubmitted(true)
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [npdId, vendorName])
 
   const handleGateSubmit = () => {
     if (!vendorName || !feasibleChoice) return
@@ -132,7 +222,7 @@ export default function SupplierQuotePage() {
       vendorName,
       status:        "submitted",
       feasible:      true,
-      formValues:    { supplyDate },
+      formValues:    { supplyDate, estimatedPrice },
       submittedAt:   today,
       revisionCount: prev ? prev.revisionCount + 1 : 1,
       queryHistory:  existingHistory.length > 0 ? existingHistory : undefined,
@@ -336,6 +426,161 @@ export default function SupplierQuotePage() {
               <p className="pt-1">Regards,<br /><strong>{vendorSpocName}</strong><br /><span className="text-slate-500">{vendorName}</span></p>
             </div>
           </div>
+
+          {/* Price Negotiation — round-based, matches ECN Sourcing pattern */}
+          {priceNegRecord && (() => {
+            const negLatest = priceNegRecord.rounds[priceNegRecord.rounds.length - 1]
+            const negPending = priceNegRecord && !priceNegRecord.approvedAt && negLatest && !negLatest.supplierResponse
+            const negResponded = priceNegRecord && !priceNegRecord.approvedAt && negLatest?.supplierResponse
+            const negAgreed = priceNegRecord?.approvedAt
+
+            return (
+              <>
+                {/* Negotiation round — sourcing has sent a target, supplier responds */}
+                {negPending && (
+                  <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6 space-y-4">
+                    <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-blue-600" /> Price Negotiation — Round {negLatest.round}
+                    </h2>
+                    <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2.5 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Your initial quote</span>
+                      <span className="text-sm font-bold text-slate-800">₹{parseFloat(estimatedPrice || "0").toLocaleString("en-IN")} / unit</span>
+                    </div>
+                    <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3">
+                      <p className="text-xs font-semibold text-blue-700 mb-0.5">Amber&apos;s target price</p>
+                      <p className="text-xl font-bold text-blue-900">
+                        {currSymbol(negLatest.currency)}{parseFloat(negLatest.targetPrice).toLocaleString("en-IN")} <span className="text-sm font-normal">/ unit</span>
+                      </p>
+                      <p className="text-[10px] text-blue-500 mt-1">Sent {new Date(negLatest.sentAt).toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="space-y-3">
+                      {/* Accept Target Price */}
+                      <button
+                        onClick={() => {
+                          const raw = localStorage.getItem(PRICE_NEG_KEY)
+                          const all: Record<string, Record<string, NegotiationRecord>> = raw ? JSON.parse(raw) : {}
+                          if (!all[npdId]) all[npdId] = {}
+                          const updated: NegotiationRecord = {
+                            ...priceNegRecord,
+                            rounds: priceNegRecord.rounds.map((r, idx) =>
+                              idx === priceNegRecord.rounds.length - 1
+                                ? { ...r, supplierResponse: { price: negLatest.targetPrice, currency: negLatest.currency, docs: [], submittedAt: Date.now() } }
+                                : r
+                            ),
+                            approvedAt: Date.now(),
+                            approvedBy: vendorName,
+                            finalPrice: negLatest.targetPrice,
+                            finalCurrency: negLatest.currency,
+                          }
+                          all[npdId][vendorName] = updated
+                          localStorage.setItem(PRICE_NEG_KEY, JSON.stringify(all))
+                          setPriceNegRecord(updated)
+                          setNegSubmitted(true)
+                        }}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl px-6 py-3 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle className="w-4 h-4" /> Accept Target Price — {currSymbol(negLatest.currency)}{parseFloat(negLatest.targetPrice).toLocaleString("en-IN")} / unit
+                      </button>
+
+                      {/* Or Submit Counter-Quote */}
+                      <div className="relative">
+                        <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200" /></div>
+                        <div className="relative flex justify-center"><span className="bg-white px-2 text-xs text-slate-400">or propose a counter</span></div>
+                      </div>
+                      <h3 className="text-sm font-semibold text-slate-700">Your counter-quote</h3>
+                      <div className="flex gap-3">
+                        <div className="w-28 shrink-0">
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Currency</label>
+                          <select value={negCurrency} onChange={e => setNegCurrency(e.target.value as "INR" | "USD" | "EUR")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="INR">INR ₹</option>
+                            <option value="USD">USD $</option>
+                            <option value="EUR">EUR €</option>
+                          </select>
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Your price / unit <span className="text-red-500">*</span></label>
+                          <input type="number" min="0" step="0.01" placeholder="e.g. 45.00" value={negPrice} onChange={e => setNegPrice(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-600 block mb-1">Supporting documents <span className="text-slate-400">(optional)</span></label>
+                        <div onClick={() => addFile(setNegDocs, negDocs)} className="rounded-lg border-2 border-dashed border-slate-200 hover:border-blue-400 p-4 text-center cursor-pointer transition-all">
+                          <p className="text-xs text-slate-400">Click to attach file</p>
+                        </div>
+                        {negDocs.length > 0 && (
+                          <ul className="mt-2 space-y-1.5">
+                            {negDocs.map((name, i) => (
+                              <li key={name} className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5">
+                                <div className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span className="text-xs font-medium text-emerald-800 truncate">{name}</span></div>
+                                <button onClick={() => removeFile(setNegDocs, i)} className="text-xs text-red-400 hover:text-red-600 shrink-0">Remove</button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (!negPrice || parseFloat(negPrice) <= 0) return
+                          const raw = localStorage.getItem(PRICE_NEG_KEY)
+                          const all: Record<string, Record<string, NegotiationRecord>> = raw ? JSON.parse(raw) : {}
+                          if (!all[npdId]) all[npdId] = {}
+                          const updated: NegotiationRecord = {
+                            ...priceNegRecord,
+                            rounds: priceNegRecord.rounds.map((r, idx) =>
+                              idx === priceNegRecord.rounds.length - 1
+                                ? { ...r, supplierResponse: { price: negPrice, currency: negCurrency, docs: [...negDocs], submittedAt: Date.now() } }
+                                : r
+                            ),
+                          }
+                          all[npdId][vendorName] = updated
+                          localStorage.setItem(PRICE_NEG_KEY, JSON.stringify(all))
+                          setPriceNegRecord(updated)
+                          setNegSubmitted(true)
+                        }}
+                        disabled={!negPrice || parseFloat(negPrice) <= 0}
+                        className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-6 py-3 transition-colors"
+                      >
+                        Submit Counter-Quote
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Responded to a round — awaiting Amber review */}
+                {negResponded && (
+                  <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6 space-y-3">
+                    <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-blue-600" /> Price Negotiation — Round {negLatest!.round}
+                    </h2>
+                    <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2.5 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Your initial quote</span>
+                      <span className="text-sm font-bold text-slate-800">₹{parseFloat(estimatedPrice || "0").toLocaleString("en-IN")} / unit</span>
+                    </div>
+                    <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-800">Counter-quote submitted — awaiting Amber review</p>
+                        <p className="text-xs text-emerald-700 mt-0.5">You will be contacted if a further counter is made.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Price agreed */}
+                {negAgreed && (
+                  <div className="bg-white rounded-xl border border-emerald-200 shadow-sm p-6">
+                    <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-800">Price agreed — {currSymbol(priceNegRecord.finalCurrency ?? "INR")}{parseFloat(priceNegRecord.finalPrice!).toLocaleString("en-IN")} / unit</p>
+                        <p className="text-xs text-emerald-700 mt-0.5">Amber will proceed to the next stage.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          })()}
 
           <p className="text-xs text-slate-400 text-center">You may close this window.</p>
         </div>
@@ -611,17 +856,57 @@ export default function SupplierQuotePage() {
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Committed Sample Dispatch Date <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-xs text-slate-400">Date by which samples will be dispatched</p>
+                  <input
+                    type="date" required
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                    value={supplyDate}
+                    onChange={e => setSupplyDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Estimated Unit Price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-xs text-slate-400">Estimated price per unit for the sample</p>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 text-sm">₹</span>
+                    <input
+                      type="number" required min="0" step="0.01"
+                      className="w-full rounded-lg border border-slate-300 pl-8 pr-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                      placeholder="0.00"
+                      value={estimatedPrice}
+                      onChange={e => setEstimatedPrice(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="space-y-1.5">
                 <label className="block text-sm font-semibold text-slate-700">
-                  Committed Sample Dispatch Date <span className="text-red-500">*</span>
+                  Supporting Document
                 </label>
-                <p className="text-xs text-slate-400">Date by which samples will be dispatched from your facility</p>
-                <input
-                  type="date" required
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500 max-w-xs"
-                  value={supplyDate}
-                  onChange={e => setSupplyDate(e.target.value)}
-                />
+                <p className="text-xs text-slate-400">Upload challan, receipt, or shipping confirmation</p>
+                <button
+                  type="button"
+                  onClick={() => setDocAttached(true)}
+                  disabled={docAttached}
+                  className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-2 w-full ${
+                    docAttached
+                      ? "bg-emerald-50 border-emerald-300 text-emerald-700 cursor-default"
+                      : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {docAttached ? (
+                    <><CheckCircle className="w-4 h-4" /> Attached</>
+                  ) : (
+                    <><FileText className="w-4 h-4" /> Add Document</>
+                  )}
+                </button>
               </div>
               <div className="pt-4 border-t border-slate-100">
                 <button

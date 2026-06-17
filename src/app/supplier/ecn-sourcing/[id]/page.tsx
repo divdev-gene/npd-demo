@@ -514,6 +514,37 @@ export default function EcnSourcingPage() {
                 </div>
 
                 <div className="space-y-3">
+                  {/* Accept Target Price */}
+                  <button
+                    onClick={() => {
+                      const raw = localStorage.getItem(ECN_NEGOTIATION_KEY)
+                      const all: Record<string, NegotiationRecord> = raw ? JSON.parse(raw) : {}
+                      const updated: NegotiationRecord = {
+                        ...negRecord!,
+                        rounds: negRecord!.rounds.map((r, idx) =>
+                          idx === negRecord!.rounds.length - 1
+                            ? { ...r, supplierResponse: { price: negLatest.targetPrice, currency: negLatest.currency, docs: [], submittedAt: Date.now() } }
+                            : r
+                        ),
+                        approvedAt: Date.now(),
+                        approvedBy: "supplier",
+                        finalPrice: negLatest.targetPrice,
+                        finalCurrency: negLatest.currency,
+                      }
+                      all[npdId] = updated
+                      localStorage.setItem(ECN_NEGOTIATION_KEY, JSON.stringify(all))
+                      setNegRecord(updated)
+                    }}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl px-6 py-3 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle className="w-4 h-4" /> Accept Target Price — {currSymbol(negLatest.currency)}{parseFloat(negLatest.targetPrice).toLocaleString("en-IN")} / unit
+                  </button>
+
+                  {/* Or Submit Counter-Quote */}
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200" /></div>
+                    <div className="relative flex justify-center"><span className="bg-white px-2 text-xs text-slate-400">or propose a counter</span></div>
+                  </div>
                   <h3 className="text-sm font-semibold text-slate-700">Your counter-quote</h3>
                   <div className="flex gap-3">
                     <div className="w-28 shrink-0">
