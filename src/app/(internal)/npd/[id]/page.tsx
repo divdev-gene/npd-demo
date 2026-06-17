@@ -7050,6 +7050,167 @@ export default function NpdDetailView() {
                     )}
                   </div>
                 )}
+                {/* ── Price Negotiation (per-vendor) ── */}
+                {isSpocOrSourcing && enquiryDispatched && displayQuotations.filter(v => {
+                  const live = liveQuotes[v.vendorName]
+                  const isSubmitted = live ? live.status !== "re_negotiation" : v.status === "submitted"
+                  const priceVal = live ? live.formValues.estimatedPrice : null
+                  return isSubmitted && priceVal
+                }).length > 0 && (
+                  <div className="border-t border-slate-200 pt-4 mt-2 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Price Negotiation</span>
+                      <span className="text-[10px] text-slate-400">per vendor</span>
+                    </div>
+                    {displayQuotations.map(v => {
+                      const live = liveQuotes[v.vendorName]
+                      const isSubmitted = live ? live.status !== "re_negotiation" : v.status === "submitted"
+                      const priceVal = live ? live.formValues.estimatedPrice : null
+                      const approval = quoteApprovals[v.vendorName]
+                      if (!isSubmitted || !priceVal || approval) return null
+
+                      const neg = priceNegData[v.vendorName]
+                      const latestRound = neg?.rounds[neg.rounds.length - 1]
+                      const pendingResponse = latestRound && !latestRound.supplierResponse
+                      const awaitingApproval = latestRound?.supplierResponse && !neg?.approvedAt
+                      const negApproved = !!neg?.approvedAt
+                      const currSymbol = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+
+                      return (
+                        <div key={v.vendorName} className="rounded-lg border border-slate-200 bg-white px-4 py-3 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold text-slate-800">{v.vendorName}</span>
+                            {negApproved ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                                Agreed: {currSymbol(neg!.finalCurrency!)}{parseFloat(neg!.finalPrice!).toLocaleString("en-IN")}
+                              </span>
+                            ) : pendingResponse ? (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                                Awaiting Supplier — Round {latestRound.round}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">Quote received</span>
+                            )}
+                          </div>
+
+                          {/* Supplier initial quote - accept */}
+                          {!neg && !negApproved && (
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 space-y-1.5">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supplier Initial Quote</p>
+                              <p className="text-sm font-bold text-slate-800">₹{parseFloat(priceVal).toLocaleString("en-IN")} <span className="text-xs font-normal text-slate-500">/ unit</span></p>
+                              <button
+                                onClick={() => {
+                                  const updated: NegotiationRecord = {
+                                    rounds: [{ round: 1, targetPrice: priceVal, currency: "INR", sentAt: Date.now(), sentBy: currentRole, supplierResponse: { price: priceVal, currency: "INR", docs: [], submittedAt: Date.now() } }],
+                                    approvedAt: Date.now(), approvedBy: currentRole, finalPrice: priceVal, finalCurrency: "INR",
+                                  }
+                                  const raw = localStorage.getItem(PRICE_NEG_KEY)
+                                  const all: Record<string, Record<string, NegotiationRecord>> = raw ? JSON.parse(raw) : {}
+                                  if (!all[npdId]) all[npdId] = {}
+                                  all[npdId][v.vendorName] = updated
+                                  localStorage.setItem(PRICE_NEG_KEY, JSON.stringify(all))
+                                  setPriceNegData(prev => ({ ...prev, [v.vendorName]: updated }))
+                                  setVendorApproval(v.vendorName, "approved")
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg"
+                              ><CheckCircle className="w-3 h-3 mr-1" />Accept Quote</button>
+                            </div>
+                          )}
+
+                          {/* Round history */}
+                          {neg && neg.rounds.length > 0 && (
+                            <div className="space-y-1.5">
+                              {neg.rounds.map(r => (
+                                <div key={r.round} className="rounded border border-slate-100 bg-slate-50 px-3 py-2 text-xs space-y-0.5">
+                                  <div className="flex justify-between">
+                                    <span className="font-bold text-slate-500">Round {r.round}</span>
+                                    <span className="text-slate-400">{new Date(r.sentAt).toLocaleString("en-IN")}</span>
+                                  </div>
+                                  <span className="text-slate-500">Target: <strong className="text-slate-800">{currSymbol(r.currency)}{parseFloat(r.targetPrice).toLocaleString("en-IN")}</strong></span>
+                                  {r.supplierResponse && (
+                                    <span className="ml-3 text-slate-500">Supplier: <strong className="text-slate-800">{currSymbol(r.supplierResponse.currency)}{parseFloat(r.supplierResponse.price).toLocaleString("en-IN")}</strong></span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Approve / Counter */}
+                          {awaitingApproval && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  const updated: NegotiationRecord = { ...neg!, approvedAt: Date.now(), approvedBy: currentRole, finalPrice: latestRound!.supplierResponse!.price, finalCurrency: latestRound!.supplierResponse!.currency }
+                                  const raw = localStorage.getItem(PRICE_NEG_KEY)
+                                  const all: Record<string, Record<string, NegotiationRecord>> = raw ? JSON.parse(raw) : {}
+                                  if (!all[npdId]) all[npdId] = {}
+                                  all[npdId][v.vendorName] = updated
+                                  localStorage.setItem(PRICE_NEG_KEY, JSON.stringify(all))
+                                  setPriceNegData(prev => ({ ...prev, [v.vendorName]: updated }))
+                                  setVendorApproval(v.vendorName, "approved")
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg"
+                              ><CheckCircle className="w-3 h-3 mr-1" />Approve Price</button>
+                              <button
+                                onClick={() => setNegTargetPrice("")}
+                                className="text-xs font-semibold text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg"
+                              >Counter ↓</button>
+                            </div>
+                          )}
+
+                          {/* Send target form */}
+                          {priceVal && !negApproved && !pendingResponse && (!neg || awaitingApproval) && (
+                            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+                              <p className="text-xs font-semibold text-blue-800">
+                                {!neg ? "Start Price Negotiation" : `Send Counter Target (Round ${(neg.rounds.length) + 1})`}
+                              </p>
+                              <div className="flex gap-2">
+                                <select
+                                  value={negCurrency}
+                                  onChange={e => setNegCurrency(e.target.value as "INR" | "USD" | "EUR")}
+                                  className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                                >
+                                  <option value="INR">INR ₹</option>
+                                  <option value="USD">USD $</option>
+                                  <option value="EUR">EUR €</option>
+                                </select>
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  placeholder="Target price / unit"
+                                  value={negTargetPrice}
+                                  onChange={e => setNegTargetPrice(e.target.value)}
+                                  className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs"
+                                />
+                                <button
+                                  disabled={!negTargetPrice || parseFloat(negTargetPrice) <= 0}
+                                  onClick={() => {
+                                    const existingRounds = neg?.rounds ?? []
+                                    const newRound: NegotiationRound = {
+                                      round: existingRounds.length + 1,
+                                      targetPrice: negTargetPrice,
+                                      currency: negCurrency,
+                                      sentAt: Date.now(),
+                                      sentBy: currentRole,
+                                    }
+                                    const updated: NegotiationRecord = { rounds: [...existingRounds, newRound] }
+                                    const raw = localStorage.getItem(PRICE_NEG_KEY)
+                                    const all: Record<string, Record<string, NegotiationRecord>> = raw ? JSON.parse(raw) : {}
+                                    if (!all[npdId]) all[npdId] = {}
+                                    all[npdId][v.vendorName] = updated
+                                    localStorage.setItem(PRICE_NEG_KEY, JSON.stringify(all))
+                                    setPriceNegData(prev => ({ ...prev, [v.vendorName]: updated }))
+                                    setNegTargetPrice("")
+                                  }}
+                                  className="bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap"
+                                >Send to Supplier</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
                 </>)}
                 </CardContent>
               </Card>
