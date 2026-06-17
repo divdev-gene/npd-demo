@@ -30,28 +30,7 @@ type StatusUpdate = {
   dateApproved?: { approvedBy: string; approvedAt: number }
 }
 
-type NegotiationRound = {
-  round: number
-  targetPrice: string
-  currency: "INR" | "USD" | "EUR"
-  sentAt: number
-  sentBy: string
-  supplierResponse?: {
-    price: string
-    currency: "INR" | "USD" | "EUR"
-    docs: string[]
-    submittedAt: number
-  }
-}
-
-type NegotiationRecord = {
-  rounds: NegotiationRound[]
-  approvedAt?: number
-  approvedBy?: string
-  finalPrice?: string
-  finalCurrency?: "INR" | "USD" | "EUR"
-  rejectedAt?: number
-}
+import { type NegotiationRound, type NegotiationRecord } from "@/lib/npdTypes"
 
 type DispatchEntry = {
   portalSentAt?: number

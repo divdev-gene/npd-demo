@@ -14,29 +14,7 @@ import {
 } from "lucide-react"
 import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
-const PRICE_NEG_KEY = "price_negotiation_v1"
-
-type NegotiationRound = {
-  round: number
-  targetPrice: string
-  currency: "INR" | "USD" | "EUR"
-  sentAt: number
-  sentBy: string
-  supplierResponse?: {
-    price: string
-    currency: "INR" | "USD" | "EUR"
-    docs: string[]
-    submittedAt: number
-  }
-}
-
-type NegotiationRecord = {
-  rounds: NegotiationRound[]
-  approvedAt?: number
-  approvedBy?: string
-  finalPrice?: string
-  finalCurrency?: "INR" | "USD" | "EUR"
-}
+import { PRICE_NEG_KEY, type NegotiationRound, type NegotiationRecord } from "@/lib/npdTypes"
 
 function getValidUntil(daysFromNow = 10) {
   const d = new Date()

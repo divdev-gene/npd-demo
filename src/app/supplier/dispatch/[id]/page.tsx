@@ -34,9 +34,10 @@ export default function SupplierDispatchPage() {
     tomorrow.setDate(tomorrow.getDate() + 1)
     setDispatchDate(tomorrow.toISOString().split("T")[0])
 
-    const raw = localStorage.getItem(DISPATCH_SUBMITTED_KEY)
-    const all: Record<string, boolean> = raw ? JSON.parse(raw) : {}
-    if (all[npdId]) setSubmitted(true)
+    // Check multi-vendor key scoped to this vendor (not the flat legacy key)
+    const rawMulti = localStorage.getItem(MULTI_DISPATCH_KEY)
+    const allMulti: Record<string, Record<string, unknown>> = rawMulti ? JSON.parse(rawMulti) : {}
+    if (vendor && allMulti[npdId]?.[vendor]) setSubmitted(true)
   }, [npdId])
 
   const handleDispatch = () => {

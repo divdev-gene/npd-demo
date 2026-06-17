@@ -162,27 +162,7 @@ function savePush(title: string, body: string, npdId: string, icon: PushNotifica
   window.dispatchEvent(new Event("push_notification"))
 }
 
-type NegotiationRound = {
-  round: number
-  targetPrice: string
-  currency: "INR" | "USD" | "EUR"
-  sentAt: number
-  sentBy: string
-  supplierResponse?: {
-    price: string
-    currency: "INR" | "USD" | "EUR"
-    docs: string[]
-    submittedAt: number
-  }
-}
-
-type NegotiationRecord = {
-  rounds: NegotiationRound[]
-  approvedAt?: number
-  approvedBy?: string
-  finalPrice?: string
-  finalCurrency?: "INR" | "USD" | "EUR"
-}
+import { type NegotiationRound, type NegotiationRecord } from "@/lib/npdTypes"
 
 function getVendors(category: string): VendorRecord[] {
   for (const key of Object.keys(VENDOR_CATALOG)) {
@@ -319,7 +299,7 @@ export default function NpdDetailView() {
   const [verdictSelection,       setVerdictSelection]       = useState<"accepted" | "not_good" | null>(null)
   const [plantRemarks,           setPlantRemarks]           = useState("")
   const [testResults,            setTestResults]            = useState<Record<string, string>>({})
-  const [evalSubmitted,          setEvalSubmitted]          = useState(false)
+  const [evalSubmitted,          setEvalSubmitted]          = useState<Record<string, boolean>>({})
   const [evalStartedAt,          setEvalStartedAt]          = useState<string | null>(null)
   const [dqaResults,             setDqaResults]             = useState<Record<string, { value: string; status: string }>>({})
   const [dqaSubmitted,           setDqaSubmitted]           = useState(false)
@@ -571,7 +551,6 @@ export default function NpdDetailView() {
     const allEval: Record<string, { results: Record<string, string>; submittedAt: string; startedAt: string }> = rawEval ? JSON.parse(rawEval) : {}
     if (allEval[npdId]) {
       setTestResults(allEval[npdId].results)
-      if (allEval[npdId].submittedAt) setEvalSubmitted(true)
       setEvalStartedAt(allEval[npdId].startedAt)
     }
 
@@ -658,7 +637,15 @@ export default function NpdDetailView() {
     // Vendor test results
     const rawVT = localStorage.getItem(VENDOR_TESTS_KEY)
     const allVT: Record<string, Record<string, { results: Record<string, string>; status: string; submittedAt?: string }>> = rawVT ? JSON.parse(rawVT) : {}
-    if (allVT[npdId]) setVendorTests(allVT[npdId])
+    if (allVT[npdId]) {
+      setVendorTests(allVT[npdId])
+      // Derive per-vendor evalSubmitted from vendor test status
+      const initEval: Record<string, boolean> = {}
+      for (const vendor of Object.keys(allVT[npdId])) {
+        initEval[vendor] = allVT[npdId][vendor].status === "complete"
+      }
+      setEvalSubmitted(initEval)
+    }
 
     // Vendor verdicts
     const rawVV = localStorage.getItem(VENDOR_VERDICTS_KEY)
@@ -826,13 +813,13 @@ export default function NpdDetailView() {
     }
   }, [allNdasSigned])
 
-  // Auto-advance to stage 4 when supplier submits dispatch via portal — NCD/NPD only (ECN dispatch is stage 6)
+  // Auto-advance to stage 5 when ALL vendors have dispatched — NCD/NPD only
   useEffect(() => {
-    if (isNCD && dispatchInfo && activeStage < 4) {
-      setActiveStage(4)
-      updateNPD(npdId, { stage: 4, stageName: NPD_STAGES[3] })
+    if (isNCD && sentVendors.length > 0 && sentVendors.every(v => multiDispatch[v]) && activeStage < 5) {
+      setActiveStage(5)
+      updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
     }
-  }, [dispatchInfo])
+  }, [multiDispatch])
 
   // Auto-assign part number if stage is ≥ 7 (RND Approval) and none is assigned yet — NCD/NPD only
   useEffect(() => {
@@ -848,6 +835,23 @@ export default function NpdDetailView() {
       updateNPD(npdId, { stage: 9, stageName: NPD_STAGES[8] })
     }
   }, [plantVerdict])
+
+  // Sync testResults when switching vendor tabs so each vendor sees their own data
+  useEffect(() => {
+    const vendor = activeTestVendor || sentVendors[0]
+    if (vendor && vendorTests[vendor]) {
+      setTestResults(vendorTests[vendor].results)
+    } else {
+      setTestResults({})
+    }
+  }, [activeTestVendor])
+  // On initial vendorTests load, sync active vendor's data without clearing flat-key fallback
+  useEffect(() => {
+    const vendor = activeTestVendor || sentVendors[0]
+    if (vendor && vendorTests[vendor]) {
+      setTestResults(vendorTests[vendor].results)
+    }
+  }, [vendorTests])
 
   // ECN: auto-advance stage 3 → 4 when supplier submits dispatch portal
   // AS: dispatch happens at stage 4 (after price approval advances to 4), so excluded here
@@ -1117,14 +1121,9 @@ export default function NpdDetailView() {
     const all: Record<string, Record<string, "approved" | "rejected">> = raw ? JSON.parse(raw) : {}
     all[npdId] = next
     localStorage.setItem(VENDOR_QUOTE_APPROVALS_KEY, JSON.stringify(all))
-    // Approving a vendor updates the supplier name and advances to Stage 3 — Supplier Dispatch
-    if (decision === "approved") {
+    // Approving a vendor updates the supplier name (first approved vendor wins)
+    if (decision === "approved" && !npd.supplier) {
       const updates: Partial<typeof npd> = { supplier: vendorName }
-      if (activeStage < 3) {
-        setActiveStage(3)
-        updates.stage = 3
-        updates.stageName = NPD_STAGES[2]
-      }
       updateNPD(npdId, updates)
     }
   }
@@ -1267,7 +1266,7 @@ export default function NpdDetailView() {
     saveRndDecision("rejected_rnd", reason)
     setActiveStage(5)
     updateNPD(npdId, { stage: 5, stageName: NPD_STAGES[4] })
-    setEvalSubmitted(false)
+    setEvalSubmitted({})
     setTqrStatusState("pending")
     const rawE = localStorage.getItem(RND_EVAL_KEY)
     if (rawE) {
@@ -1398,7 +1397,9 @@ export default function NpdDetailView() {
     }
     // Stage 5→6: auto-complete R&D eval so DQA stage opens cleanly
     if (activeStage === 5) {
-      setEvalSubmitted(true)
+      const allEval: Record<string, boolean> = {}
+      sentVendors.forEach(v => { allEval[v] = true })
+      setEvalSubmitted(allEval)
     }
     // Stage 6→7: auto-complete DQA results
     if (activeStage === 6) {
@@ -1600,7 +1601,7 @@ export default function NpdDetailView() {
     }
     if (activeStage === 7) {
       // Reset evaluation so stage 5 is open
-      setEvalSubmitted(false)
+      setEvalSubmitted({})
       setTqrStatusState("pending")
       setRejectReason("")
       setTestResults({})
@@ -3674,6 +3675,7 @@ export default function NpdDetailView() {
                         const tests = getTestsByCategory(npd.itemCategory)
                         const totalDays = getTotalTestDays(npd.itemCategory)
                         const allFilled = tests.length === 0 || tests.every(t => (testResults[t.testName] ?? "").trim() !== "")
+                        const currentVendor = sentVendors.length > 1 ? (activeTestVendor || sentVendors[0]) : (sentVendors[0] || npd.supplier || "")
 
                         // Deadline reminder calculation
                         const deadlineEl = (() => {
@@ -3720,7 +3722,7 @@ export default function NpdDetailView() {
                             )}
 
                             {/* Test entry form — R&D user only, before submission */}
-                            {isRnd && !evalSubmitted && tests.length > 0 && (
+                            {isRnd && !evalSubmitted[currentVendor] && tests.length > 0 && (
                               <div className="border border-slate-200 rounded-xl overflow-hidden">
                                 <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between">
                                   <span className="text-sm font-bold text-white">R&amp;D Test Evaluation — {npd.itemCategory}</span>
@@ -3776,9 +3778,9 @@ export default function NpdDetailView() {
                                       allEval[npdId] = { results: testResults, submittedAt: now, startedAt: startedTs }
                                       localStorage.setItem(RND_EVAL_KEY, JSON.stringify(allEval))
                                       if (!evalStartedAt) setEvalStartedAt(startedTs)
-                                      setEvalSubmitted(true)
-                                      // Save to per-vendor tests key
                                       const currentVendor = sentVendors.length > 1 ? (activeTestVendor || sentVendors[0]) : (sentVendors[0] || npd.supplier || "")
+                                      setEvalSubmitted(prev => ({ ...prev, [currentVendor]: true }))
+                                      // Save to per-vendor tests key
                                       if (currentVendor) {
                                         const updated = { ...vendorTests, [currentVendor]: { results: testResults, status: "complete", submittedAt: now } }
                                         setVendorTests(updated)
@@ -3796,7 +3798,7 @@ export default function NpdDetailView() {
                             )}
 
                             {/* Supporting documents — R&D user, before submission */}
-                            {isRnd && !evalSubmitted && (
+                            {isRnd && !evalSubmitted[currentVendor] && (
                               <div className="border border-slate-200 rounded-xl overflow-hidden">
                                 <div className="bg-slate-100 px-4 py-2.5 flex items-center justify-between border-b border-slate-200">
                                   <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
@@ -3839,7 +3841,7 @@ export default function NpdDetailView() {
                             )}
 
                             {/* Results view (read-only after submission) */}
-                            {evalSubmitted && tests.length > 0 && (
+                            {evalSubmitted[currentVendor] && tests.length > 0 && (
                               <div className="border border-emerald-200 rounded-xl overflow-hidden">
                                 <div className="bg-emerald-700 px-4 py-2.5 flex items-center justify-between">
                                   <span className="text-sm font-bold text-white">Evaluation Results — {npd.itemCategory}</span>
@@ -3881,7 +3883,7 @@ export default function NpdDetailView() {
                               <div>
                                 <p className="text-sm font-bold text-blue-900">Sample Evaluation Actions</p>
                                 <p className="text-xs text-blue-700 mt-1">
-                                  {evalSubmitted ? "Evaluation complete. Approve to route to R&D Head." : "Complete all test results above before approving."}
+                                  {evalSubmitted[currentVendor] ? "Evaluation complete. Approve to route to R&D Head." : "Complete all test results above before approving."}
                                 </p>
                               </div>
                               {tqrStatus === "pending" ? (
@@ -3890,7 +3892,7 @@ export default function NpdDetailView() {
                                     <XCircle className="w-4 h-4 mr-2" /> Reject Sample
                                   </Button>
                                   <Button
-                                    disabled={!evalSubmitted}
+                                    disabled={!sentVendors.every(v => evalSubmitted[v])}
                                     className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                                     onClick={() => {
                                       setTqrStatus("approved_by_user")
@@ -3906,6 +3908,10 @@ export default function NpdDetailView() {
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <button
                                       onClick={() => {
+                                        if (!sentVendors.every(v => evalSubmitted[v])) {
+                                          alert("All vendors must complete their evaluation before final approval.")
+                                          return
+                                        }
                                         setActiveStage(6)
                                         updateNPD(npdId, { stage: 6, stageName: NPD_STAGES[5] })
                                         savePush(`TQR Approved — ${npdId}`, `R&D Head approved TQR for ${npd.itemName}. Advancing to DQA Testing.`, npdId, "check")
@@ -7625,6 +7631,42 @@ export default function NpdDetailView() {
               </div>
             </div>
           ))}
+
+          {/* ── Stage 2 → Stage 3 Proceed Gate ── */}
+          {!isECN && !isAltSupplier && activeStage === 2 && (() => {
+            const allResolved = sentVendors.length > 0 && sentVendors.every(v => quoteApprovals[v] === "approved" || quoteApprovals[v] === "rejected")
+            const resolvedCount = sentVendors.filter(v => quoteApprovals[v] === "approved" || quoteApprovals[v] === "rejected").length
+            const firstApproved = sentVendors.find(v => quoteApprovals[v] === "approved")
+            return (
+              <div className={`rounded-xl border p-4 ${allResolved ? "bg-teal-50 border-teal-200" : "bg-slate-50 border-slate-200"}`}>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {allResolved ? <CheckCircle2 className="w-5 h-5 text-teal-600 shrink-0" /> : <Circle className="w-5 h-5 text-slate-400 shrink-0" />}
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">Stage 2 — Sourcing Complete</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {allResolved
+                          ? `All ${sentVendors.length} vendor${sentVendors.length !== 1 ? "s" : ""} resolved. Ready to proceed to Supplier Dispatch.`
+                          : `${resolvedCount}/${sentVendors.length} vendor${sentVendors.length !== 1 ? "s" : ""} resolved. Awaiting sourcing decision on remaining vendors.`}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    disabled={!allResolved}
+                    onClick={() => {
+                      const supplierName = firstApproved || sentVendors[0]
+                      const updates: Partial<typeof npd> = { stage: 3, stageName: NPD_STAGES[2], supplier: supplierName }
+                      updateNPD(npdId, updates)
+                      setActiveStage(3)
+                    }}
+                    className="bg-teal-700 hover:bg-teal-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold shrink-0"
+                  >
+                    <Send className="w-4 h-4 mr-1.5" />Proceed to Supplier Dispatch →
+                  </Button>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* ── Section 2: Supplier Dispatch (NCD/NPD only) ────────────────── */}
           {!isECN && !isAltSupplier && activeStage >= 3 && activeStage >= 8 && dispatchInfo && (

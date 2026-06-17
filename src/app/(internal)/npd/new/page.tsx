@@ -455,7 +455,13 @@ export default function NewRequestWizard() {
       </div>
 
       <div className="flex justify-end pt-4 border-t border-slate-100">
-        <Button disabled={!typeOfWork} onClick={() => setStep(2)} className="bg-blue-900 hover:bg-blue-800 active:scale-[0.98] transition-transform text-white px-6">
+        <Button disabled={!typeOfWork} onClick={() => {
+          if (typeOfWork === "NTD") {
+            router.push('/ntd/new')
+          } else {
+            setStep(2)
+          }
+        }} className="bg-blue-900 hover:bg-blue-800 active:scale-[0.98] transition-transform text-white px-6">
           Continue <ChevronRight className="w-4 h-4 ml-1.5" />
         </Button>
       </div>

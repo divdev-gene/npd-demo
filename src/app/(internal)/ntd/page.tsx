@@ -1,8 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Plus, Search, Wrench, ChevronRight } from "lucide-react"
+import { Search, Wrench, ChevronRight } from "lucide-react"
 import { getAllNTDRecords } from "@/lib/ntd"
 import type { NTDRecord } from "@/types/ntd"
 
@@ -16,17 +15,12 @@ export default function NTDListPage() {
   const router = useRouter()
   const [records, setRecords] = useState<NTDRecord[]>([])
   const [search, setSearch] = useState("")
-  const [currentRole, setCurrentRole] = useState("")
-
   useEffect(() => {
-    setCurrentRole(localStorage.getItem("poc_role") ?? "rnd_engineer")
     const load = () => setRecords([...getAllNTDRecords()].reverse())
     load()
     const t = setInterval(load, 3000)
     return () => clearInterval(t)
   }, [])
-
-  const canCreate = currentRole.startsWith("rnd") || currentRole === "super_admin"
 
   const filtered = records.filter(r =>
     r.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -46,13 +40,7 @@ export default function NTDListPage() {
             <p className="text-sm text-slate-500">{records.length} record{records.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
-        {canCreate && (
-          <Link href="/ntd/new"
-            className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
-            <Plus className="w-4 h-4" />
-            New Tool Development
-          </Link>
-        )}
+        
       </div>
 
       {/* Search */}
@@ -74,12 +62,7 @@ export default function NTDListPage() {
           <p className="text-slate-500 font-medium">
             {records.length === 0 ? "No tool development records yet" : "No records match your search"}
           </p>
-          {records.length === 0 && canCreate && (
-            <Link href="/ntd/new"
-              className="mt-4 inline-flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
-              <Plus className="w-4 h-4" /> Create first NTD
-            </Link>
-          )}
+          
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
