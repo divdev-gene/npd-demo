@@ -174,67 +174,53 @@ export default function DFMPage() {
   }
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 py-6 space-y-6">
-      <Link href={`/ntd/${id}`} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+    <div className="max-w-[1200px] mx-auto px-4 py-4 space-y-4">
+      <Link href={`/ntd/${id}`} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors w-fit">
         <ArrowLeft className="w-4 h-4" /> Back to NTD {record.id}
       </Link>
 
       {/* Header */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Stage 7 — DFM Review</h1>
-            <p className="text-sm text-slate-500 mt-0.5">{record.title}</p>
+      <div className="bg-white rounded-lg border border-slate-200 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-sm font-bold text-slate-900 truncate">Stage 7 — DFM Review</h1>
+            <p className="text-[11px] text-slate-500 truncate">{record.title}</p>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-slate-800">{approved} / {total}</p>
-            <p className="text-xs text-slate-400">Components Approved</p>
+          <div className="flex items-center gap-3 shrink-0">
+            {activeCommodities.length > 0 && (
+              <div className="flex gap-1">
+                {(["All", ...activeCommodities] as (NTDCommodity | "All")[]).map(c => (
+                  <button key={c} onClick={() => setSelectedCommodity(c)}
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors ${
+                      selectedCommodity === c
+                        ? "bg-purple-600 text-white border-purple-600"
+                        : "bg-white text-slate-500 border-slate-200"
+                    }`}>
+                    {c} {commodityCounts[c]}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="text-right border-l border-slate-200 pl-3">
+              <p className="text-base font-bold text-slate-800">{approved}/{total}</p>
+            </div>
           </div>
         </div>
-        {/* Progress bar */}
-        <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className="mt-2 h-1 bg-slate-100 rounded-full overflow-hidden">
           <div className="h-full bg-purple-600 rounded-full transition-all duration-500"
             style={{ width: total > 0 ? `${Math.round((approved / total) * 100)}%` : "0%" }} />
         </div>
-        {/* Commodity filter chips */}
-        {activeCommodities.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {(["All", ...activeCommodities] as (NTDCommodity | "All")[]).map(c => {
-              const isActive = selectedCommodity === c
-              const count = commodityCounts[c] ?? 0
-              return (
-                <button
-                  key={c}
-                  onClick={() => setSelectedCommodity(c)}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                    isActive
-                      ? "bg-purple-600 text-white border-purple-600"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-purple-300 hover:text-purple-700"
-                  }`}
-                >
-                  {c}
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                    isActive ? "bg-purple-500 text-white" : "bg-slate-100 text-slate-500"
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
 
         {allApproved && (
-          <div className="mt-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-            <p className="font-semibold text-emerald-800">DFM Complete — All components approved. Advanced to Stage 8.</p>
+          <div className="mt-2 flex items-center gap-1.5 text-emerald-700 text-xs font-semibold">
+            <CheckCircle2 className="w-3.5 h-3.5" /> All components approved
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <div className="flex gap-5 items-start">
         {/* Component board */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <div className="flex-1 min-w-0 bg-white rounded-lg border border-slate-200 p-3">
           <ComponentApprovalBoard
             components={filteredComponents}
             mode="dfm"
@@ -244,98 +230,73 @@ export default function DFMPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-4">
-          {/* Supplier portal link */}
-          <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-5 space-y-3">
+        <div className="w-80 shrink-0 space-y-3">
+          {/* Supplier Portal */}
+          <div className="bg-white rounded-lg border border-blue-200 p-3.5 space-y-2.5">
             <div className="flex items-center gap-2">
               <Link2 className="w-4 h-4 text-blue-600" />
-              <h3 className="font-semibold text-slate-800 text-sm">Supplier Portal</h3>
+              <h3 className="text-xs font-bold text-slate-800">Supplier Portal</h3>
             </div>
-            <p className="text-[11px] text-slate-500">Share this link with the supplier so they can upload DFM PPT and 3D Design files.</p>
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-              <a
-                href={`/supplier/ntd/${id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 text-xs text-blue-700 font-mono truncate hover:underline"
-              >
-                /supplier/ntd/{id}
-              </a>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/supplier/ntd/${id}`)
-                  setCopied(true)
-                  setTimeout(() => setCopied(false), 2000)
-                }}
-                className="shrink-0 p-1 rounded hover:bg-blue-100 text-blue-500 hover:text-blue-700 transition-colors"
-                title="Copy link"
-              >
-                {copied ? <CheckIcon className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Share this link with the supplier so they can upload DFM PPT and 3D Design files.
+            </p>
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2">
+              <span className="flex-1 text-[11px] text-blue-700 font-mono truncate">/supplier/ntd/{id}</span>
+              <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/supplier/ntd/${id}`); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                className="flex items-center gap-1 text-xs font-semibold text-blue-700 bg-white border border-blue-200 hover:bg-blue-100 px-2.5 py-1 rounded transition-colors shrink-0">
+                {copied ? <CheckIcon className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {copied ? "Copied" : "Copy"}
               </button>
             </div>
-            <a
-              href={`/supplier/ntd/${id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1.5 w-full text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-3 py-2 transition-colors"
-            >
-              Open Supplier Portal <ExternalLink className="w-3 h-3" />
+            <a href={`/supplier/ntd/${id}`} target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-3 py-2 transition-colors">
+              Open Supplier Portal <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
 
-          {/* PO Activity (sourcing) */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
+          {/* PO Activity */}
+          <div className="bg-white rounded-lg border border-slate-200 p-3.5 space-y-2.5">
             <div className="flex items-center gap-2">
               <Package className="w-4 h-4 text-teal-600" />
-              <h3 className="font-semibold text-slate-800 text-sm">PO Activity</h3>
+              <h3 className="text-xs font-bold text-slate-800">PO Activity</h3>
             </div>
             {dfmData.po_activity.raised ? (
               <div className="space-y-1">
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                   <CheckCircle2 className="w-3.5 h-3.5" /> PO Raised
                 </span>
-                <p className="text-xs text-slate-600 font-mono bg-slate-50 px-2 py-1 rounded-lg">{dfmData.po_activity.po_number}</p>
+                <p className="text-[11px] text-slate-600 font-mono bg-slate-50 border border-slate-200 px-2.5 py-1 rounded">{dfmData.po_activity.po_number}</p>
                 <p className="text-[11px] text-slate-400">by {dfmData.po_activity.raised_by}</p>
               </div>
             ) : isSourcing ? (
               <div className="space-y-2">
-                <label className="text-[11px] font-bold text-slate-500 uppercase">PO Number</label>
-                <input
-                  type="text"
-                  autoComplete="off"
-                  value={poNumber}
+                <label className="text-[10px] font-bold text-slate-500 uppercase">PO Number</label>
+                <input type="text" autoComplete="off" value={poNumber}
                   onChange={e => setPoNumber(e.target.value)}
                   onFocus={() => { isEditingRef.current = true }}
                   onBlur={() => { isEditingRef.current = false }}
                   placeholder="e.g. PO-2026-0042"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                />
-                <button
-                  onClick={handleMarkPO}
-                  disabled={!poNumber.trim()}
-                  className="w-full text-sm font-semibold bg-teal-700 hover:bg-teal-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors">
-                  Mark PO Raised
-                </button>
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                <button onClick={handleMarkPO} disabled={!poNumber.trim()}
+                  className="w-full text-xs font-semibold bg-teal-700 hover:bg-teal-800 disabled:opacity-40 text-white px-3 py-2 rounded-lg transition-colors">Mark PO Raised</button>
               </div>
             ) : (
-              <p className="text-xs text-slate-400 italic">Awaiting sourcing to raise PO</p>
+              <p className="text-[11px] text-slate-400 italic">Awaiting sourcing to raise PO</p>
             )}
           </div>
 
-          {/* Status legend */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-2">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status Guide</p>
-            {[
-              { label: "Pending", cls: "bg-slate-100 text-slate-600", desc: "Awaiting supplier files" },
-              { label: "Under Review", cls: "bg-amber-100 text-amber-700", desc: "Files submitted, reviewing" },
-              { label: "Revision Required", cls: "bg-red-100 text-red-700", desc: "Feedback sent to supplier" },
-              { label: "Approved", cls: "bg-emerald-100 text-emerald-700", desc: "Both files approved ✓" },
-            ].map(s => (
-              <div key={s.label} className="flex items-center gap-2">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>{s.label}</span>
-                <span className="text-[11px] text-slate-500">{s.desc}</span>
-              </div>
-            ))}
+          {/* Status guide */}
+          <div className="bg-white rounded-lg border border-slate-200 p-2.5">
+            <p className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Status Guide</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: "Pending", cls: "bg-slate-100 text-slate-600" },
+                { label: "Under Review", cls: "bg-amber-100 text-amber-700" },
+                { label: "Revision Required", cls: "bg-red-100 text-red-700" },
+                { label: "Approved", cls: "bg-emerald-100 text-emerald-700" },
+              ].map(s => (
+                <span key={s.label} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>
+              ))}
+            </div>
           </div>
         </div>
       </div>

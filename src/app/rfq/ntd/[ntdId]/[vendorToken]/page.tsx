@@ -100,9 +100,9 @@ export default function VendorRFQPage() {
     : undefined
 
   // Reference file links
-  const partSpecLinks: { label: string; link: string }[] = (initData?.part_specs ?? []).flatMap(f => {
+  const partSpecLinks: { id: string; label: string; link: string }[] = (initData?.part_specs ?? []).flatMap(f => {
     const link = f.versions.find(v => v.version_no === f.current_version)?.link ?? ""
-    return link ? [{ label: f.slot_name, link }] : []
+    return link ? [{ id: f.file_id, label: f.slot_name, link }] : []
   })
   const specSheetLink = specData?.spec_sheet
     ? specData.spec_sheet.versions.find(v => v.version_no === specData.spec_sheet.current_version)?.link ?? ""
@@ -263,8 +263,8 @@ export default function VendorRFQPage() {
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Part Spec Files</p>
                   <div className="flex flex-wrap gap-2">
-                    {partSpecLinks.map(({ label, link }) => (
-                      <a key={label} href={link} target="_blank" rel="noopener noreferrer"
+                    {partSpecLinks.map(({ id, label, link }) => (
+                      <a key={id} href={link} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:border-slate-400 hover:text-slate-900 px-3 py-1.5 rounded-full shadow-sm transition-colors">
                         <ExternalLink className="w-3 h-3 text-slate-400" />
                         {label}

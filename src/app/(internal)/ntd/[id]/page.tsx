@@ -5,7 +5,7 @@ import Link from "next/link"
 import {
   CheckCircle2, Circle, ChevronRight, ArrowLeft, Wrench,
   AlertTriangle, ExternalLink, Plus, Trash2, Copy, Check,
-  Users, Clock, Package, Building2, Paperclip, X, FileSpreadsheet
+  Users, Clock, Package, Building2, Paperclip, X, FileSpreadsheet, Upload
 } from "lucide-react"
 import {
   getNTDRecord, getNTDInitiation, setNTDInitiation, getNTDSpec, setNTDSpec,
@@ -58,7 +58,7 @@ function StageCard({
       <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
       <div>
         <p className="text-xs font-semibold text-slate-700">Stage {stageNum} — {STAGE_NAMES[stageNum]}</p>
-        {doneLabel && <p className="text-[11px] text-slate-400">{doneLabel}</p>}
+        {doneLabel && <p className="text-xs text-slate-400">{doneLabel}</p>}
       </div>
     </div>
   )
@@ -68,7 +68,7 @@ function StageCard({
       <Circle className="w-4 h-4 text-slate-400 shrink-0" />
       <div>
         <p className="text-xs font-semibold text-slate-500">Stage {stageNum} — {STAGE_NAMES[stageNum]}</p>
-        <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Upcoming</span>
+        <span className="text-xs text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Upcoming</span>
       </div>
     </div>
   )
@@ -95,7 +95,7 @@ function CopyButton({ text }: { text: string }) {
   }
   return (
     <button onClick={handleCopy}
-      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition-colors"
+      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors"
       aria-label="Copy link">
       {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
       {copied ? "Copied" : "Copy"}
@@ -179,21 +179,7 @@ export default function NTDDetailPage() {
     return () => { clearInterval(t); window.removeEventListener("rolechange", onRole) }
   }, [reload])
 
-  // Stage 6 — poll for all-commodity acknowledgement → advance to Stage 7
-  const activeStageForS6 = record?.current_stage
-  useEffect(() => {
-    if (activeStageForS6 !== 6) return
-    const handoff = getNTDHandoff(id)
-    if (!handoff?.submitted_at) return
-    const interval = setInterval(() => {
-      if (allCommoditiesAcknowledged(id)) {
-        clearInterval(interval)
-        advanceNTDStage(id, 7, "system", "rnd")
-        reload()
-      }
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [activeStageForS6, id, reload])
+  // Stage 6 → 7: manual only via demo buttons
 
   if (!record) {
     return (
@@ -313,6 +299,40 @@ export default function NTDDetailPage() {
     })
     appendActivity(id, currentRole, ntdRole, 9, "manufacturing_update",
       `Component ${componentId} marked ${componentMfgReady[componentId] ? "not ready" : "ready"} for manufacturing`)
+  }
+
+  // ── Stage 2: bulk upload all fields for commodity components (POC) ──
+  const handleBulkUpload = (commodity: NTDCommodity) => {
+    setSourcingExtraFields(prev => {
+      const next = {
+        ...prev,
+        [commodity]: { noOfCavity: "2", runnerType: "Hot Runner", mould: "Multi-Cavity" },
+      }
+      localStorage.setItem(`ntd_sourcing_extras_${id}`, JSON.stringify(next))
+      return next
+    })
+    const init = getNTDInitiation(id)
+    if (init) {
+      setNTDInitiation(id, {
+        ...init,
+        components: init.components.map(c =>
+          c.commodity === commodity && c.status !== "merged"
+            ? {
+                ...c,
+                name: `${commodity} ${c.componentId}`,
+                referenceNo: `${commodity === "Sheet Metal" ? "SM" : commodity === "Plastics" ? "PL" : "EP"}-${c.componentId}`,
+                drgNo: `DRG-${c.componentId}`,
+                partSize: `${commodity === "Sheet Metal" ? "150x80x2" : commodity === "Plastics" ? "120x60x4" : "200x100x5"}`,
+                material: `${commodity === "Sheet Metal" ? "CRCA Steel" : commodity === "Plastics" ? "ABS" : "EPS"}`,
+                qps: `${commodity === "Sheet Metal" ? "2000" : commodity === "Plastics" ? "5000" : "1000"}`,
+                drwgWeight: `${commodity === "Sheet Metal" ? "45.2" : commodity === "Plastics" ? "12.8" : "3.5"}`,
+              }
+            : c
+        ),
+      })
+    }
+    reload()
+    appendActivity(id, currentRole, ntdRole, 2, "file_uploaded", `Bulk uploaded data for ${commodity} (POC)`)
   }
 
   // ── Stage 2 query: raise (sourcing) ──
@@ -636,7 +656,7 @@ export default function NTDDetailPage() {
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold text-slate-700">Stage 1 — Initiation</p>
           {initData && (
-            <p className="text-[11px] text-slate-400">
+            <p className="text-xs text-slate-400">
               Submitted by {initData.submitted_by}
               {initData.tech_spec_sheets && Object.keys(initData.tech_spec_sheets).length > 0 && ` · ${Object.keys(initData.tech_spec_sheets).length} spec sheet(s)`}
               {initData.part_specs.length > 0 && ` · ${initData.part_specs.length} spec file(s)`}
@@ -701,7 +721,7 @@ export default function NTDDetailPage() {
           {/* ── Per-commodity component tables ── */}
           {initData?.components && initData.components.length > 0 ? (
             <div className="space-y-1.5">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Components <span className="ml-1 font-normal text-slate-400 normal-case">({initData.components.length} total)</span>
               </p>
               {NTD_COMMODITIES.map(commodity => {
@@ -718,11 +738,11 @@ export default function NTDDetailPage() {
                       {/* Left: commodity identity */}
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <span className="text-sm font-bold text-slate-800 leading-none">{commodity}</span>
-                        <span className="shrink-0 text-[10px] bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded-full">
+                        <span className="shrink-0 text-xs bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded-full">
                           {comps.length} {comps.length !== 1 ? "components" : "component"}
                         </span>
                         {isSP && (
-                          <span className="shrink-0 text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">SP</span>
+                          <span className="shrink-0 text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">SP</span>
                         )}
                       </div>
                       {/* Right: semi-Progressive toggle (Sheet Metal only) */}
@@ -738,22 +758,31 @@ export default function NTDDetailPage() {
                           >
                             <span className={`inline-block h-3.5 w-3.5 translate-y-px rounded-full bg-white shadow transition-transform ${isSP ? "translate-x-3.5" : "translate-x-0.5"}`} />
                           </button>
-                          <span className="text-[11px] font-medium text-slate-600">Semi-Progressive</span>
+                          <span className="text-xs font-medium text-slate-600">Semi-Progressive</span>
                         </label>
+                      )}
+                      {/* Right: bulk upload mould details (POC — fills dummy data) */}
+                      {isSourcing && !specData?.sourcing_signed && (
+                        <button
+                          onClick={() => handleBulkUpload(commodity as NTDCommodity)}
+                          className="flex items-center gap-1.5 text-xs font-semibold bg-slate-700 hover:bg-slate-800 text-white px-2.5 py-1 rounded-lg transition-colors shrink-0"
+                        >
+                          <Upload className="w-3 h-3" /> Bulk Upload
+                        </button>
                       )}
                     </div>
 
                     {/* ── Column headers ── */}
-                    <div className="grid grid-cols-[52px_2fr_1fr_1fr_1fr_1fr_0.8fr_1fr_0.5fr] gap-3 px-4 py-2 bg-slate-50/60 border-b border-slate-100 items-center">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ID</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Part Name</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Ref. No.</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Drg. No.</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Size (mm)</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Material</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">QPS</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Wt. (gms)</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Spec</span>
+                    <div className="grid grid-cols-[52px_2fr_1fr_1fr_1fr_1fr_0.8fr_1fr_0.5fr] gap-3 px-4 py-2.5 bg-slate-50/60 border-b border-slate-100 items-center">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">ID</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Part Name</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Ref. No.</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Drg. No.</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Size (mm)</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Material</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center">QPS</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Wt. (gms)</span>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Spec</span>
                     </div>
 
                     {/* ── Component rows ── */}
@@ -765,7 +794,7 @@ export default function NTDDetailPage() {
                           key={c.componentId}
                           className="grid grid-cols-[52px_2fr_1fr_1fr_1fr_1fr_0.8fr_1fr_0.5fr] gap-3 px-4 py-3 items-center text-sm hover:bg-slate-50/60"
                         >
-                          <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded text-center">{c.componentId}</span>
+                          <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded text-center">{c.componentId}</span>
                           <span className="text-slate-700 font-medium truncate" title={c.name}>{c.name}</span>
                           <span className="text-slate-600 text-center truncate" title={c.referenceNo || "-"}>{c.referenceNo || "-"}</span>
                           <span className="text-slate-600 text-center truncate" title={c.drgNo || "-"}>{c.drgNo || "-"}</span>
@@ -774,15 +803,12 @@ export default function NTDDetailPage() {
                           <span className="text-slate-600 text-center truncate" title={c.qps || "-"}>{c.qps || "-"}</span>
                           <span className="text-slate-600 text-center truncate" title={c.drwgWeight || "-"}>{c.drwgWeight || "-"}</span>
                           <span className="text-center">
-                            {specSheet?.link ? (
-                              <a href={specSheet.link} target="_blank" rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center text-blue-600 hover:text-blue-800"
-                                title={`Download ${specSheet.file_name}`}>
-                                <FileSpreadsheet className="w-3.5 h-3.5" />
-                              </a>
-                            ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
+                            <button
+                              onClick={() => alert("Spec download: demo — no file attached")}
+                              className="inline-flex items-center justify-center text-blue-600 hover:text-blue-800"
+                              title="Download spec sheet (demo)">
+                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                            </button>
                           </span>
                         </div>
                       )})}
@@ -790,14 +816,14 @@ export default function NTDDetailPage() {
 
                     {/* ── Sourcing mould details ── */}
                     <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/40">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Mould Details</p>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Mould Details</p>
                       <div className="grid grid-cols-3 gap-3">
                         {(["noOfCavity", "runnerType", "mould"] as const).map(field => {
                           const label = field === "noOfCavity" ? "No. of Cavity" : field === "runnerType" ? "Runner Type" : "Mould"
                           const value = sourcingData[field]
                           return (
                             <div key={field}>
-                              <label className="text-[10px] font-semibold text-slate-500 mb-1 block">{label}</label>
+                              <label className="text-xs font-semibold text-slate-500 mb-1 block">{label}</label>
                               {canEditSourcing ? (
                                 <input
                                   type="text"
@@ -831,9 +857,9 @@ export default function NTDDetailPage() {
           {s2Queries.length > 0 && (
             <div className="space-y-2 border-t border-slate-100 pt-5">
               <div className="flex items-center gap-2 mb-3">
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Queries</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Queries</p>
                 {hasOpenQuery && (
-                  <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">
                     {s2Queries.filter(q => !q.resolved).length} open
                   </span>
                 )}
@@ -844,17 +870,17 @@ export default function NTDDetailPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-0.5 flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-800 leading-snug">{q.text}</p>
-                      <p className="text-[11px] text-slate-400 mt-1">Raised by {q.raised_by} · {new Date(q.raised_at).toLocaleString()}</p>
+                      <p className="text-xs text-slate-400 mt-1">Raised by {q.raised_by} · {new Date(q.raised_at).toLocaleString()}</p>
                     </div>
-                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${q.resolved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${q.resolved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                       {q.resolved ? "Resolved" : "Open"}
                     </span>
                   </div>
                   {q.resolved && q.response && (
                     <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2.5">
-                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">R&D Response</p>
+                      <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-1">R&D Response</p>
                       <p className="text-sm text-slate-700">{q.response}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">by {q.resolved_by} · {new Date(q.resolved_at!).toLocaleString()}</p>
+                      <p className="text-xs text-slate-400 mt-1">by {q.resolved_by} · {new Date(q.resolved_at!).toLocaleString()}</p>
                     </div>
                   )}
                   {!q.resolved && isRnd && (
@@ -908,7 +934,7 @@ export default function NTDDetailPage() {
 
           {/* ── Sourcing sign-off ── */}
           <div className={`rounded-xl border px-5 py-4 transition-colors ${specData?.sourcing_signed ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">Sourcing Approval</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Sourcing Approval</p>
             {specData?.sourcing_signed ? (
               <div>
                 <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
@@ -957,7 +983,7 @@ export default function NTDDetailPage() {
                 <div key={commodity} className="border border-slate-200 rounded-xl overflow-hidden">
                   <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700">{commodity}</span>
-                    <span className="text-[10px] text-slate-400">{catalogVendors.length} catalog vendors</span>
+                    <span className="text-xs text-slate-400">{catalogVendors.length} catalog vendors</span>
                   </div>
                   <div className="p-4 space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -982,11 +1008,11 @@ export default function NTDDetailPage() {
                               className="mt-0.5 rounded border-slate-300 accent-indigo-600" />
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-slate-800">{cv.name}</p>
-                              <p className="text-[10px] text-slate-400">{cv.tier}{cv.spocName ? ` · ${cv.spocName}` : ""}</p>
+                              <p className="text-xs text-slate-400">{cv.tier}{cv.spocName ? ` · ${cv.spocName}` : ""}</p>
                               {isAdded && existingVendor && (
                                 <div className="flex items-center gap-2 mt-1.5">
                                   {existingVendor.sent && (
-                                    <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+                                    <span className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
                                       <CheckCircle2 className="w-3 h-3" /> RFQ Sent
                                     </span>
                                   )}
@@ -1058,10 +1084,10 @@ export default function NTDDetailPage() {
             <div key={commodity} className="space-y-2">
               {/* Commodity section header */}
               <div className="flex items-center gap-3 px-1">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full">
+                <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-100 px-3 py-1 rounded-full">
                   {commodity}
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs text-slate-500">
                   {finalizedCount}/{commodityVendors.length} finalized · {quoteCount} quoted
                 </span>
                 <div className="flex-1 h-px bg-slate-100" />
@@ -1076,339 +1102,251 @@ export default function NTDDetailPage() {
           const vendorAwaitingResponse = q?.thread.length && q.thread[q.thread.length - 1].author_type === "vendor"
           const rfqUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/rfq/ntd/${id}/${vendor.token}`
 
+          // Compute selected total if all categories chosen
+          const vendorComps = (initData?.components ?? []).filter(c => c.commodity === vendor.commodity && c.status !== "merged")
+          const hasSP = initData?.semi_Progressive?.[vendor.commodity as NTDCommodity] ?? false
+          const catSels = q?.category_selections ?? {}
+          const allSelected = vendorComps.length > 0 && vendorComps.every(c => !!catSels[c.componentId])
+          const selectedTotal = allSelected ? vendorComps.reduce((sum, comp) => {
+            const sel = catSels[comp.componentId]
+            if (!sel) return sum
+            const cp = q!.quotation!.component_prices![comp.componentId]
+            if (!cp) return sum
+            return sum + (sel.selected_category === "stage" ? (cp.stage ?? 0)
+              : sel.selected_category === "Progressive" ? (cp.Progressive ?? 0)
+              : (cp.semi_Progressive ?? 0))
+          }, 0) : 0
+
           return (
-            <div key={vid} className={`rounded-xl border overflow-hidden ${isFinalized ? "border-emerald-200" : "border-slate-200"}`}>
+            <div key={vid} className={`rounded-xl overflow-hidden ${isFinalized ? "border border-emerald-300 bg-emerald-50/30" : "border border-slate-200 bg-white"}`}>
 
               {/* ── Header ── */}
-              <div className={`flex items-center gap-2 px-3 py-2 border-b ${isFinalized ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100"}`}>
-                <p className="font-semibold text-slate-800 text-sm truncate flex-1">{vendor.vendor_name}</p>
-                {vendorAwaitingResponse && !isFinalized && (
-                  <span className="shrink-0 text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full animate-pulse">
-                    Vendor replied
-                  </span>
+              <div className={`flex items-center gap-3 px-4 py-3 ${isFinalized ? "bg-emerald-50 border-b border-emerald-200" : "bg-white border-b border-slate-150"}`}>
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isFinalized ? "bg-emerald-500" : q?.status === "negotiating" ? "bg-amber-400" : q?.status === "quotation_received" ? "bg-blue-500" : "bg-slate-300"}`} />
+                  <p className="font-bold text-slate-900 text-base truncate">{vendor.vendor_name}</p>
+                </div>
+                {q?.quotation && (
+                  <div className="flex items-center gap-3 text-sm text-slate-500">
+                    <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {q.quotation.lead_time_days}d</span>
+                    <span className="flex items-center gap-1.5">{q.quotation.currency}</span>
+                  </div>
                 )}
-                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                <span className={`shrink-0 text-xs font-bold px-3 py-1 rounded-full ${
                   isFinalized ? "bg-emerald-100 text-emerald-700"
                   : q?.status === "negotiating" ? "bg-amber-100 text-amber-700"
                   : q?.status === "quotation_received" ? "bg-blue-100 text-blue-700"
                   : "bg-slate-100 text-slate-500"}`}>
-                  {isFinalized ? "Finalized ✓" : q?.status === "negotiating" ? "Negotiating" : q?.status === "quotation_received" ? "Quote received" : "Awaiting quote"}
+                  {isFinalized ? "Finalized" : q?.status === "negotiating" ? "Negotiating" : q?.status === "quotation_received" ? "Quote received" : "Awaiting quote"}
                 </span>
-                <div className="shrink-0 flex items-center gap-1 text-[9px] text-slate-400 font-medium pl-1 border-l border-slate-200">
-                  <span className="hidden sm:inline">RFQ link</span>
-                  <CopyButton text={rfqUrl} />
-                </div>
+                <CopyButton text={rfqUrl} />
               </div>
 
-              {/* ── Body: two-column split ── */}
-              <div className="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] divide-x divide-slate-100">
+              {/* ── Body ── */}
+              <div className="px-4 py-3 space-y-4">
 
-                {/* Left — quote summary + per-component category selection */}
-                <div className="p-3 space-y-2">
-                  {q?.quotation ? (
-                    <>
-                      {/* Lead time + doc */}
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <div className="bg-slate-50 rounded-lg px-2.5 py-2">
-                          <p className="text-[9px] text-slate-400 uppercase tracking-wide">Lead time</p>
-                          <p className="text-sm font-bold text-slate-800 leading-tight">{q.quotation.lead_time_days}d</p>
-                        </div>
-                        <div className="bg-slate-50 rounded-lg px-2.5 py-2">
-                          <p className="text-[9px] text-slate-400 uppercase tracking-wide">Currency</p>
-                          <p className="text-sm font-bold text-slate-800 leading-tight">{q.quotation.currency}</p>
-                        </div>
-                      </div>
-
-                      {/* Per-component pricing table with inline category selection for sourcing */}
-                      {q.quotation.component_prices && (() => {
-                        const vendorComps = (initData?.components ?? []).filter(c => c.commodity === vendor.commodity && c.status !== "merged")
-                        if (vendorComps.length === 0) return null
-                        const hasSP = initData?.semi_Progressive?.[vendor.commodity as NTDCommodity] ?? false
-                        const catSels = q.category_selections ?? {}
-
-                        const categoryLabel: Record<PriceCategory, string> = { stage: "Stage", Progressive: "Progressive", semi_Progressive: "Semi" }
-
-                        const selectedTotal = vendorComps.reduce((sum, comp) => {
-                          const sel = catSels[comp.componentId]
-                          if (!sel) return sum
-                          const cp = q.quotation!.component_prices![comp.componentId]
-                          if (!cp) return sum
-                          return sum + (sel.selected_category === "stage" ? (cp.stage ?? 0)
-                            : sel.selected_category === "Progressive" ? (cp.Progressive ?? 0)
-                            : (cp.semi_Progressive ?? 0))
-                        }, 0)
-
-                        const allSelected = vendorComps.every(c => !!catSels[c.componentId])
-
-                        return (
-                          <div className="space-y-1.5">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">
-                              Quoted Prices {isSourcing && <span className="text-amber-500">— select category per component</span>}
-                            </p>
-                            <div className="rounded-lg border border-slate-100 overflow-hidden">
-                              <table className="w-full text-[10px]">
-                                <thead>
-                                  <tr className="border-b border-slate-100 bg-slate-50">
-                                    <th className="px-2 py-1.5 text-left font-semibold text-slate-400 w-[30%]">Comp</th>
-                                    <th className="px-2 py-1.5 text-right font-bold text-blue-600 border-l border-blue-50">Stage</th>
-                                    <th className="px-2 py-1.5 text-right font-bold text-amber-600 border-l border-amber-50">Progressive</th>
-                                    {hasSP && <th className="px-2 py-1.5 text-right font-bold text-indigo-600 border-l border-indigo-50">Semi</th>}
-                                    <th className="px-2 py-1.5 text-center font-bold text-emerald-600 border-l border-slate-100 w-[80px]">
-                                      {isSourcing ? "Apply" : "Applied"}
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                  {vendorComps.map(comp => {
-                                    const cp = q.quotation!.component_prices![comp.componentId]
-                                    const sel = catSels[comp.componentId]
-                                    const appliedPrice = sel && cp
-                                      ? sel.selected_category === "stage" ? (cp.stage ?? 0)
-                                      : sel.selected_category === "Progressive" ? (cp.Progressive ?? 0)
-                                      : (cp.semi_Progressive ?? 0)
-                                      : null
-
-                                    return (
-                                      <tr key={comp.componentId} className={`hover:bg-slate-50 ${sel ? "bg-emerald-50/30" : ""}`}>
-                                        <td className="px-2 py-1.5">
-                                          <span className="font-mono text-[9px] font-bold text-slate-400 mr-1">{comp.componentId}</span>
-                                          <span className="text-slate-700 truncate">{comp.name}</span>
-                                        </td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-600 border-l border-blue-50">
-                                          {cp ? (cp.stage ?? 0).toLocaleString() : "—"}
-                                        </td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-600 border-l border-amber-50">
-                                          {cp ? (cp.Progressive ?? 0).toLocaleString() : "—"}
-                                        </td>
-                                        {hasSP && (
-                                          <td className="px-2 py-1.5 text-right tabular-nums text-slate-600 border-l border-indigo-50">
-                                            {cp ? (cp.semi_Progressive ?? 0).toLocaleString() : "—"}
-                                          </td>
+                {/* ─── QUOTE SECTION ─── */}
+                {q?.quotation ? (
+                  <>
+                    {/* Pricing table */}
+                    {q.quotation.component_prices && vendorComps.length > 0 && (
+                      <div>
+                        <div className="rounded-lg border border-slate-200 overflow-hidden">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-slate-200 bg-slate-50">
+                                <th className="px-3 py-2.5 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">Component</th>
+                                <th className="px-3 py-2.5 text-right font-semibold text-slate-500 text-xs uppercase tracking-wider">Stage</th>
+                                <th className="px-3 py-2.5 text-right font-semibold text-slate-500 text-xs uppercase tracking-wider">Progressive</th>
+                                {hasSP && <th className="px-3 py-2.5 text-right font-semibold text-slate-500 text-xs uppercase tracking-wider">Semi</th>}
+                                {isSourcing && <th className="px-3 py-2.5 text-center font-semibold text-slate-500 text-xs uppercase tracking-wider w-[80px]">Category</th>}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {vendorComps.map(comp => {
+                                const cp = q.quotation!.component_prices![comp.componentId]
+                                const sel = catSels[comp.componentId]
+                                return (
+                                  <tr key={comp.componentId} className={`${sel ? "bg-emerald-50/40" : ""} hover:bg-slate-50`}>
+                                    <td className="px-3 py-2.5">
+                                      <span className="inline-flex items-center gap-2">
+                                        <span className="font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-xs">{comp.componentId}</span>
+                                        <span className="text-slate-800 text-sm font-medium">{comp.name}</span>
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800 font-semibold text-sm">{cp ? (cp.stage ?? 0).toLocaleString() : "—"}</td>
+                                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800 font-semibold text-sm">{cp ? (cp.Progressive ?? 0).toLocaleString() : "—"}</td>
+                                    {hasSP && <td className="px-3 py-2.5 text-right tabular-nums text-slate-800 font-semibold text-sm">{cp ? (cp.semi_Progressive ?? 0).toLocaleString() : "—"}</td>}
+                                    {isSourcing && (
+                                      <td className="px-3 py-2.5 text-center">
+                                        {cp ? (
+                                          <select
+                                            value={sel?.selected_category ?? ""}
+                                            onChange={e => {
+                                              if (!e.target.value) return
+                                              const cat = e.target.value as PriceCategory
+                                              const price = cat === "stage" ? (cp.stage ?? 0)
+                                                : cat === "Progressive" ? (cp.Progressive ?? 0)
+                                                : (cp.semi_Progressive ?? 0)
+                                              const existing = getNTDQuotation(id) ?? {}
+                                              const newSelections: Record<string, ComponentCategorySelection> = {
+                                                ...(existing[vid]?.category_selections ?? {}),
+                                                [comp.componentId]: { selected_category: cat, base_price: price, currency: q.quotation!.currency },
+                                              }
+                                              setNTDQuotation(id, { ...existing, [vid]: { ...existing[vid]!, category_selections: newSelections } })
+                                              reload()
+                                            }}
+                                            className="text-xs rounded border border-slate-200 bg-white px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-400 text-slate-700"
+                                          >
+                                            <option value="">—</option>
+                                            <option value="stage">Stage</option>
+                                            <option value="Progressive">Progressive</option>
+                                            {hasSP && <option value="semi_Progressive">Semi</option>}
+                                          </select>
+                                        ) : (
+                                          <span className="text-slate-300 text-sm">—</span>
                                         )}
-                                        <td className="px-2 py-1.5 border-l border-slate-100 text-center">
-                                          {isSourcing ? (
-                                            <select
-                                              value={sel?.selected_category ?? ""}
-                                              onChange={e => {
-                                                if (!e.target.value) return
-                                                const cat = e.target.value as PriceCategory
-                                                const price = cat === "stage" ? (cp?.stage ?? 0)
-                                                  : cat === "Progressive" ? (cp?.Progressive ?? 0)
-                                                  : (cp?.semi_Progressive ?? 0)
-                                                const existing = getNTDQuotation(id) ?? {}
-                                                const newSelections: Record<string, ComponentCategorySelection> = {
-                                                  ...(existing[vid]?.category_selections ?? {}),
-                                                  [comp.componentId]: { selected_category: cat, base_price: price, currency: q.quotation!.currency },
-                                                }
-                                                setNTDQuotation(id, {
-                                                  ...existing,
-                                                  [vid]: { ...existing[vid]!, category_selections: newSelections },
-                                                })
-                                                reload()
-                                              }}
-                                              className="text-[10px] rounded border border-slate-200 bg-white px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400 w-full"
-                                            >
-                                              <option value="">—</option>
-                                              <option value="stage">Stage</option>
-                                              <option value="Progressive">Progressive</option>
-                                              {hasSP && <option value="semi_Progressive">Semi</option>}
-                                            </select>
-                                          ) : (
-                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${sel ? "bg-emerald-100 text-emerald-700" : "text-slate-300"}`}>
-                                              {sel ? categoryLabel[sel.selected_category] : "—"}
-                                            </span>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    )
-                                  })}
-                                </tbody>
-                                {allSelected && (
-                                  <tfoot>
-                                    <tr className="border-t-2 border-emerald-200 bg-emerald-50">
-                                      <td colSpan={hasSP ? 4 : 3} className="px-2 py-2 text-[10px] font-bold text-emerald-700 uppercase tracking-wide">
-                                        Selected Total
                                       </td>
-                                      <td className="px-2 py-2 text-right border-l border-emerald-200">
-                                        <span className="text-sm font-bold text-emerald-800 tabular-nums">{q.quotation.currency} {selectedTotal.toLocaleString()}</span>
-                                      </td>
-                                    </tr>
-                                  </tfoot>
-                                )}
-                              </table>
+                                    )}
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                            {allSelected && (
+                              <tfoot>
+                                <tr className="border-t-2 border-emerald-200 bg-emerald-50">
+                                  <td colSpan={hasSP ? 4 : 3} className="px-3 py-3 text-xs font-bold text-emerald-700 uppercase tracking-wider">Total</td>
+                                  <td className="px-3 py-3 text-right font-bold text-emerald-800 tabular-nums text-base">{q.quotation.currency} {selectedTotal.toLocaleString()}</td>
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </div>
+                        {q.quotation.doc_link && (
+                          <a href={q.quotation.doc_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline mt-2 font-medium">
+                            <ExternalLink className="w-4 h-4" /> View quotation document
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ─── NEGOTIATION SECTION ─── */}
+                    <div className="bg-slate-50/60 rounded-xl border border-slate-100 px-4 py-4">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Negotiation</p>
+
+                      {/* Thread — chat bubbles */}
+                      {q.thread && q.thread.length > 0 && (
+                        <div className="mb-3 max-h-48 overflow-y-auto space-y-2 rounded-lg bg-slate-50 border border-slate-100 p-3">
+                          {q.thread.map(msg => (
+                            <div key={msg.message_id}
+                              className={`rounded-lg px-4 py-2.5 text-sm leading-relaxed w-fit max-w-[80%] shadow-sm ${
+                                msg.author_type === "internal"
+                                  ? "bg-blue-700 text-white ml-auto"
+                                  : "bg-white border border-slate-200 text-slate-800"
+                              }`}>
+                              <p className={`text-xs font-bold mb-1 ${msg.author_type === "internal" ? "text-blue-200" : "text-slate-500"}`}>
+                                {msg.author_type === "internal" ? msg.author_name : vendor.vendor_name}
+                              </p>
+                              <p>{msg.text}</p>
+                              {msg.counter_offer && (
+                                <p className={`mt-1 text-xs font-bold ${msg.author_type === "internal" ? "text-blue-200" : "text-amber-700"}`}>
+                                  Counter: {q.quotation?.currency ?? "₹"} {msg.counter_offer.toLocaleString()}
+                                </p>
+                              )}
+                              <p className={`text-xs mt-1 opacity-60 ${msg.author_type === "internal" ? "text-blue-200" : "text-slate-400"}`}>
+                                {new Date(msg.created_at).toLocaleString()}
+                              </p>
                             </div>
-                            {/* Auto-fill counter-price hint */}
-                            {allSelected && isSourcing && !isFinalized && (
-                              <button
-                                onClick={() => {
-                                  setCounterPrice(prev => ({ ...prev, [vid]: String(selectedTotal) }))
-                                  setCounterText(prev => ({ ...prev, [vid]: prev[vid] ?? `Negotiating on selected total: ${q.quotation!.currency} ${selectedTotal.toLocaleString()}` }))
-                                }}
-                                className="w-full text-[10px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg transition-colors text-left"
-                              >
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Sourcing action area */}
+                      {isSourcing && !isFinalized && (
+                        <div className="space-y-3">
+                          {lastVendorCounter && (
+                            <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                              <div>
+                                <p className="text-sm font-semibold text-amber-900">Vendor counter offer</p>
+                                <p className="text-xl font-bold text-amber-800">{q?.quotation?.currency ?? "₹"} {lastVendorCounter.counter_offer!.toLocaleString()}</p>
+                              </div>
+                              <button onClick={() => handleAcceptVendorPrice(vid, vendor.vendor_name, lastVendorCounter.counter_offer!, q?.quotation?.currency ?? "INR")}
+                                className="flex items-center gap-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors shrink-0">
+                                <CheckCircle2 className="w-4 h-4" /> Accept & Finalize
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <textarea value={counterText[vid] ?? ""}
+                              onChange={e => setCounterText(prev => ({ ...prev, [vid]: e.target.value }))}
+                              onFocus={pausePolling} onBlur={resumePolling}
+                              autoComplete="off" placeholder="Type your message..."
+                              rows={3}
+                              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                            />
+                            <div className="flex items-center gap-2">
+                              <input type="text" value={messageDocLinks[vid] ?? ""}
+                                onChange={e => setMessageDocLinks(prev => ({ ...prev, [vid]: e.target.value }))}
+                                onFocus={pausePolling} onBlur={resumePolling}
+                                autoComplete="off" placeholder="Doc link (optional)"
+                                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                              />
+                              <div className="relative w-32">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-semibold">₹</span>
+                                <input type="text" inputMode="numeric" autoComplete="off"
+                                  value={counterPrice[vid] ?? ""}
+                                  onChange={e => setCounterPrice(prev => ({ ...prev, [vid]: e.target.value }))}
+                                  onFocus={pausePolling} onBlur={resumePolling}
+                                  placeholder="Amount" className="w-full rounded-lg border border-slate-200 pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                />
+                              </div>
+                              <button onClick={() => handleSendCounter(vid, vendor.vendor_name)} disabled={!counterText[vid]?.trim()}
+                                className="flex items-center gap-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                                Send
+                              </button>
+                              <button onClick={() => {
+                                const existing = quotationData ?? {}
+                                setNTDQuotation(id, { ...existing, [vid]: { ...q, status: "finalized" } })
+                                appendActivity(id, currentRole, ntdRole, 4, "quotation_submitted", `Quotation finalized for ${vendor.vendor_name}`, { vendor_id: vid })
+                                reload()
+                              }}
+                                className="flex items-center gap-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                                <CheckCircle2 className="w-4 h-4" /> Finalize
+                              </button>
+                            </div>
+                            {allSelected && (
+                              <button onClick={() => { setCounterPrice(prev => ({ ...prev, [vid]: String(selectedTotal) })); setCounterText(prev => ({ ...prev, [vid]: prev[vid] ?? `Negotiating on selected total: ${q.quotation!.currency} ${selectedTotal.toLocaleString()}` })) }}
+                                className="text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-2 rounded-lg transition-colors w-full text-left">
                                 ↓ Use selected total ({q.quotation.currency} {selectedTotal.toLocaleString()}) as counter-price
                               </button>
                             )}
                           </div>
-                        )
-                      })()}
 
-                      {/* Quoted category totals (read-only reference) */}
-                      {(q.quotation.stage_price != null || q.quotation.Progressive_price != null) && (
-                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5 space-y-0.5">
-                          <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Quoted totals</p>
-                          {q.quotation.stage_price != null && (
-                            <div className="flex justify-between text-[10px]">
-                              <span className="text-slate-500">Stage</span>
-                              <span className="font-semibold text-slate-700">{q.quotation.currency} {q.quotation.stage_price.toLocaleString()}</span>
-                            </div>
-                          )}
-                          {q.quotation.Progressive_price != null && (
-                            <div className="flex justify-between text-[10px]">
-                              <span className="text-slate-500">Progressive</span>
-                              <span className="font-semibold text-slate-700">{q.quotation.currency} {q.quotation.Progressive_price.toLocaleString()}</span>
-                            </div>
-                          )}
-                          {q.quotation.semi_Progressive_price != null && (
-                            <div className="flex justify-between text-[10px]">
-                              <span className="text-indigo-500">Semi-Progressive</span>
-                              <span className="font-semibold text-indigo-700">{q.quotation.currency} {q.quotation.semi_Progressive_price.toLocaleString()}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {q.quotation.doc_link
-                        ? <a href={q.quotation.doc_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:underline"><ExternalLink className="w-3 h-3" />Quote doc</a>
-                        : <p className="text-[10px] text-slate-400">No doc attached</p>}
-
-                      {isFinalized && (
-                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-semibold pt-0.5">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Finalized
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="py-3 space-y-1">
-                      <p className="text-[11px] text-slate-400 italic">No quote yet.</p>
-                      <p className="text-[10px] text-slate-400">Share RFQ link for vendor to submit.</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right — thread + actions */}
-                <div className="p-3 flex flex-col gap-2">
-
-                  {/* Thread — capped height, scrolls internally */}
-                  {q?.thread && q.thread.length > 0 ? (
-                    <div className="max-h-28 overflow-y-auto space-y-1 rounded-lg border border-slate-100 bg-slate-50 p-1.5">
-                      {q.thread.map(msg => (
-                        <div key={msg.message_id}
-                          className={`rounded-md px-2.5 py-1.5 text-[10px] w-fit max-w-[90%] ${msg.author_type === "internal" ? "bg-blue-900 text-white ml-auto" : "bg-white border border-slate-200 text-slate-800"}`}>
-                          <p className={`text-[8px] font-bold mb-0.5 ${msg.author_type === "internal" ? "text-blue-200" : "text-slate-400"}`}>
-                            {msg.author_type === "internal" ? `Sourcing — ${msg.author_name}` : `Vendor — ${vendor.vendor_name}`}
-                          </p>
-                          <p className="leading-snug">{msg.text}</p>
-                          {(msg as any).doc_link && (
-                            <a href={(msg as any).doc_link} target="_blank" rel="noopener noreferrer"
-                              className={`inline-flex items-center gap-1 mt-0.5 text-[9px] font-semibold underline ${msg.author_type === "internal" ? "text-blue-200" : "text-blue-600"}`}>
-                              <ExternalLink className="w-2.5 h-2.5" /> Attached doc
-                            </a>
-                          )}
-                          {msg.counter_offer && (
-                            <p className={`mt-0.5 text-[9px] font-bold ${msg.author_type === "internal" ? "text-blue-200" : "text-amber-700"}`}>
-                              Counter: {q.quotation?.currency ?? "₹"} {msg.counter_offer.toLocaleString()}
+                          {lastInternalCounter && (
+                            <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5" /> Last sent: {q?.quotation?.currency ?? "₹"} {lastInternalCounter.counter_offer!.toLocaleString()} — awaiting vendor reply
                             </p>
                           )}
-                          <p className={`text-[7px] mt-0.5 ${msg.author_type === "internal" ? "text-blue-300" : "text-slate-400"}`}>
-                            {new Date(msg.created_at).toLocaleTimeString()}
-                          </p>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-400 text-center">
-                      No messages yet
-                    </div>
-                  )}
+                      )}
 
-                  {/* Sourcing action area — always below thread, never hidden */}
-                  {isSourcing && !isFinalized && (
-                    <div className="space-y-2">
-                      {lastVendorCounter && (
-                        <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
-                          <div>
-                            <p className="text-[9px] font-semibold text-amber-900">Vendor counter</p>
-                            <p className="text-xs font-bold text-amber-800">{q?.quotation?.currency ?? "₹"} {lastVendorCounter.counter_offer!.toLocaleString()}</p>
-                          </div>
-                          <button
-                            onClick={() => handleAcceptVendorPrice(vid, vendor.vendor_name, lastVendorCounter.counter_offer!, q?.quotation?.currency ?? "INR")}
-                            className="text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg transition-colors">
-                            Accept & Finalize
-                          </button>
-                        </div>
-                      )}
-                      <textarea
-                        value={counterText[vid] ?? ""}
-                        onChange={e => setCounterText(prev => ({ ...prev, [vid]: e.target.value }))}
-                        onFocus={pausePolling}
-                        onBlur={resumePolling}
-                        autoComplete="off"
-                        placeholder="Message or negotiation note…"
-                        rows={2}
-                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
-                      />
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          value={messageDocLinks[vid] ?? ""}
-                          onChange={e => setMessageDocLinks(prev => ({ ...prev, [vid]: e.target.value }))}
-                          onFocus={pausePolling}
-                          onBlur={resumePolling}
-                          autoComplete="off"
-                          placeholder="Attach doc link (optional)"
-                          className="flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-amber-400"
-                        />
-                        <div className="relative flex-1">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">₹</span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="off"
-                            value={counterPrice[vid] ?? ""}
-                            onChange={e => setCounterPrice(prev => ({ ...prev, [vid]: e.target.value }))}
-                            onFocus={pausePolling}
-                            onBlur={resumePolling}
-                            placeholder="Counter price (opt.)"
-                            className="w-full rounded-lg border border-slate-200 pl-5 pr-2 py-1.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          />
-                        </div>
-                        <button
-                          onClick={() => handleSendCounter(vid, vendor.vendor_name)}
-                          disabled={!counterText[vid]?.trim()}
-                          className="text-[10px] font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap">
-                          Send
-                        </button>
-                        {q?.quotation && (
-                          <button onClick={() => {
-                            const existing = quotationData ?? {}
-                            setNTDQuotation(id, { ...existing, [vid]: { ...q, status: "finalized" } })
-                            appendActivity(id, currentRole, ntdRole, 4, "quotation_submitted", `Quotation finalized for ${vendor.vendor_name}`, { vendor_id: vid })
-                            reload()
-                          }}
-                            className="text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap">
-                            Finalize
-                          </button>
-                        )}
-                      </div>
-                      {lastInternalCounter && (
-                        <p className="text-[9px] text-slate-400">
-                          Last sent: {q?.quotation?.currency ?? "₹"} {lastInternalCounter.counter_offer!.toLocaleString()} — awaiting vendor reply
-                        </p>
+                      {/* Read-only state for non-sourcing */}
+                      {!isSourcing && q.thread && q.thread.length === 0 && (
+                        <p className="text-sm text-slate-400 italic">No negotiation activity yet.</p>
                       )}
                     </div>
-                  )}
-                </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3 py-3">
+                    <Clock className="w-6 h-6 text-slate-300" />
+                    <div>
+                      <p className="text-base text-slate-500 font-medium">Awaiting quotation from vendor</p>
+                      <p className="text-sm text-slate-400 mt-0.5">Share the RFQ link with the vendor to submit their quote.</p>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
           )
@@ -1419,7 +1357,7 @@ export default function NTDDetailPage() {
 
         {isSourcing && quotationData && Object.values(quotationData).some(v => v.status === "finalized") && (
           <button onClick={() => { advanceNTDStage(id, 5, currentRole, ntdRole); reload() }}
-            className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+            className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors">
             Proceed to Supplier Selection <ChevronRight className="w-4 h-4" />
           </button>
         )}
@@ -1450,22 +1388,25 @@ export default function NTDDetailPage() {
 
               return (
                 <div key={commodity} className="rounded-xl border border-slate-200 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{commodity}</span>
-                      <span className="text-[10px] text-slate-400">{finalizedVendors.length} / {commodityVendors.length} vendors finalized</span>
+                  <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-slate-700 uppercase tracking-wide">{commodity}</span>
+                      <span className="text-xs text-slate-400">{finalizedVendors.length}/{commodityVendors.length} vendors finalized</span>
                     </div>
                     {selected && (
-                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                        <CheckCircle2 className="w-3 h-3" /> {selected.vendor_name}
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> {selected.vendor_name}
                       </span>
                     )}
                   </div>
 
                   {finalizedVendors.length === 0 ? (
-                    <div className="px-4 py-4 text-xs text-slate-400 italic">No finalized vendors yet — complete Stage 4 negotiations first.</div>
+                    <div className="flex items-center gap-3 px-4 py-5">
+                      <Clock className="w-5 h-5 text-slate-300" />
+                      <p className="text-sm text-slate-400">No finalized vendors yet — complete Stage 4 negotiations first.</p>
+                    </div>
                   ) : (
-                    <div className="p-3 space-y-2">
+                    <div className="p-3 space-y-3">
                       {finalizedVendors.map(([vid, vendor]) => {
                         const q = quotations[vid]?.quotation
                         const catSels = quotations[vid]?.category_selections ?? {}
@@ -1479,7 +1420,6 @@ export default function NTDDetailPage() {
                             : cat === "Progressive" ? (cp.Progressive ?? 0)
                             : (cp.semi_Progressive ?? 0))
                         }, 0)
-                        const categoryLabel: Record<string, string> = { stage: "Stage", Progressive: "Progressive", semi_Progressive: "Semi" }
 
                         return (
                           <div
@@ -1492,31 +1432,33 @@ export default function NTDDetailPage() {
                                 : "border-slate-200 bg-white hover:border-slate-300"
                             }`}
                           >
-                            <div className="flex items-center justify-between px-4 py-3">
-                              <div className="flex items-center gap-3 min-w-0">
-                                {isSelected && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />}
+                            <div className="flex items-center justify-between px-4 py-4">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                {isSelected && <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />}
                                 <div>
-                                  <p className="text-sm font-bold text-slate-800">{vendor.vendor_name}</p>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-[10px] text-slate-400">{commodityComponents.length} component{commodityComponents.length !== 1 ? "s" : ""}</span>
-                                    <span className="text-[9px] text-slate-300">|</span>
-                                    <span className="text-[10px] text-slate-400">{q ? `${q.lead_time_days}d lead time` : ""}</span>
-                                    <span className="text-[9px] text-slate-300">|</span>
-                                    <span className="text-[10px] text-slate-400">{q ? q.currency : ""}</span>
+                                  <p className="text-base font-bold text-slate-900">{vendor.vendor_name}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs text-slate-500">{commodityComponents.length} component{commodityComponents.length !== 1 ? "s" : ""}</span>
+                                    <span className="text-xs text-slate-300">|</span>
+                                    <span className="text-xs text-slate-500">{q ? `${q.lead_time_days}d lead time` : ""}</span>
+                                    <span className="text-xs text-slate-300">|</span>
+                                    <span className="text-xs text-slate-500">{q ? q.currency : ""}</span>
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3 shrink-0">
+                              <div className="flex items-center gap-4 shrink-0">
                                 <div className="text-right">
                                   {effectiveTotal != null && (
-                                    <p className="text-lg font-black text-slate-900 tabular-nums leading-none">{q?.currency} {effectiveTotal.toLocaleString()}</p>
+                                    <p className="text-xl font-black text-slate-900 tabular-nums leading-none">{q?.currency} {effectiveTotal.toLocaleString()}</p>
                                   )}
-                                  <p className="text-[10px] text-slate-400 mt-0.5">{q ? `Total: ${q.currency} ${(q.amount ?? 0).toLocaleString()}` : ""}</p>
+                                  {q && (
+                                    <p className="text-xs text-slate-400 mt-0.5">Total quoted: {q.currency} {(q.amount ?? 0).toLocaleString()}</p>
+                                  )}
                                 </div>
                                 {isSourcing && !selected && (
                                   <button
                                     onClick={() => handleSelectCommoditySupplier(commodity, vid, vendor.vendor_name)}
-                                    className="text-xs font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+                                    className="text-sm font-semibold bg-indigo-700 hover:bg-indigo-800 text-white px-5 py-2.5 rounded-lg transition-colors whitespace-nowrap"
                                   >
                                     Select Supplier
                                   </button>
@@ -1524,18 +1466,18 @@ export default function NTDDetailPage() {
                               </div>
                             </div>
                             {q?.component_prices && (
-                              <div className="border-t border-slate-100 px-4 py-3 space-y-2">
-                                <p className="text-[10px] font-semibold text-slate-400">Per-component pricing — selected category</p>
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-[10px] border-collapse">
+                              <div className="border-t border-slate-100 px-4 py-3">
+                                <p className="text-xs font-semibold text-slate-400 mb-2">Pricing breakdown</p>
+                                <div className="rounded-lg border border-slate-200 overflow-hidden">
+                                  <table className="w-full">
                                     <thead>
-                                      <tr className="border-b border-slate-100">
-                                        <th className="px-2 py-1 text-left font-semibold text-slate-400">Component</th>
-                                        <th className="px-2 py-1 text-center font-semibold text-slate-400">Category</th>
-                                        <th className="px-2 py-1 text-right font-semibold text-slate-400">Price</th>
+                                      <tr className="border-b border-slate-100 bg-slate-50">
+                                        <th className="px-3 py-2 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">Component</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-500 text-xs uppercase tracking-wider">Category</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 text-xs uppercase tracking-wider">Price</th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-50">
+                                    <tbody className="divide-y divide-slate-100">
                                       {commodityComponents.map(comp => {
                                         const cp = q.component_prices![comp.componentId]
                                         const catSel = catSels[comp.componentId]
@@ -1547,17 +1489,19 @@ export default function NTDDetailPage() {
                                           cat === "Progressive" ? "text-amber-700 bg-amber-50" :
                                           "text-indigo-700 bg-indigo-50"
                                         return (
-                                          <tr key={comp.componentId}>
-                                            <td className="px-2 py-1.5 text-slate-700">
-                                              <span className="font-mono font-bold text-slate-400 mr-1">{comp.componentId}</span>
-                                              {comp.name}
-                                            </td>
-                                            <td className="px-2 py-1.5 text-center">
-                                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${catColor}`}>
-                                                {categoryLabel[cat] ?? cat}
+                                          <tr key={comp.componentId} className="hover:bg-slate-50">
+                                            <td className="px-3 py-2.5">
+                                              <span className="inline-flex items-center gap-2">
+                                                <span className="font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-xs">{comp.componentId}</span>
+                                                <span className="text-slate-800 text-sm font-medium">{comp.name}</span>
                                               </span>
                                             </td>
-                                            <td className={`px-2 py-1.5 text-right tabular-nums font-bold ${cat === "stage" ? "text-blue-700" : cat === "Progressive" ? "text-amber-700" : "text-indigo-700"}`}>
+                                            <td className="px-3 py-2.5 text-center">
+                                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${catColor}`}>
+                                                {cat === "stage" ? "Stage" : cat === "Progressive" ? "Progressive" : "Semi"}
+                                              </span>
+                                            </td>
+                                            <td className={`px-3 py-2.5 text-right tabular-nums font-bold text-sm ${cat === "stage" ? "text-blue-700" : cat === "Progressive" ? "text-amber-700" : "text-indigo-700"}`}>
                                               {q?.currency ?? ""} {price.toLocaleString()}
                                             </td>
                                           </tr>
@@ -1565,10 +1509,10 @@ export default function NTDDetailPage() {
                                       })}
                                     </tbody>
                                     <tfoot>
-                                      <tr className="border-t border-slate-100">
-                                        <td className="px-2 py-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wide">Selected total</td>
+                                      <tr className="border-t-2 border-emerald-200 bg-emerald-50">
+                                        <td className="px-3 py-2.5 text-xs font-bold text-emerald-700 uppercase tracking-wider">Total</td>
                                         <td />
-                                        <td className="px-2 py-1.5 text-right font-bold text-emerald-700 tabular-nums">
+                                        <td className="px-3 py-2.5 text-right font-bold text-emerald-800 tabular-nums text-base">
                                           {effectiveTotal != null ? (q?.currency ?? "") + " " + effectiveTotal.toLocaleString() : "—"}
                                         </td>
                                       </tr>
@@ -1587,32 +1531,35 @@ export default function NTDDetailPage() {
             })}
 
             {selectionData?.sourcing_approved && !selectionData.rnd_acknowledged && isRnd && (
-              <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-4 space-y-3">
-                <p className="text-sm font-semibold text-indigo-800">Acknowledge Supplier Selections</p>
-                <div className="space-y-1">
+              <div className="border border-indigo-200 rounded-xl bg-indigo-50 p-5 space-y-4">
+                <p className="text-base font-bold text-indigo-800">Acknowledge Supplier Selections</p>
+                <div className="space-y-2">
                   {Object.entries(selectionData.selections ?? {}).map(([commodity, sel]) => (
-                    <div key={commodity} className="flex items-center gap-2 text-xs">
-                      <span className="font-semibold text-slate-500 w-24 shrink-0">{commodity}</span>
-                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                      <span className="text-slate-700">{sel.vendor_name}</span>
+                    <div key={commodity} className="flex items-center gap-3 text-sm">
+                      <span className="font-semibold text-slate-500 w-28 shrink-0">{commodity}</span>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span className="text-slate-800 font-medium">{sel.vendor_name}</span>
                     </div>
                   ))}
                 </div>
                 <button onClick={handleRndAcknowledge}
-                  className="w-full py-2 rounded-lg text-sm font-semibold bg-indigo-700 hover:bg-indigo-800 text-white transition-colors">
+                  className="w-full py-3 rounded-xl text-base font-bold bg-indigo-700 hover:bg-indigo-800 text-white transition-colors">
                   Acknowledge All Selections
                 </button>
               </div>
             )}
 
             {selectionData?.sourcing_approved && !selectionData.rnd_acknowledged && !isRnd && (
-              <p className="text-xs text-slate-400 italic">Awaiting R&D acknowledgement...</p>
+              <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-200">
+                <Clock className="w-4 h-4 text-slate-400" />
+                <p className="text-sm text-slate-500 italic">Awaiting R&D acknowledgement...</p>
+              </div>
             )}
 
             {selectionData?.rnd_acknowledged && (
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                <p className="text-sm text-emerald-800">Supplier selections acknowledged by {selectionData.rnd_acknowledged_by}</p>
+              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                <p className="text-base font-medium text-emerald-800">Supplier selections acknowledged by {selectionData.rnd_acknowledged_by}</p>
               </div>
             )}
           </div>
@@ -1641,7 +1588,7 @@ export default function NTDDetailPage() {
                 <div className="space-y-2">
                   {(() => { const activeComps = initData.components.filter(c => c.status !== "merged"); return (
                   <>
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Components ({activeComps.length})</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Components ({activeComps.length})</p>
                   <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-800">Component list is locked from Stage 1 and cannot be changed.</p>
@@ -1659,7 +1606,7 @@ export default function NTDDetailPage() {
               ) : (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Components ({components.length})</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Components ({components.length})</p>
                     <button onClick={() => {
                       const nextNum = String(components.length + 1).padStart(2, "0")
                       setComponents(prev => [...prev, { id: `C${nextNum}`, name: "" }])
@@ -1691,7 +1638,7 @@ export default function NTDDetailPage() {
               {/* Final design files — click to mark uploaded */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Final Design Files</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Final Design Files</p>
                   <button onClick={() => setFinalDesignSlots(prev => [...prev, { id: String(Date.now()), slotName: "", link: "" }])}
                     className="text-xs text-emerald-700 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Slot</button>
                 </div>
@@ -1727,7 +1674,7 @@ export default function NTDDetailPage() {
               {/* Per-commodity acknowledgement tracker */}
               {s6Commodities.length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Supplier Acknowledgement</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Supplier Acknowledgement</p>
                   {s6Commodities.map(commodity => {
                     const supplierName = s6Suppliers[commodity] ?? "—"
                     const acked = s6AckMap[commodity] === true
@@ -1737,7 +1684,7 @@ export default function NTDDetailPage() {
                       <div key={commodity} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${acked ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-slate-700">{commodity}</p>
-                          <p className="text-[11px] text-slate-500 truncate">{supplierName}</p>
+                          <p className="text-xs text-slate-500 truncate">{supplierName}</p>
                         </div>
                         {acked ? (
                           <div className="flex items-center gap-2 shrink-0">
@@ -1746,11 +1693,11 @@ export default function NTDDetailPage() {
                             </span>
                             {s6Suppliers[commodity] && (<>
                               <Link href={`/ntd/${id}/dfm`}
-                                className="text-[10px] font-semibold bg-purple-700 hover:bg-purple-800 text-white px-2.5 py-1 rounded-lg transition-colors">
+                                className="text-xs font-semibold bg-purple-700 hover:bg-purple-800 text-white px-2.5 py-1 rounded-lg transition-colors">
                                 DFM
                               </Link>
                               <Link href={`/ntd/${id}/mould-design`}
-                                className="text-[10px] font-semibold bg-slate-700 hover:bg-slate-800 text-white px-2.5 py-1 rounded-lg transition-colors">
+                                className="text-xs font-semibold bg-slate-700 hover:bg-slate-800 text-white px-2.5 py-1 rounded-lg transition-colors">
                                 Mould
                               </Link>
                             </>)}
@@ -1760,7 +1707,7 @@ export default function NTDDetailPage() {
                             <div className="flex items-center gap-1.5 text-amber-700 text-xs font-medium">
                               <Clock className="w-3.5 h-3.5" /> Awaiting
                             </div>
-                            <code className="text-[10px] bg-white border border-amber-200 px-1.5 py-0.5 rounded hidden sm:block">{portalUrl}</code>
+                            <code className="text-xs bg-white border border-amber-200 px-1.5 py-0.5 rounded hidden sm:block">{portalUrl}</code>
                             <CopyButton text={fullUrl} />
                           </div>
                         )}
@@ -1836,22 +1783,22 @@ export default function NTDDetailPage() {
               return (
                 <div key={comp.componentId} className={`flex items-center justify-between rounded-lg px-3 py-2 border ${isApproved ? "border-emerald-100 bg-emerald-50/40" : "border-slate-100 bg-white"}`}>
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-[10px] font-bold text-slate-400 shrink-0">{comp.componentId}</span>
+                    <span className="font-mono text-xs font-bold text-slate-400 shrink-0">{comp.componentId}</span>
                     <span className="text-xs text-slate-700 truncate">{comp.name}</span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${isApproved ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${isApproved ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                       {isApproved ? "Approved" : comp.final_status === "revision_required" ? "Revise" : comp.final_status === "under_review" ? "Review" : "Pending"}
                     </span>
                   </div>
                   {isApproved && !dfmData.stage_complete && (
                     <button
                       onClick={() => handleToggleMfgReady(comp.componentId)}
-                      className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg transition-colors shrink-0 ${isReady ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500 hover:bg-emerald-100 hover:text-emerald-700"}`}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors shrink-0 ${isReady ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500 hover:bg-emerald-100 hover:text-emerald-700"}`}
                     >
                       {isReady ? "Ready for Mfg" : "Mark Ready for Mfg"}
                     </button>
                   )}
                   {isApproved && dfmData.stage_complete && (
-                    <span className={`text-[10px] font-semibold shrink-0 ${isReady ? "text-emerald-600" : "text-slate-400"}`}>
+                    <span className={`text-xs font-semibold shrink-0 ${isReady ? "text-emerald-600" : "text-slate-400"}`}>
                       {isReady ? "✓ Ready for Mfg" : "Not marked for Mfg"}
                     </span>
                   )}
@@ -1870,7 +1817,7 @@ export default function NTDDetailPage() {
       doneLabel={mouldData?.stage_complete ? `${mouldProgress.approved} components approved` : undefined}>
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${mouldSubStage === "8A" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${mouldSubStage === "8A" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
             Sub-stage {mouldSubStage}
           </span>
           {mouldSubStage === "8A" && (
@@ -1886,16 +1833,16 @@ export default function NTDDetailPage() {
               return (
                 <div key={comp.componentId} className={`flex items-center justify-between rounded-lg px-3 py-2 border ${isApproved ? "border-emerald-100 bg-emerald-50/40" : "border-slate-100 bg-white"}`}>
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-[10px] font-bold text-slate-400 shrink-0">{comp.componentId}</span>
+                    <span className="font-mono text-xs font-bold text-slate-400 shrink-0">{comp.componentId}</span>
                     <span className="text-xs text-slate-700 truncate">{comp.name}</span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${isApproved ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${isApproved ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                       {isApproved ? "Approved" : comp.final_status === "revision_required" ? "Revise" : comp.final_status === "under_review" ? "Review" : "Pending"}
                     </span>
                   </div>
                   {isApproved && (
                     <button
                       onClick={() => handleToggleMfgReady(comp.componentId)}
-                      className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg transition-colors shrink-0 ${isReady ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500 hover:bg-emerald-100 hover:text-emerald-700"}`}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors shrink-0 ${isReady ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500 hover:bg-emerald-100 hover:text-emerald-700"}`}
                     >
                       {isReady ? "Ready for Mfg" : "Mark Ready for Mfg"}
                     </button>
@@ -1962,8 +1909,8 @@ export default function NTDDetailPage() {
                         <p className="text-xs text-slate-500">Supplier: <span className="font-medium text-slate-700">{supplierName}</span></p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-500">{readyCount}/{totalCount} components ready</span>
-                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                        <span className="text-xs text-slate-500">{readyCount}/{totalCount} components ready</span>
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
                           commStatus === "complete" ? "bg-emerald-100 text-emerald-700" :
                           commStatus === "in_progress" ? "bg-amber-100 text-amber-700" :
                           "bg-slate-200 text-slate-500"
@@ -1981,10 +1928,10 @@ export default function NTDDetailPage() {
                           return (
                             <div key={comp.componentId} className="flex items-center justify-between rounded-lg bg-white border border-slate-100 px-3 py-1.5">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="font-mono text-[9px] font-bold text-slate-400 shrink-0">{comp.componentId}</span>
-                                <span className="text-[11px] text-slate-700 truncate">{comp.name}</span>
+                                <span className="font-mono text-[11px] font-bold text-slate-400 shrink-0">{comp.componentId}</span>
+                                <span className="text-xs text-slate-700 truncate">{comp.name}</span>
                               </div>
-                              <span className={`text-[10px] font-semibold shrink-0 ${isReady ? "text-emerald-600" : "text-slate-400"}`}>
+                              <span className={`text-xs font-semibold shrink-0 ${isReady ? "text-emerald-600" : "text-slate-400"}`}>
                                 {isReady ? "✓ Ready" : "Pending DFM/Mould"}
                               </span>
                             </div>
@@ -1999,7 +1946,7 @@ export default function NTDDetailPage() {
                       return (
                         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Supplier Portal</p>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Supplier Portal</p>
                             <p className="text-xs text-slate-500 truncate">{portalUrl}</p>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
@@ -2016,7 +1963,7 @@ export default function NTDDetailPage() {
                     {/* Delivery timeline phases (from supplier submission) */}
                     {commData && (commData.phases ?? []).length > 0 && (
                       <div className="space-y-1.5">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supplier Delivery Timeline</p>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Supplier Delivery Timeline</p>
                         {commData.phases!.map(p => (
                           <div key={p.name} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-1.5 border border-slate-100">
                             <span className="text-slate-600">{p.name}</span>
@@ -2125,7 +2072,7 @@ export default function NTDDetailPage() {
                   "border-slate-200 bg-slate-50"
                 }`}>
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${
                       isReceived ? "bg-indigo-600 text-white" :
                       isDispatched ? "bg-blue-600 text-white" :
                       "bg-slate-300 text-slate-600"
@@ -2137,12 +2084,12 @@ export default function NTDDetailPage() {
                          "Awaiting Supplier Dispatch"}
                       </p>
                       {isDispatched && t.samples_dispatched_at && (
-                        <p className="text-[10px] text-blue-500">
+                        <p className="text-xs text-blue-500">
                           Dispatched {new Date(t.samples_dispatched_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                         </p>
                       )}
                       {isReceived && t.samples_received_at && (
-                        <p className="text-[10px] text-indigo-500">
+                        <p className="text-xs text-indigo-500">
                           Received {new Date(t.samples_received_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                         </p>
                       )}
@@ -2159,10 +2106,10 @@ export default function NTDDetailPage() {
                   )}
 
                   {isPending && (
-                    <span className="text-[10px] text-slate-400 italic shrink-0">Awaiting supplier</span>
+                    <span className="text-xs text-slate-400 italic shrink-0">Awaiting supplier</span>
                   )}
                   {isReceived && (
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
                       t.status === "complete" && t.result === "all_pass" ? "bg-emerald-100 text-emerald-700" :
                       t.status === "complete" ? "bg-red-100 text-red-700" :
                       "bg-indigo-100 text-indigo-700"
@@ -2182,7 +2129,7 @@ export default function NTDDetailPage() {
           return (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Supplier Portal</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Supplier Portal</p>
                 <p className="text-xs text-slate-500 truncate">{supplierUrl}</p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
@@ -2216,7 +2163,7 @@ export default function NTDDetailPage() {
                 <div key={i} className={`flex-1 rounded px-1.5 py-1.5 text-center transition-all ${
                   isDoneStep ? "bg-emerald-600" : isCurrentStep ? "bg-blue-700 ring-1 ring-blue-400 ring-offset-1" : "bg-slate-100"
                 }`}>
-                  <p className={`text-[9px] font-bold truncate ${isDoneStep || isCurrentStep ? "text-white" : "text-slate-400"}`}>{name}</p>
+                  <p className={`text-[11px] font-bold truncate ${isDoneStep || isCurrentStep ? "text-white" : "text-slate-400"}`}>{name}</p>
                 </div>
               )
             })}
@@ -2334,7 +2281,7 @@ export default function NTDDetailPage() {
                   <p className="font-semibold text-slate-700">Step 6: Final Sign-off (Both Required)</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className={`rounded-lg border px-3 py-2 ${s11Data?.final_approval?.rnd_head_approved ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">R&D Head</p>
+                      <p className="text-xs font-bold text-slate-500 uppercase">R&D Head</p>
                       {s11Data?.final_approval?.rnd_head_approved
                         ? <p className="text-xs text-emerald-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Approved</p>
                         : canApprove ? (
@@ -2359,7 +2306,7 @@ export default function NTDDetailPage() {
                         ) : <p className="text-xs text-slate-400 italic">Pending</p>}
                     </div>
                     <div className={`rounded-lg border px-3 py-2 ${s11Data?.final_approval?.sourcing_head_approved ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Sourcing Head</p>
+                      <p className="text-xs font-bold text-slate-500 uppercase">Sourcing Head</p>
                       {s11Data?.final_approval?.sourcing_head_approved
                         ? <p className="text-xs text-emerald-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Approved</p>
                         : (currentRole === "sourcing_head" || currentRole === "super_admin") ? (
@@ -2428,24 +2375,24 @@ export default function NTDDetailPage() {
           {/* Right: 2×2 info tiles */}
           <div className="grid grid-cols-2 gap-3 shrink-0">
             <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Users className="w-3 h-3" /> Assigned SPOC</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Users className="w-3 h-3" /> Assigned SPOC</p>
               <p className="text-sm font-semibold text-slate-800 mt-0.5">Rohan Desai</p>
-              <p className="text-[10px] text-slate-400">Others</p>
+              <p className="text-xs text-slate-400">Others</p>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Building2 className="w-3 h-3" /> Supplier</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Building2 className="w-3 h-3" /> Supplier</p>
               <p className="text-sm font-semibold text-slate-800 mt-0.5 leading-tight line-clamp-2">
                 {record.supplier ?? <span className="text-slate-400 italic font-normal text-xs">TBD</span>}
               </p>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Package className="w-3 h-3" /> Components</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Package className="w-3 h-3" /> Components</p>
               <p className="text-sm font-semibold text-slate-800 mt-0.5">
                 {record.component_count ?? <span className="text-slate-400 italic text-xs font-normal">Set in Stage 6</span>}
               </p>
             </div>
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Wrench className="w-3 h-3" /> Current Stage</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Wrench className="w-3 h-3" /> Current Stage</p>
               <p className="text-sm font-semibold text-blue-900 mt-0.5 leading-tight line-clamp-2">
                 {complete ? "Complete" : `${stage}. ${STAGE_NAMES[stage]}`}
               </p>
@@ -2455,7 +2402,7 @@ export default function NTDDetailPage() {
 
         {/* Demo controls */}
         <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Demo Controls</span>
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Demo Controls</span>
           <div className="flex items-center gap-2">
             <button
               onClick={demoRevert}
@@ -2485,10 +2432,10 @@ export default function NTDDetailPage() {
             const nameColor = s.status !== "upcoming" ? "text-white" : "text-slate-400"
             return (
               <div key={s.step} className={`flex-1 rounded-md px-2 py-2.5 flex flex-col gap-1 transition-all duration-300 ${chipBg}`}>
-                <span className={`text-[9px] font-bold uppercase tracking-wider ${labelColor}`}>
+                <span className={`text-[11px] font-bold uppercase tracking-wider ${labelColor}`}>
                   {s.step === 8 ? `Step ${s.step}${mouldSubStage}` : `Step ${s.step}`}
                 </span>
-                <span className={`text-[11px] font-semibold leading-tight ${nameColor}`}>{STAGE_NAMES[s.step]}</span>
+                <span className={`text-xs font-semibold leading-tight ${nameColor}`}>{STAGE_NAMES[s.step]}</span>
               </div>
             )
           })}
@@ -2580,14 +2527,14 @@ export default function NTDDetailPage() {
                         <div key={i} className="px-5 py-3 flex items-center justify-between gap-4">
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-slate-800 truncate">{d.label}</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
+                            <p className="text-xs text-slate-400 mt-0.5">
                               v{d.file.current_version} · {d.file.versions.length} version(s)
                               {latestUploader && ` · ${latestUploader}`}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             {d.file.approved && (
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Approved</span>
+                              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Approved</span>
                             )}
                             {latestLink ? (
                               <a href={latestLink} target="_blank" rel="noopener noreferrer"

@@ -146,37 +146,37 @@ function RndDocsPanel({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
           R&D Reference Docs
         </p>
         {canUpload && !showForm && (
           <button onClick={() => setShowForm(true)}
-            className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-lg transition-colors">
-            <Plus className="w-3 h-3" /> Add Doc
+            className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 px-2 py-0.5 rounded-lg transition-colors">
+            <Plus className="w-3 h-3" /> Add
           </button>
         )}
       </div>
 
       {canUpload && showForm && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-2">
-          <input type="text" autoComplete="off" placeholder="Doc name (e.g. Annotated Drawing)" value={docName}
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5 space-y-1.5">
+          <input type="text" autoComplete="off" placeholder="Doc name" value={docName}
             onChange={e => setDocName(e.target.value)}
-            className="w-full rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-indigo-400" />
           <input type="text" autoComplete="off" placeholder="Drive / SharePoint link" value={docLink}
             onChange={e => setDocLink(e.target.value)}
-            className="w-full rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-          <div className="flex gap-2">
+            className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+          <div className="flex gap-1.5">
             <button onClick={() => {
               if (docName.trim() && docLink.trim()) {
                 onUpload(docName.trim(), docLink.trim())
                 setDocName(""); setDocLink(""); setShowForm(false)
               }
             }} disabled={!docName.trim() || !docLink.trim()}
-              className="flex items-center gap-1 text-[11px] font-semibold bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg transition-colors">
-              <Upload className="w-3 h-3" /> Share with Supplier
+              className="flex items-center gap-1 text-[11px] font-semibold bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 text-white px-2.5 py-1 rounded-lg transition-colors">
+              <Upload className="w-3 h-3" /> Share
             </button>
             <button onClick={() => setShowForm(false)}
-              className="text-[11px] text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors">
+              className="text-[11px] text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg transition-colors">
               Cancel
             </button>
           </div>
@@ -186,18 +186,18 @@ function RndDocsPanel({
       {docs.length === 0 ? (
         <p className="text-xs text-slate-400 italic">No docs shared yet</p>
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           {docs.map(doc => {
             const link = doc.versions.find(v => v.version_no === doc.current_version)?.link ?? ""
             return (
-              <div key={doc.file_id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
-                <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span className="text-xs font-medium text-slate-700 flex-1 truncate">{doc.slot_name}</span>
+              <div key={doc.file_id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
+                <FileText className="w-3 h-3 text-indigo-400 shrink-0" />
+                <span className="text-[11px] font-medium text-slate-700 flex-1 truncate">{doc.slot_name}</span>
                 <span className="text-[10px] text-slate-400">v{doc.current_version}</span>
                 {link && (
                   <a href={link} target="_blank" rel="noopener noreferrer"
                     className="text-blue-600 hover:text-blue-800 transition-colors">
-                    <ExternalLink className="w-3.5 h-3.5" />
+                    <ExternalLink className="w-3 h-3" />
                   </a>
                 )}
               </div>
@@ -225,7 +225,7 @@ function IterationHistoryPanel({ comp }: { comp: NTDDFMComponent }) {
           <div className="absolute left-1.5 top-3 bottom-0 w-px bg-slate-200" />
           <div className="absolute left-0 top-2 w-3 h-3 rounded-full bg-slate-300 border-2 border-white" />
 
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-slate-600">Iteration {snap.iter}</span>
               <span className="text-[10px] text-slate-400">{relTime(snap.submittedAt)}</span>
@@ -302,7 +302,9 @@ export function ComponentApprovalBoard({
   redesignRound = 0,
   triggeredByTrial,
 }: ComponentApprovalBoardProps) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(components.map(c => [c.componentId, c.final_status !== "approved"]))
+  )
   const [activeTab, setActiveTab] = useState<Record<string, "files" | "docs" | "history">>({})
   const [reviewComments, setReviewComments] = useState<Record<string, string>>({})
 
@@ -319,17 +321,7 @@ export function ComponentApprovalBoard({
     setActiveTab(prev => ({ ...prev, [id]: tab }))
 
   return (
-    <div className="space-y-3">
-      {/* Board header */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-800">{approved} / {total} Components Approved</p>
-          <span className="text-xs text-slate-500">{pct}%</span>
-        </div>
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full bg-indigo-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
+    <div className="space-y-2">
 
       {redesignRound > 0 && (
         <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -356,41 +348,39 @@ export function ComponentApprovalBoard({
 
           return (
             <div key={comp.componentId}
-              className={`rounded-xl border transition-all duration-200 ${
+              className={`rounded-lg transition-all ${
                 isApproved || isLocked
-                  ? "border-emerald-200 bg-emerald-50/60"
-                  : comp.final_status === "revision_required"
-                  ? "border-red-200 bg-red-50/40"
-                  : "border-slate-200 bg-white shadow-sm"
+                  ? "bg-emerald-50 border border-emerald-200"
+                  : "bg-white border border-slate-200"
               }`}>
               {/* ── Accordion header ── */}
               <button
                 onClick={() => !isApproved && !isLocked && setExpanded(prev => ({ ...prev, [comp.componentId]: !prev[comp.componentId] }))}
-                className={`w-full flex items-center justify-between px-4 py-3 text-left rounded-xl transition-colors ${
-                  isApproved || isLocked ? "cursor-default" : "hover:bg-slate-50/80"
+                className={`w-full flex items-center justify-between px-3 py-2.5 text-left rounded-lg transition-colors ${
+                  isApproved || isLocked
+                    ? "cursor-default"
+                    : isExpanded
+                    ? "bg-indigo-50/50 cursor-pointer"
+                    : "hover:bg-slate-100 cursor-pointer"
                 }`}
                 disabled={isApproved || !!isLocked}
               >
-                {/* Left: ID + name + iteration */}
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0">
                   {isApproved
                     ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    : <Circle className="w-4 h-4 text-slate-300 shrink-0" />}
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-800">{comp.componentId} — {comp.name}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Iteration {comp.iteration_no}</p>
-                  </div>
+                    : <Circle className="w-4 h-4 text-slate-400 shrink-0" />}
+                  <p className="text-sm font-semibold text-slate-800">{comp.componentId} — {comp.name}</p>
                 </div>
 
-                {/* Right: per-file status + component badge + chevron */}
-                <div className="flex items-center gap-3 shrink-0">
+                {/* Right: file status + component badge + chevron */}
+                <div className="flex items-center gap-2 shrink-0">
                   {pptStatus && d3dStatus && !isApproved && (
-                    <div className="flex items-center gap-3 pr-1">
+                    <div className="hidden sm:flex items-center gap-2">
                       <FileStatusPill label="PPT" status={pptStatus} />
                       <FileStatusPill label="3D" status={d3dStatus} />
                     </div>
                   )}
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${statusMeta.cls}`}>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${statusMeta.cls}`}>
                     {statusMeta.label}
                   </span>
                   {!isApproved && !isLocked && (
@@ -406,7 +396,7 @@ export function ComponentApprovalBoard({
                 <div className="border-t border-slate-100">
                   {/* Tab bar */}
                   {mode === "dfm" && (
-                    <div className="flex border-b border-slate-100 px-4 pt-1 gap-1">
+                    <div className="flex border-b border-slate-100 px-3 gap-1">
                       {(["files", "docs", "history"] as const).map(t => {
                         const icons = { files: FileText, docs: FolderOpen, history: History }
                         const labels = { files: "Files & Review", docs: "R&D Docs", history: "History" }
@@ -414,15 +404,15 @@ export function ComponentApprovalBoard({
                         const hasBadge = t === "docs" && dfmComp && (dfmComp.rnd_docs ?? []).length > 0
                         return (
                           <button key={t} onClick={() => setTab(comp.componentId, t)}
-                            className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold border-b-2 transition-colors ${
+                            className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold border-b-2 transition-colors ${
                               tab === t
                                 ? "border-indigo-500 text-indigo-700"
                                 : "border-transparent text-slate-400 hover:text-slate-600"
                             }`}>
-                            <Icon className="w-3.5 h-3.5" />
+                            <Icon className="w-3 h-3" />
                             {labels[t]}
                             {hasBadge && (
-                              <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center">
+                              <span className="w-3.5 h-3.5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center">
                                 {(dfmComp?.rnd_docs ?? []).length}
                               </span>
                             )}
@@ -432,7 +422,7 @@ export function ComponentApprovalBoard({
                     </div>
                   )}
 
-                  <div className="px-4 py-4">
+                  <div className="px-3 py-3">
                     {/* ─── DFM mode ─── */}
                     {mode === "dfm" && dfmComp && (() => {
                       const pptHasLink = !!(dfmComp.ppt?.versions.find(v => v.version_no === dfmComp.ppt?.current_version)?.link)
@@ -440,55 +430,31 @@ export function ComponentApprovalBoard({
                       const filesApproved = dfmComp.ppt?.approved && dfmComp.design_3d?.approved
 
                       if (tab === "files") return (
-                        <div className="space-y-4">
-                          {/* File status summary strip */}
-                          <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                            <span className="text-[11px] font-bold text-slate-500">Files:</span>
-                            <FileStatusPill label="DFM PPT" status={pptStatus!} />
-                            <FileStatusPill label="3D Design" status={d3dStatus!} />
-                            <span className="ml-auto text-[10px] text-slate-400">
-                              {[dfmComp.ppt?.approved, dfmComp.design_3d?.approved].filter(Boolean).length} / 2 approved
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">DFM PPT</p>
-                              <VersionedFileInput
-                                file={dfmComp.ppt}
-                                slotName="DFM PPT"
-                                role={role}
-                                readOnly={isInternalRole}
-                                showApproveButton={canReviewRnd && pptHasLink}
-                                onUpload={(link, note) => onFileAction(comp.componentId, "ppt", "upload", { link, note })}
-                                onRevise={(link, note, cid) => onFileAction(comp.componentId, "ppt", "revise", { link, note, cid })}
-                                onApprove={(fid) => onFileAction(comp.componentId, "ppt", "approve", { fid })}
-                                onAddComment={(text, req, al, an) => onFileAction(comp.componentId, "ppt", "comment", { text, req, attachmentLink: al, attachmentName: an })}
-                                onResolveComment={(cid) => onFileAction(comp.componentId, "ppt", "resolve", { cid })}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3D Design</p>
-                              <VersionedFileInput
-                                file={dfmComp.design_3d}
-                                slotName="3D Design"
-                                role={role}
-                                readOnly={isInternalRole}
-                                showApproveButton={canReviewRnd && d3dHasLink}
-                                onUpload={(link, note) => onFileAction(comp.componentId, "design_3d", "upload", { link, note })}
-                                onRevise={(link, note, cid) => onFileAction(comp.componentId, "design_3d", "revise", { link, note, cid })}
-                                onApprove={(fid) => onFileAction(comp.componentId, "design_3d", "approve", { fid })}
-                                onAddComment={(text, req, al, an) => onFileAction(comp.componentId, "design_3d", "comment", { text, req, attachmentLink: al, attachmentName: an })}
-                                onResolveComment={(cid) => onFileAction(comp.componentId, "design_3d", "resolve", { cid })}
-                              />
-                            </div>
-                          </div>
-
-                          {isInternalRole && !filesApproved && (
-                            <p className="text-[11px] text-slate-400 italic">
-                              Approve both files to complete this component. Use the comment icon to flag revisions.
-                            </p>
-                          )}
+                        <div className="space-y-2 bg-slate-50 rounded-lg p-2.5">
+                          <VersionedFileInput
+                            file={dfmComp.ppt}
+                            slotName="DFM PPT"
+                            role={role}
+                            readOnly={isInternalRole}
+                            showApproveButton={canReviewRnd && pptHasLink}
+                            onUpload={(link, note) => onFileAction(comp.componentId, "ppt", "upload", { link, note })}
+                            onRevise={(link, note, cid) => onFileAction(comp.componentId, "ppt", "revise", { link, note, cid })}
+                            onApprove={(fid) => onFileAction(comp.componentId, "ppt", "approve", { fid })}
+                            onAddComment={(text, req, al, an) => onFileAction(comp.componentId, "ppt", "comment", { text, req, attachmentLink: al, attachmentName: an })}
+                            onResolveComment={(cid) => onFileAction(comp.componentId, "ppt", "resolve", { cid })}
+                          />
+                          <VersionedFileInput
+                            file={dfmComp.design_3d}
+                            slotName="3D Design"
+                            role={role}
+                            readOnly={isInternalRole}
+                            showApproveButton={canReviewRnd && d3dHasLink}
+                            onUpload={(link, note) => onFileAction(comp.componentId, "design_3d", "upload", { link, note })}
+                            onRevise={(link, note, cid) => onFileAction(comp.componentId, "design_3d", "revise", { link, note, cid })}
+                            onApprove={(fid) => onFileAction(comp.componentId, "design_3d", "approve", { fid })}
+                            onAddComment={(text, req, al, an) => onFileAction(comp.componentId, "design_3d", "comment", { text, req, attachmentLink: al, attachmentName: an })}
+                            onResolveComment={(cid) => onFileAction(comp.componentId, "design_3d", "resolve", { cid })}
+                          />
                         </div>
                       )
 
