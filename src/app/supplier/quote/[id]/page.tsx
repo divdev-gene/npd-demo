@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
+import { fetchVendors, type VmsVendor } from "@/lib/vendors"
 import {
   mockNPDs, LIVE_QUOTATIONS_KEY,
   type NPDRecord, type LiveQuotation,
-  SPOC_CONTACTS, DEFAULT_RND_CONTACT, VENDOR_CATALOG, type ContactInfo,
+  SPOC_CONTACTS, DEFAULT_RND_CONTACT, type ContactInfo,
 } from "@/lib/mockData"
 import {
   CheckCircle2, FileText, ExternalLink, UserCircle,
@@ -21,6 +22,19 @@ function getValidUntil(daysFromNow = 10) {
   d.setDate(d.getDate() + daysFromNow)
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
 }
+
+const currSymbol = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+const addFile = (setter: React.Dispatch<React.SetStateAction<string[]>>, list: string[]) => {
+  const input = document.createElement("input")
+  input.type = "file"
+  input.onchange = (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (file) setter([...list, file.name])
+  }
+  input.click()
+}
+const removeFile = (setter: React.Dispatch<React.SetStateAction<string[]>>, index: number) =>
+  setter(prev => prev.filter((_, i) => i !== index))
 
 export default function SupplierQuotePage() {
   const params = useParams()
@@ -55,19 +69,9 @@ export default function SupplierQuotePage() {
   const [negCurrency, setNegCurrency] = useState<"INR" | "USD" | "EUR">("INR")
   const [negDocs, setNegDocs] = useState<string[]>([])
   const [negSubmitted, setNegSubmitted] = useState(false)
-  const currSymbol = (c: string) => c === "INR" ? "₹" : c === "USD" ? "$" : "€"
+  const [allVendors, setAllVendors] = useState<VmsVendor[]>([])
 
-  // ── File helpers ──
-  const addFile = (setter: React.Dispatch<React.SetStateAction<string[]>>, current: string[]) => {
-    const names = ["quotation.pdf", "price_breakdown.xlsx", "material_spec.pdf", "capacity_report.pdf"]
-    const name = names[current.length % names.length]
-    setter(prev => [...prev, name])
-  }
-  const removeFile = (setter: React.Dispatch<React.SetStateAction<string[]>>, index: number) => {
-    setter(prev => prev.filter((_, i) => i !== index))
-  }
-
-  const validUntil = getValidUntil(10)
+  useEffect(() => { fetchVendors().then(setAllVendors) }, [])
 
   useEffect(() => {
     const qp     = new URLSearchParams(window.location.search)
@@ -220,9 +224,8 @@ export default function SupplierQuotePage() {
   // Query submitted screen
   if (feasible === "no") {
     const spocContact = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
-    const allCatalogVendorsQuery = Object.values(VENDOR_CATALOG).flat()
-    const vendorRecordQuery = allCatalogVendorsQuery.find(v => v.name === vendorName)
-    const vendorSpocNameQuery = vendorRecordQuery?.spocName ?? vendorName
+    const vendorRecordQuery = allVendors.find(v => v.company_name === vendorName)
+    const vendorSpocNameQuery = vendorRecordQuery?.contact_person_name ?? vendorName
     const npdPortalUrl = typeof window !== "undefined" ? `${window.location.origin}/supplier/quote/${npd.id}?vendor=${encodeURIComponent(vendorName)}` : ""
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -295,9 +298,8 @@ export default function SupplierQuotePage() {
   // Cannot manufacture screen
   if (feasible === "cannot") {
     const spocContact = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
-    const allCatalogVendorsCannot = Object.values(VENDOR_CATALOG).flat()
-    const vendorRecordCannot = allCatalogVendorsCannot.find(v => v.name === vendorName)
-    const vendorSpocNameCannot = vendorRecordCannot?.spocName ?? vendorName
+    const vendorRecordCannot = allVendors.find(v => v.company_name === vendorName)
+    const vendorSpocNameCannot = vendorRecordCannot?.contact_person_name ?? vendorName
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-lg w-full py-10 px-8 space-y-6">
@@ -351,9 +353,8 @@ export default function SupplierQuotePage() {
   if (submitted) {
     const spocContact = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
     const dispDate = supplyDate ? new Date(supplyDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : supplyDate
-    const allCatalogVendors = Object.values(VENDOR_CATALOG).flat()
-    const vendorRecord = allCatalogVendors.find(v => v.name === vendorName)
-    const vendorSpocName = vendorRecord?.spocName ?? vendorName
+    const vendorRecord = allVendors.find(v => v.company_name === vendorName)
+    const vendorSpocName = vendorRecord?.contact_person_name ?? vendorName
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 max-w-lg w-full py-10 px-8 space-y-6">

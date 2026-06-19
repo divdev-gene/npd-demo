@@ -13,8 +13,6 @@
 | Engineering Change Notice | `ECN` | 8 | Change to an existing component. Abbreviated flow. |
 | New Tool Development | `NTD` | 11 | New tooling / die / fixture. Separate detailed workflow. |
 | Alternative Supplier | `AS` | 8 | Qualify an alternative vendor for an existing component. |
-| PP (Pre-Production) Repeat | `PP` | 9 | Repeat run using existing tooling. Reuses NPD stage machine. |
-| Compliance / Regulatory | `CR` | 6 | Certification, regulatory approval workflow. |
 
 ---
 
@@ -25,7 +23,7 @@ Central record that stores all fields common to NPD, NCD, ECN, and AS. Each "typ
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | `string` (PK) | Auto-generated: `NPD-FY-2026-0001`, `ECN-FY-2026-0001`, `AS-FY-2026-0001` |
-| `type_of_work` | `enum: NCD | NPD | ECN | NTD | ALT_SUPPLIER | COMPLIANCE | PP_REPEAT` | Determines workflow |
+| `type_of_work` | `enum: NCD | NPD | ECN | NTD | ALT_SUPPLIER` | Determines workflow |
 | `status` | `enum: active | complete` | NTD only |
 | `title` / `item_name` | `string` | Display name |
 | `item_category` | `string` | Commodity/category |
@@ -123,35 +121,6 @@ Central record that stores all fields common to NPD, NCD, ECN, and AS. Each "typ
 | 10 | Trials | Sample testing, trial results, redesign |
 | 11 | Commissioning | Inspection, shipment, EXIM, arrival, final sign-off |
 
-### 3e. Compliance / Regulatory Stages
-
-| Stage | Name | Description |
-|-------|------|-------------|
-| 1 | Initiation | Initial request creation |
-| 2 | Evaluation | Requirement evaluation |
-| 3 | Lab Assignment | Assign testing lab |
-| 4 | Document Submission | Submit compliance docs |
-| 5 | Certification Verification | Verify certification |
-| 6 | Closure | Final closure |
-
-### 3f. PP (Pre-Production) Repeat
-
-Reuses the NPD stage machine (9 stages) as defined in Section 3a. No separate stage progression logic.
-
-| Stage | Name | Description |
-|-------|------|-------------|
-| 1 | Initiation | Tool creation, component data, spec sheets |
-| 2 | Spec & Sign-off | Component review, sourcing extras, queries |
-| 3 | RFQ Dispatch | Vendor pool, RFQ links |
-| 4 | Quotation Review | Vendor quotes, component pricing, negotiation |
-| 5 | Supplier Selection | Per-commodity vendor selection, R&D ack |
-| 6 | Design Handoff | Final designs, supplier acknowledgement |
-| 7 | DFM | DFM review loop (ppt, 3D design) |
-| 8 | Mould Design | Mould 3D, MFA PPT, joint review |
-| 9 | Manufacturing | Per-commodity mfg tracking, phases |
-| 10 | Trials | Sample testing, trial results, redesign |
-| 11 | Commissioning | Inspection, shipment, EXIM, arrival, final sign-off |
-
 ---
 
 ## 4. Stage Data Entities (per-type)
@@ -212,9 +181,7 @@ Each stage stores its own JSON blob. Keys are documented in `mockData.ts`.
 | `ecn_dqa_tests_v1` | 5 | `{results[], submittedAt}` |
 | `ecn_head_approval_v1` | 6 | `{approved, approvedAt, note}` |
 | `ecn_plant_eval_v1` | 7 | `{results, submittedAt}` |
-| `ecn_pp_pricing_v1` | 8 | PP pricing data |
-| `ecn_pp_rnd_approval_v1` | 8 | PP R&D approval |
-| `ecn_pp_negotiation_v1` | 8 | PP negotiation rounds |
+
 
 ### 4c. AS (Alternative Supplier) Stage Data
 
@@ -228,9 +195,7 @@ Each stage stores its own JSON blob. Keys are documented in `mockData.ts`.
 | `ecn_dqa_tests_v1` | 5 | DQA tests (shared key) |
 | `ecn_head_approval_v1` | 6 | Head approval (shared key) |
 | `as_plant_eval_v1` | 7 | Plant evaluation (separate from ECN) |
-| `as_pp_pricing_v1` | 8 | PP pricing |
-| `as_pp_sourcing_approved_v1` | 8 | Sourcing approval |
-| `as_pp_rnd_approval_v1` | 8 | R&D approval |
+
 
 ### 4d. NTD Stage Data (separate typed system)
 
@@ -525,9 +490,7 @@ npd_record (polymorphic parent)
   ├── type_of_work = NTD
   │     └── separate typed stage data (NTDInitiationData → NTDSpecData → ...)
   │     └── separate NTDRecord (id, title, spoc, current_stage, status)
-  ├── type_of_work = ALT_SUPPLIER / COMPLIANCE
-  └── type_of_work = PP_REPEAT
-        └── reuses NPD stage machine (9 stages)
+  ├── type_of_work = ALT_SUPPLIER
 
 Stage data (separate tables or JSON blobs per stage):
   npd_record.id → stage_data (polymorphic, keyed by record_id + stage_number)
@@ -551,8 +514,6 @@ Versioned files:
 - **ECN**: Stages 1→8. R&D approval at Stage 2 gates the rest.
 - **AS**: Stages 1→8. R&D approval at Stage 2 gates negotiation.
 - **NTD**: Stages 1→11. Automated advancement on stage-complete conditions.
-- **CR (Compliance)**: Stages 1→6. Manual stage progression.
-- **PP (Pre-Production) Repeat**: Stages 1→9 (NPD stage machine). Manual progression.
 - **All types**: Revert allowed (demo). No parallel stage execution within a single workflow.
 - **NTD Sub-stages**: Stage 8 splits into `8A` (Mould Design) and `8B` (Joint Review).
 - **NTD Redesign Loop**: Trial failures can trigger re-entry at Stage 8A (Mould Design) via `NTDRedesignRound`.

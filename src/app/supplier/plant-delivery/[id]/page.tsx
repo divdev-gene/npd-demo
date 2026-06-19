@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
+import { fetchVendors, type VmsVendor } from "@/lib/vendors"
 import {
   mockNPDs, PLANT_SUPPLIER_RESP_KEY, PART_ASSIGNMENT_KEY, DELIVERY_DETAILS_KEY,
-  type NPDRecord, SPOC_CONTACTS, DEFAULT_RND_CONTACT, VENDOR_CATALOG, type ContactInfo,
+  type NPDRecord, SPOC_CONTACTS, DEFAULT_RND_CONTACT, type ContactInfo,
 } from "@/lib/mockData"
 import {
   CheckCircle2, Package, UserCircle, Mail, Phone, MapPin,
@@ -47,7 +48,8 @@ export default function SupplierPlantDeliveryPage() {
   const [deliveryDate,     setDeliveryDate]     = useState("")
   const [alreadySubmitted, setAlreadySubmitted] = useState(false)
   const [justSubmitted,    setJustSubmitted]    = useState(false)
-
+  const [allVendors, setAllVendors] = useState<VmsVendor[]>([])
+  useEffect(() => { fetchVendors().then(setAllVendors) }, [])
   useEffect(() => {
     const qp     = new URLSearchParams(window.location.search)
     const vendor = qp.get("vendor") ?? ""
@@ -100,9 +102,8 @@ export default function SupplierPlantDeliveryPage() {
 
   if (justSubmitted || alreadySubmitted) {
     const spocContact: ContactInfo = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
-    const allCatalogV = Object.values(VENDOR_CATALOG).flat()
-    const vendorRec   = allCatalogV.find(v => v.name === vendorName)
-    const vendorSpoc  = vendorRec?.spocName ?? vendorName
+    const vendorRec   = allVendors.find(v => v.company_name === vendorName)
+    const vendorSpoc  = vendorRec?.contact_person_name ?? vendorName
     const deliveryDateFormatted = deliveryDate
       ? new Date(deliveryDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
       : deliveryDate

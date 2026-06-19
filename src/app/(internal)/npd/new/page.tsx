@@ -15,7 +15,8 @@ import {
   TrendingDown, BarChart2, Truck, Target
 } from "lucide-react"
 import { useNPDs } from "@/lib/npdContext"
-import { getStageName, REJECTED_PARTS_KEY, DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD, VENDOR_CATALOG, ECN_STAGE1_KEY, NPD_BUNDLE_KEY, AS_STAGE1_KEY, type ASStage1Data } from "@/lib/mockData"
+import { fetchVendors, type VmsVendor } from "@/lib/vendors"
+import { getStageName, REJECTED_PARTS_KEY, DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD, ECN_STAGE1_KEY, NPD_BUNDLE_KEY, AS_STAGE1_KEY, COMMODITY_CODE_MAP, commodityCodeToName, type ASStage1Data } from "@/lib/mockData"
 
 type BundleItem = {
   id: string
@@ -44,6 +45,21 @@ const WORK_TYPES = [
   { id: "NTD",          title: "New Tool Development",      short: "NTD",  desc: "New tooling / die / fixture development request.",         icon: Hammer,    tat: 45, stages: 10 },
   { id: "ALT_SUPPLIER", title: "Alternative Supplier",      short: "AS",   desc: "Qualify an alternative vendor for an existing component.", icon: RefreshCw, tat: 30, stages: 8  },
 ]
+
+const commodityToSpoc = (codeOrName: string): { name: string; display: string } => {
+  const name = commodityCodeToName(codeOrName).toLowerCase()
+  if (name.includes("aluminium") || name.includes("steel") || name.includes("brass") || name.includes("copper") || name.includes("bolt") || name.includes("hardware") || name.includes("screw") || name.includes("nut"))
+    return { name: "Karan Mehta", display: "Karan Mehta · Sheet Metal SPOC" }
+  if (name.includes("electronic") || name.includes("capacitor") || name.includes("wire") || name.includes("terminal") || name.includes("remote") || name.includes("fan") || name.includes("motor") || name.includes("ink") || name.includes("tape"))
+    return { name: "Priya Rajan", display: "Priya Rajan · Electronics SPOC" }
+  if (name.includes("compressor"))
+    return { name: "Amit Kumar", display: "Amit Kumar · Compressors SPOC" }
+  if (name.includes("foam") || name.includes("eps") || name.includes("poly") || name.includes("bag") || name.includes("carton") || name.includes("packing") || name.includes("sticker") || name.includes("label") || name.includes("rubber") || name.includes("chemical") || name.includes("powder") || name.includes("gas") || name.includes("brazing"))
+    return { name: "Varun Joshi", display: "Varun Joshi · Packaging SPOC" }
+  if (name.includes("plastic") || name.includes("sheet") || name.includes("extruded") || name.includes("mould") || name.includes("molding"))
+    return { name: "Rahul Sharma", display: "Rahul Sharma · Plastics SPOC" }
+  return { name: "Rohan Desai", display: "Rohan Desai · General & Others SPOC" }
+}
 
 const SPOC_NAME_MAP: Record<string, string> = {
   "Plastics":                "Rahul Sharma",
@@ -144,6 +160,9 @@ export default function NewRequestWizard() {
     setBundleItems(prev => prev.filter(it => it.id !== id))
   }
 
+  const [allVendors, setAllVendors] = useState<VmsVendor[]>([])
+  useEffect(() => { fetchVendors().then(setAllVendors) }, [])
+
   // ECN-specific fields
   const [ecnPartNumber, setEcnPartNumber]               = useState("")
   const [ecnPartName, setEcnPartName]                   = useState("")
@@ -167,9 +186,9 @@ export default function NewRequestWizard() {
     if (isRndUser) return !SOURCING_TYPE_IDS.includes(typeId)
     return true
   }
-  const effectiveCommodity = commodity === "Others" && customCommodity.trim()
-    ? customCommodity.trim()
-    : commodity
+  const effectiveCommodity = commodity
+    ? commodityCodeToName(commodity)
+    : (customCommodity.trim() || "")
 
   const handleConfirmDispatch = () => {
     const year = new Date().getFullYear()
@@ -243,7 +262,7 @@ export default function NewRequestWizard() {
           tatHealth: "green",
           tatDaysRemaining: effectiveTat,
           totalTat: effectiveTat,
-          spoc: SPOC_NAME_MAP[item.commodity] || "Rohan Desai",
+          spoc: commodityToSpoc(item.commodity).name,
           supplier: "Pending Assignment",
           priority: priorityLabel,
           gradeA: false, tqrScore: null, cost: null,
@@ -285,7 +304,7 @@ export default function NewRequestWizard() {
       tatHealth: "green",
       tatDaysRemaining: effectiveTat,
       totalTat: effectiveTat,
-      spoc: isECN ? "Rohan Desai" : (SPOC_NAME_MAP[commodity] || "General Sourcing"),
+      spoc: isECN ? "Rohan Desai" : (commodity ? commodityToSpoc(commodity).name : "General Sourcing"),
       supplier: isECN ? ecnSupplier : isAltSup ? asSupplierName.trim() : "Pending Assignment",
       priority: priorityLabel,
       gradeA: false,
@@ -543,7 +562,7 @@ export default function NewRequestWizard() {
             )}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Remarks</Label>
-              <textarea rows={2} placeholder="Overall remarks for this NPD bundle…" value={remarks}
+              <textarea rows={2} placeholder="Overall remarks for this bundle…" value={remarks}
                 onChange={e => setRemarks(e.target.value)}
                 className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
             </div>
@@ -604,19 +623,18 @@ export default function NewRequestWizard() {
                         {/* Commodity */}
                         <td className="px-3 py-3">
                           <Select value={item.commodity} onValueChange={(v: string | null) => { if (v) updateBundleItem(item.id, { commodity: v }) }}>
-                            <SelectTrigger className="w-full bg-white h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectTrigger className="w-full bg-white h-8 text-sm"><span className="flex flex-1 text-left">{item.commodity ? commodityCodeToName(item.commodity) : "Select"}</span></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Plastics">Plastics</SelectItem>
-                              <SelectItem value="Sheet Metal">Sheet Metal</SelectItem>
-                              <SelectItem value="Electronics & Electrical">Electronics &amp; Electrical</SelectItem>
-                              <SelectItem value="Compressors & Motors">Compressors &amp; Motors</SelectItem>
-                              <SelectItem value="Packaging & Others">Packaging &amp; Others</SelectItem>
-                              <SelectItem value="Others">Others</SelectItem>
+                              {Object.entries(COMMODITY_CODE_MAP).map(([code]) => (
+                                <SelectItem key={code} value={code}>{commodityCodeToName(code)}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
-                          {item.commodity === "Others" && (
-                            <Input placeholder="Specify…" value={item.customCommodity}
-                              onChange={e => updateBundleItem(item.id, { customCommodity: e.target.value })} className="bg-white h-7 text-xs mt-1" />
+                          {item.commodity && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <User className="w-3 h-3 text-blue-700 shrink-0" />
+                              <span className="text-[10px] font-semibold text-blue-800 truncate">{commodityToSpoc(item.commodity).name}</span>
+                            </div>
                           )}
                           {item.commodity && item.commodity !== "Others" && (
                             <div className="flex items-center gap-1 mt-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200">
@@ -740,8 +758,8 @@ export default function NewRequestWizard() {
               <Select value={ecnSupplier} onValueChange={v => { if (v) setEcnSupplier(v) }}>
                 <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Select supplier" /></SelectTrigger>
                 <SelectContent>
-                  {Object.values(VENDOR_CATALOG).flat().filter((v, i, arr) => arr.findIndex(x => x.name === v.name) === i).map(v => (
-                    <SelectItem key={v.name} value={v.name}>{v.name}</SelectItem>
+                  {allVendors.filter((v, i, arr) => arr.findIndex(x => x.company_name === v.company_name) === i).map(v => (
+                    <SelectItem key={v.company_name} value={v.company_name}>{v.company_name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -896,35 +914,18 @@ export default function NewRequestWizard() {
             {typeOfWork !== "ALT_SUPPLIER" && <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Commodity / Category <span className="text-red-500">*</span></Label>
               <p className="text-[11px] text-slate-400">Determines auto-routing to Sourcing SPOC</p>
-              <Select onValueChange={(v: string | null) => { if (v) setCommodity(v) }}>
-                <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Select category" /></SelectTrigger>
+              <Select value={commodity} onValueChange={(v: string | null) => { if (v) setCommodity(v) }}>
+                <SelectTrigger className="w-full bg-white"><span className="flex flex-1 text-left">{commodity ? commodityCodeToName(commodity) : "Select commodity"}</span></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Plastics">Plastics</SelectItem>
-                  <SelectItem value="Sheet Metal">Sheet Metal</SelectItem>
-                  <SelectItem value="Electronics & Electrical">Electronics & Electrical</SelectItem>
-                  <SelectItem value="Compressors & Motors">Compressors & Motors</SelectItem>
-                  <SelectItem value="Packaging & Others">Packaging & Others</SelectItem>
-                  <SelectItem value="Others">Others</SelectItem>
+                  {Object.entries(COMMODITY_CODE_MAP).map(([code]) => (
+                    <SelectItem key={code} value={code}>{commodityCodeToName(code)}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              {commodity === "Others" && (
-                <div className="space-y-1.5 mt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                    Specify Commodity <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    placeholder="e.g. Rubber Gaskets, Heat Exchanger, Fasteners…"
-                    value={customCommodity}
-                    onChange={e => setCustomCommodity(e.target.value)}
-                    className="bg-white"
-                  />
-                  <p className="text-[11px] text-slate-400">This will be recorded as the item category in the NPD record.</p>
-                </div>
-              )}
               {commodity && (
                 <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-lg bg-blue-950/[0.05] border border-blue-200">
                   <User className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                  <span className="text-xs font-semibold text-blue-800">{SPOC_DISPLAY_MAP[commodity]}</span>
+                  <span className="text-xs font-semibold text-blue-800">{commodityToSpoc(commodity).display}</span>
                 </div>
               )}
             </div>}
@@ -1517,7 +1518,7 @@ export default function NewRequestWizard() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <User className="w-3 h-3 text-blue-700 shrink-0" />
-                      <span className="text-xs font-semibold text-blue-800">{SPOC_NAME_MAP[item.commodity] || "—"}</span>
+                      <span className="text-xs font-semibold text-blue-800">{item.commodity ? commodityToSpoc(item.commodity).name : "—"}</span>
                     </div>
                     <div className="text-xs text-slate-500">
                       {item.sampleQty && <span>{item.sampleQty} samples</span>}
@@ -1557,7 +1558,7 @@ export default function NewRequestWizard() {
         ] : [
           { label: "Item",             value: itemName || "—" },
           ...(typeOfWork !== "ALT_SUPPLIER" ? [{ label: "Category", value: effectiveCommodity || "—" }] : []),
-          ...(typeOfWork !== "ALT_SUPPLIER" ? [{ label: "SPOC", value: SPOC_NAME_MAP[commodity] || "—" }] : []),
+          ...(typeOfWork !== "ALT_SUPPLIER" ? [{ label: "SPOC", value: commodity ? commodityToSpoc(commodity).name : "—" }] : []),
           ...(typeOfWork === "ALT_SUPPLIER" ? [{ label: "Change Objective", value: changeObjective || "—" }] : []),
           { label: "Priority",    value: `${priority} — ${priority === "P1" ? "Critical" : priority === "P2" ? "High" : "Normal"}` },
           { label: "Plant",       value: manufacturingLocation || "—" },
@@ -1577,7 +1578,7 @@ export default function NewRequestWizard() {
         <div className="flex items-center justify-between px-5 py-3.5 bg-slate-900 text-white">
           <div>
             <p className="text-xs text-slate-400 mb-0.5">Automated Dispatch Preview</p>
-            <h3 className="text-sm font-semibold">New Request Alert → <span className="text-blue-300">{commodity ? SPOC_DISPLAY_MAP[commodity] : "Sourcing SPOC"}</span></h3>
+            <h3 className="text-sm font-semibold">New Request Alert → <span className="text-blue-300">{commodity ? commodityToSpoc(commodity).display : "Sourcing SPOC"}</span></h3>
           </div>
           <Mail className="w-5 h-5 text-slate-400" />
         </div>
@@ -1585,11 +1586,11 @@ export default function NewRequestWizard() {
         <div className="bg-white p-6 font-mono text-sm text-slate-700 space-y-3">
           <div className="grid grid-cols-[80px_1fr] gap-y-1 text-xs border-b border-slate-100 pb-3 mb-3">
             <span className="text-slate-400">From:</span>    <span className="font-semibold">Amber Auto-Bot &lt;noreply@amber.internal&gt;</span>
-            <span className="text-slate-400">To:</span>      <span className="font-semibold">{commodity ? SPOC_DISPLAY_MAP[commodity] : "Sourcing SPOC"}</span>
+            <span className="text-slate-400">To:</span>      <span className="font-semibold">{commodity ? commodityToSpoc(commodity).display : "Sourcing SPOC"}</span>
             <span className="text-slate-400">Subject:</span> <span className="font-semibold">ACTION REQUIRED — New {displayWorkTypeLabel} for {effectiveCommodity || "Component"}</span>
           </div>
 
-          <p className="text-slate-600">Dear {typeOfWork === "ECN" ? "R&D Head" : (SPOC_NAME_MAP[commodity] || "Sourcing Team")},</p>
+          <p className="text-slate-600">Dear {typeOfWork === "ECN" ? "R&D Head" : (commodity ? commodityToSpoc(commodity).name : "Sourcing Team")},</p>
           <p className="text-slate-600">A new <strong className="text-slate-800">{displayWorkTypeLabel}</strong> project has been initiated by R&D requiring immediate sourcing allocation.</p>
 
           <div className="rounded-md bg-slate-50 border border-slate-100 p-4 space-y-1 text-xs">
@@ -1628,7 +1629,7 @@ export default function NewRequestWizard() {
             )}
           </div>
 
-          <p className="text-slate-600 text-xs">Please log in to the Amber NPD portal to initiate Supplier ASR Sync and Bulk Enquiry dispatch.</p>
+          <p className="text-slate-600 text-xs">Please log in to the Amber portal to initiate Supplier ASR Sync and Bulk Enquiry dispatch.</p>
 
           <p className="text-slate-600 text-xs">Regards,<br /><strong>{pocRole === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name}</strong></p>
         </div>

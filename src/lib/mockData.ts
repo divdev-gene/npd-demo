@@ -41,19 +41,6 @@ export const SPOC_NAMES = ["Rahul Sharma", "Karan Mehta", "Priya Rajan", "Amit K
 
 export const VENDOR_EMAIL = "divyanshchawla12@gmail.com";
 
-export type VendorRecord = {
-  name: string;
-  tier: "Tier 1" | "Tier 2" | "Tier 3" | "New";
-  commodityMatch: number;
-  auditScore: number;
-  certifications: string[];
-  status: "verified" | "audit_overdue" | "new";
-  spocName?: string;
-  spocEmail?: string;
-  spocPhone?: string;
-  isRequested?: boolean;
-};
-
 export const VENDOR_RFQ_TEMPLATE_KEY = "vendor_rfq_template_v1";
 export const DEFAULT_RFQ_TEMPLATE = `Subject: Feasibility Confirmation Required — {item_name} ({npd_id})
 
@@ -77,62 +64,6 @@ For any clarifications, please feel free to reach out.
 
 Regards,
 {spoc_name}`;
-
-export const VENDOR_CATALOG: Record<string, VendorRecord[]> = {
-  // ── Used by mock NPDs (full category names) ────────────────────────────────
-  "Commodity-Based Component Development": [
-    { name: "Tubetech India Pvt Ltd",      tier: "Tier 1", commodityMatch: 100, auditScore: 94, certifications: ["ISO 9001:2015", "IATF 16949"],          status: "verified",      spocName: "Rajiv Nair",      spocEmail: "rajiv.nair@tubetech.in",      spocPhone: "+91 98201 11001" },
-    { name: "MetalWorks India",             tier: "Tier 1", commodityMatch: 92,  auditScore: 89, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Suresh Balan",    spocEmail: "suresh.balan@metalworks.in",  spocPhone: "+91 98201 22002" },
-    { name: "Alpha Component Systems",      tier: "Tier 2", commodityMatch: 86,  auditScore: 78, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Deepa Menon",     spocEmail: "deepa.menon@alphacomp.in",    spocPhone: "+91 98201 33003" },
-    { name: "National Metalfabs",           tier: "Tier 2", commodityMatch: 81,  auditScore: 71, certifications: [],                                       status: "audit_overdue", spocName: "Vinod Shetty",    spocEmail: "vinod.shetty@natmetal.in",    spocPhone: "+91 98201 44004" },
-    { name: "Supreme Plastics Ltd",         tier: "Tier 2", commodityMatch: 74,  auditScore: 65, certifications: [],                                       status: "new",           spocName: "Anjali Iyer",     spocEmail: "anjali.iyer@supremeplast.in", spocPhone: "+91 98201 55005" },
-  ],
-  "Compliance & Regulatory": [
-    { name: "TUV SUD India",               tier: "Tier 1", commodityMatch: 100, auditScore: 99, certifications: ["NABL Accredited", "ISO 17025"],         status: "verified",      spocName: "Dr. Ramesh Pillai", spocEmail: "r.pillai@tuvsud.in",        spocPhone: "+91 98201 66006" },
-    { name: "Bureau Veritas",              tier: "Tier 1", commodityMatch: 97,  auditScore: 97, certifications: ["NABL Accredited", "ISO 17025"],         status: "verified",      spocName: "Kavita Sharma",   spocEmail: "k.sharma@bureauveritas.in",   spocPhone: "+91 98201 77007" },
-    { name: "SGS India Pvt Ltd",           tier: "Tier 2", commodityMatch: 91,  auditScore: 88, certifications: ["Accredited Body"],                     status: "verified",      spocName: "Nikhil Oberoi",   spocEmail: "n.oberoi@sgs.com",            spocPhone: "+91 98201 88008" },
-  ],
-
-  // ── Used by new-request form (commodity short names) ──────────────────────
-  "Plastics": [
-    { name: "Supreme Plastics Ltd",         tier: "Tier 1", commodityMatch: 96,  auditScore: 91, certifications: ["ISO 9001:2015", "IATF 16949"],          status: "verified",      spocName: "Anjali Iyer",     spocEmail: "anjali.iyer@supremeplast.in", spocPhone: "+91 98201 55005" },
-    { name: "Hindustan Polymers Pvt Ltd",   tier: "Tier 1", commodityMatch: 88,  auditScore: 83, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Prakash Rao",     spocEmail: "p.rao@hindpoly.in",           spocPhone: "+91 98201 99009" },
-    { name: "Pioneer Moulding Co.",         tier: "Tier 2", commodityMatch: 79,  auditScore: 72, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Shalini Tiwari",  spocEmail: "s.tiwari@pioneermould.in",    spocPhone: "+91 98201 10010" },
-    { name: "Unique Polymers India",        tier: "Tier 3", commodityMatch: 65,  auditScore: 58, certifications: [],                                       status: "new",           spocName: "Arun Das",        spocEmail: "a.das@uniquepoly.in",         spocPhone: "+91 98201 10011" },
-  ],
-  "Sheet Metal": [
-    { name: "MetalWorks India",             tier: "Tier 1", commodityMatch: 97,  auditScore: 92, certifications: ["ISO 9001:2015", "IATF 16949"],          status: "verified",      spocName: "Suresh Balan",    spocEmail: "suresh.balan@metalworks.in",  spocPhone: "+91 98201 22002" },
-    { name: "Precision Stampings Ltd",      tier: "Tier 1", commodityMatch: 91,  auditScore: 86, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Rahul Desai",     spocEmail: "r.desai@precstamp.in",        spocPhone: "+91 98201 20012" },
-    { name: "Alpha Component Systems",      tier: "Tier 2", commodityMatch: 82,  auditScore: 74, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Deepa Menon",     spocEmail: "deepa.menon@alphacomp.in",    spocPhone: "+91 98201 33003" },
-    { name: "Bright Steel Works",           tier: "Tier 2", commodityMatch: 70,  auditScore: 63, certifications: [],                                       status: "audit_overdue", spocName: "Manoj Kulkarni",  spocEmail: "m.kulkarni@brightsteel.in",   spocPhone: "+91 98201 30013" },
-  ],
-  "Electronics & Electrical": [
-    { name: "MicroElectrix Systems",        tier: "Tier 1", commodityMatch: 98,  auditScore: 91, certifications: ["ISO 9001:2015", "UL Listed", "CE Mark"], status: "verified",     spocName: "Preethi Nanda",   spocEmail: "p.nanda@microelx.in",         spocPhone: "+91 98201 40014" },
-    { name: "Shenzhen Optoelectronics",     tier: "Tier 2", commodityMatch: 90,  auditScore: 83, certifications: ["CE Mark", "RoHS Compliant"],            status: "verified",      spocName: "Kevin Zhang",     spocEmail: "k.zhang@szoptoelx.com",       spocPhone: "+86 138 0013 8000" },
-    { name: "Synapse Electronics Pvt Ltd",  tier: "Tier 2", commodityMatch: 76,  auditScore: 68, certifications: [],                                       status: "audit_overdue", spocName: "Arvind Pillai",   spocEmail: "a.pillai@synapseelx.in",      spocPhone: "+91 98201 50015" },
-    { name: "Rexnord Controls India",       tier: "Tier 3", commodityMatch: 67,  auditScore: 59, certifications: [],                                       status: "new",           spocName: "Sonal Mehta",     spocEmail: "s.mehta@rexnord.in",          spocPhone: "+91 98201 60016" },
-  ],
-  "Compressors & Motors": [
-    { name: "Tecumseh India Ltd",           tier: "Tier 1", commodityMatch: 99,  auditScore: 95, certifications: ["ISO 9001:2015", "IATF 16949"],          status: "verified",      spocName: "Ganesh Krishnan",  spocEmail: "g.krishnan@tecumseh.in",      spocPhone: "+91 98201 70017" },
-    { name: "Emerson Electric India",       tier: "Tier 1", commodityMatch: 96,  auditScore: 93, certifications: ["ISO 9001:2015", "UL Listed"],           status: "verified",      spocName: "Akash Verma",      spocEmail: "a.verma@emerson.in",          spocPhone: "+91 98201 80018" },
-    { name: "GD Midea Compressor Co.",      tier: "Tier 2", commodityMatch: 88,  auditScore: 81, certifications: ["CE Mark"],                             status: "verified",      spocName: "Li Wei",           spocEmail: "li.wei@gdmidea.com",          spocPhone: "+86 139 0013 9000" },
-    { name: "Kirloskar Electric Ltd",       tier: "Tier 2", commodityMatch: 83,  auditScore: 76, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Santosh Hegde",    spocEmail: "s.hegde@kirloskar.in",        spocPhone: "+91 98201 90019" },
-  ],
-  "EPS": [
-    { name: "Nirlon Foam Industries",  tier: "Tier 1", commodityMatch: 95, auditScore: 88, certifications: ["ISO 9001:2015"],               status: "verified",      spocName: "Ramesh Pillai",  spocEmail: "r.pillai@nirlon.in",         spocPhone: "+91 98201 11201" },
-    { name: "Supreme EPS Solutions",   tier: "Tier 2", commodityMatch: 82, auditScore: 76, certifications: ["ISO 9001:2015"],               status: "verified",      spocName: "Lata Nair",      spocEmail: "l.nair@supremeeps.in",       spocPhone: "+91 98201 11202" },
-    { name: "Aerofoam India Pvt Ltd",  tier: "Tier 2", commodityMatch: 73, auditScore: 65, certifications: [],                              status: "new",           spocName: "Vikram Joshi",   spocEmail: "v.joshi@aerofoam.in",        spocPhone: "+91 98201 11203" },
-  ],
-  "Packaging & Others": [
-    { name: "Packwell Solutions",           tier: "Tier 1", commodityMatch: 96,  auditScore: 88, certifications: ["ISO 9001:2015", "FSC Certified"],       status: "verified",      spocName: "Divya Nair",       spocEmail: "d.nair@packwell.in",          spocPhone: "+91 98201 10120" },
-    { name: "PrintPack Industries",         tier: "Tier 2", commodityMatch: 84,  auditScore: 75, certifications: ["ISO 9001:2015"],                        status: "verified",      spocName: "Rakesh Singhania", spocEmail: "r.singhania@printpack.in",    spocPhone: "+91 98201 10221" },
-    { name: "GreenPack Co.",                tier: "Tier 3", commodityMatch: 70,  auditScore: 62, certifications: [],                                       status: "new",           spocName: "Priya Gupta",      spocEmail: "p.gupta@greenpack.in",        spocPhone: "+91 98201 10322" },
-  ],
-  "Others": [
-    { name: "MultiSource India Pvt Ltd",    tier: "Tier 2", commodityMatch: 72,  auditScore: 67, certifications: [],                                       status: "new",           spocName: "Anil Tomar",       spocEmail: "a.tomar@multisource.in",      spocPhone: "+91 98201 10423" },
-    { name: "General Component Suppliers",  tier: "Tier 3", commodityMatch: 60,  auditScore: 55, certifications: [],                                       status: "new",           spocName: "Meena Joshi",      spocEmail: "m.joshi@gencomp.in",          spocPhone: "+91 98201 10524" },
-  ],
-};
 
 export type FormQuestion = {
   id: string;
@@ -377,6 +308,19 @@ export const NPD_STAGES = [
   "PP Pricing",                    // 8
   "NPD Summary & Closure",         // 9
 ] as const
+
+export const NCD_STAGES: readonly string[] = [
+  "Request Initialisation",        // 1
+  "Supplier Sourcing and Confirm", // 2
+  "Supplier Dispatch",             // 3
+  "Design and Feasibility",        // 4
+  "RND Testing & TQR",             // 5
+  "DQA Testing",                   // 6
+  "RND Approval",                  // 7
+  "PP Pricing",                    // 8
+  "NCD Summary & Closure",         // 9
+]
+
 export const TOTAL_NPD_STAGES = 9
 export const DQA_TESTS_KEY = "dqa_tests_v1"
 export const ECN_STAGE1_KEY = "ecn_stage1_v1"
@@ -720,9 +664,82 @@ export const getStageName = (stage: number, type: string) => {
     return compStages[stage - 1] || "Unknown";
   }
 
+  if (type === "New Component Development (NCD)") {
+    return NCD_STAGES[stage - 1] ?? "Unknown";
+  }
+
   return NPD_STAGES[stage - 1] ?? "Unknown";
 };
+
+export const moduleLabel = (typeOfWork: string): string => {
+  if (typeOfWork === "New Component Development (NCD)") return "NCD"
+  if (typeOfWork === "New Product Development (NPD)") return "NPD"
+  if (typeOfWork === "Engineering Change Notice (ECN)") return "ECN"
+  if (typeOfWork?.includes("Alternative Supplier")) return "AS"
+  if (typeOfWork === "Compliance / Regulatory") return "Compliance"
+  return "NPD"
+}
 
 export const getBundleChildren = (parentId: string, npds: NPDRecord[]): NPDRecord[] =>
   npds.filter(n => n.parentId === parentId)
     .sort((a, b) => a.id.localeCompare(b.id));
+
+export const COMMODITY_CODE_MAP: Record<string, string> = {
+  AA: 'AA - Aluminium',
+  AB: 'AB - FG-Extruded Sheet',
+  AC: 'AC - FG-HE Coil',
+  AD: 'AD - FG-IDU',
+  AE: 'AE - FG-Inner Case',
+  AF: 'AF - FG-MFC',
+  AG: 'AG - FG-ODU',
+  AH: 'AH - FG-PLC',
+  AI: 'AI - FG-SMC',
+  AJ: 'AJ - Steel',
+  AK: 'AK - FG-WAC',
+  AL: 'AL - FG-ODU Kit',
+  AM: 'AM - FG-SAC',
+  AN: 'AN - ODU-Accessories',
+  AO: 'AO - Compressor',
+  AP: 'AP - Motor',
+  AQ: 'AQ - RM-IDU',
+  AR: 'AR - RM-HE Coil',
+  AS: 'AS - Sticker & Label',
+  AT: 'AT - Remote',
+  AU: 'AU - Foam',
+  AV: 'AV - EPS',
+  AX: 'AX - Brass Parts',
+  AY: 'AY - Capacitor',
+  AZ: 'AZ - Cross Flow Fan',
+  BA: 'BA - FG-Portable AC',
+  BB: 'BB - Fan',
+  BC: 'BC - Gas',
+  BD: 'BD - Hardware',
+  BE: 'BE - Ink',
+  BF: 'BF - Poly Bag',
+  BG: 'BG - Rear Grill',
+  BH: 'BH - Hardware Other',
+  BI: 'BI - Rubber Parts',
+  BJ: 'BJ - Service Valve',
+  BK: 'BK - Tape',
+  BL: 'BL - Wire',
+  BM: 'BM - FG-PP Roll',
+  BN: 'BN - Bolt',
+  BO: 'BO - Brazing Rod',
+  BP: 'BP - Carton Box',
+  BQ: 'BQ - Chemical',
+  BR: 'BR - FG-Copper Tubing',
+  BS: 'BS - Powder',
+  BT: 'BT - Terminal Block',
+  BU: 'BU - Packing Material',
+  BV: 'BV - Copper Tube',
+};
+
+export const commodityCodeToName = (code: string): string => {
+  const entry = COMMODITY_CODE_MAP[code];
+  if (!entry) return code;
+  return entry.split(' - ')[1] || code;
+};
+
+export const commodityNameToCode = (name: string): string | undefined => {
+  return Object.entries(COMMODITY_CODE_MAP).find(([, v]) => v.includes(name))?.[0];
+};

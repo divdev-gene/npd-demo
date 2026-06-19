@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { getStageName, NPD_BUNDLE_KEY, getBundleChildren } from "@/lib/mockData"
+import { getStageName, NPD_BUNDLE_KEY, getBundleChildren, moduleLabel } from "@/lib/mockData"
 import { useNPDs } from "@/lib/npdContext"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -32,7 +32,7 @@ const TAT_LABEL: Record<string, string> = {
 function getRoleLabel(role: string) {
   if (role === "rnd_user") return "Your Requests"
   if (SPOC_NAMES.includes(role)) return `Assigned to ${role}`
-  return "All NPD Requests"
+  return "All Requests"
 }
 
 function StageProgress({ stage }: { stage: number }) {
@@ -127,7 +127,7 @@ export default function ArchivePage() {
   const showRaisedBy = FULL_ACCESS_ROLES.includes(currentRole)
 
   const kpis = [
-    { label: "Total NPDs",     value: total,  icon: Layers,        color: "#1E40AF", bg: "#EFF6FF" },
+    { label: "Total",         value: total,  icon: Layers,        color: "#1E40AF", bg: "#EFF6FF" },
     { label: "Active",         value: active, icon: Activity,      color: "#059669", bg: "#ECFDF5" },
     { label: "Overdue / Risk", value: overdue,icon: AlertTriangle,  color: overdue > 0 ? "#DC2626" : "#64748B", bg: overdue > 0 ? "#FEF2F2" : "#F8FAFC", alert: overdue > 0 },
     { label: "Grade A",        value: gradeA, icon: Star,          color: "#7C3AED", bg: "#F5F3FF" },
@@ -140,7 +140,7 @@ export default function ArchivePage() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-[22px] font-bold tracking-tight text-slate-900">{getRoleLabel(currentRole)}</h1>
-          <p className="text-[13px] text-slate-500 mt-0.5">Search and filter through your visible NPD repository.</p>
+          <p className="text-[13px] text-slate-500 mt-0.5">Search and filter through your visible repository.</p>
         </div>
         <span className="text-[11px] font-semibold text-slate-400">{total} total records</span>
       </div>

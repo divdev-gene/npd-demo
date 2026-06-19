@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import {
-  getStageName, getBundleChildren, NPD_BUNDLE_KEY, VENDOR_CATALOG, SPOC_NAMES, SPOC_CONTACTS, NPD_STAGES, TOTAL_NPD_STAGES,
+  getStageName, getBundleChildren, NPD_BUNDLE_KEY, SPOC_NAMES, SPOC_CONTACTS, NPD_STAGES, NCD_STAGES, TOTAL_NPD_STAGES, moduleLabel,
   MOCK_SUPPLIER_DOCS, SUPPLIER_DOCS_KEY,
   MOCK_VENDOR_QUOTATIONS, VENDOR_QUOTE_APPROVALS_KEY,
   LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY, VENDOR_RFQ_TEMPLATE_KEY, DEFAULT_RFQ_TEMPLATE, VENDOR_EMAIL, COMPOSED_EMAILS_KEY,
@@ -22,10 +22,11 @@ import {
   AS_STAGE1_KEY, AS_RND_APPROVAL_KEY, type ASStage1Data,
   DEFAULT_RND_CONTACT, DEFAULT_RND_HEAD,
   getTestsByCategory, getTotalTestDays,
-  type NPDRecord, type VendorRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse, type PushNotification, type TestResult,
+  type NPDRecord, type SupplierDoc, type VendorQuotation, type LiveQuotation, type VendorStatusResponse, type PushNotification, type TestResult,
 } from "@/lib/mockData"
+import { fetchVendors, getCachedVendors, type VmsVendor } from "@/lib/vendors"
 import { useNPDs } from "@/lib/npdContext"
-import { downloadMISReport } from "@/lib/reportGenerator"
+import { downloadMISReport, reportPrefix } from "@/lib/reportGenerator"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -164,13 +165,13 @@ function savePush(title: string, body: string, npdId: string, icon: PushNotifica
 
 import { type NegotiationRound, type NegotiationRecord } from "@/lib/npdTypes"
 
-function getVendors(category: string): VendorRecord[] {
-  for (const key of Object.keys(VENDOR_CATALOG)) {
-    if (category.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(category.toLowerCase())) {
-      return VENDOR_CATALOG[key]
-    }
-  }
-  return VENDOR_CATALOG[category] ?? []
+function getVendors(category: string, allVendors: VmsVendor[]): VmsVendor[] {
+  const cat = category.toLowerCase()
+  return allVendors.filter(v =>
+    v.commodity_code?.toLowerCase() === cat ||
+    v.business_vertical?.toLowerCase().includes(cat) ||
+    cat.includes(v.business_vertical?.toLowerCase() ?? "")
+  )
 }
 
 
@@ -192,6 +193,8 @@ export default function NpdDetailView() {
     all[npdId] = s
     localStorage.setItem(TQR_STATUS_KEY, JSON.stringify(all))
   }
+  const [allVendors, setAllVendors] = useState<VmsVendor[]>([])
+  useEffect(() => { fetchVendors().then(setAllVendors) }, [])
   const [rndApprovalDecision, setRndApprovalDecision] = useState<"approved" | "rejected_rnd" | "rejected_dqa" | null>(null)
   const [rndRejectionReason,  setRndRejectionReason]  = useState("")
   const [rejectReason, setRejectReason] = useState("")
@@ -514,8 +517,8 @@ export default function NpdDetailView() {
       setSelectedVendors(new Set(prevSent))
       setEnquiryDispatched(true)
     } else {
-      const initial = getVendors(npd?.itemCategory ?? "")
-      if (initial.length > 0) setSelectedVendors(new Set([initial[0].name]))
+      const initial = getVendors(npd?.itemCategory ?? "", allVendors)
+      if (initial.length > 0) setSelectedVendors(new Set([initial[0].company_name]))
     }
 
     // Vendor statuses
@@ -989,10 +992,9 @@ export default function NpdDetailView() {
     // Compose emails for each vendor
     const template = localStorage.getItem(VENDOR_RFQ_TEMPLATE_KEY) || DEFAULT_RFQ_TEMPLATE
     // Build a lookup of vendorName → spocName from the catalog
-    const allCatalogVendors = Object.values(VENDOR_CATALOG).flat()
     const emails = vendorList.map(vName => {
-      const vendorRecord = allCatalogVendors.find(v => v.name === vName)
-      const vendorSpocName = vendorRecord?.spocName ?? vName
+      const vendorRecord = allVendors.find(v => v.company_name === vName)
+      const vendorSpocName = vendorRecord?.contact_person_name ?? vName
       const portalLink = `${baseUrl}/supplier/quote/${npdId}?vendor=${encodeURIComponent(vName)}`
       const filled = template
         .replace(/{npd_id}/g,       npdId)
@@ -1378,7 +1380,7 @@ export default function NpdDetailView() {
 
     // Stage 2→3: auto-approve first vendor if none locked yet
     if (activeStage === 2 && (!npd.supplier || npd.supplier === "Pending Assignment")) {
-      const firstVendor = getVendors(npd.itemCategory)[0]?.name ?? sentVendors[0]
+      const firstVendor = getVendors(npd.itemCategory, allVendors)[0]?.company_name ?? sentVendors[0]
       if (firstVendor) {
         setVendorApproval(firstVendor, "approved") // internally advances to stage 3
         return
@@ -1634,22 +1636,23 @@ export default function NpdDetailView() {
     }
 
     setActiveStage(prev)
-    updateNPD(npdId, { stage: prev, stageName: isNCD ? NPD_STAGES[prev - 1] : getStageName(prev, npd.typeOfWork) })
+    updateNPD(npdId, { stage: prev, stageName: getStageName(prev, npd.typeOfWork) })
   }
 
-  const catalogVendors = getVendors(npd.itemCategory)
-  const vendors: VendorRecord[] = [
-    ...catalogVendors,
+  const catalogVendors = getVendors(npd.itemCategory, allVendors)
+  const vendors = [
+    ...catalogVendors.map(v => ({
+      company_name: v.company_name,
+      contact_person_name: v.contact_person_name,
+      email: v.email,
+      phone_number: v.phone_number,
+      isRequested: false,
+    })),
     ...requestedVendors.map(rv => ({
-      name: rv.name,
-      tier: "New" as const,
-      commodityMatch: 0,
-      auditScore: 0,
-      certifications: [] as string[],
-      status: "new" as const,
-      spocName: rv.contact,
-      spocEmail: rv.email,
-      spocPhone: rv.phone,
+      company_name: rv.name,
+      contact_person_name: rv.contact,
+      email: rv.email,
+      phone_number: rv.phone,
       isRequested: true,
     })),
   ]
@@ -1742,7 +1745,7 @@ export default function NpdDetailView() {
     setSourcingApprovedBy(approver)
     setSourcingApprovedAt(now)
     setSourcingTatExtendOpen(false)
-    savePush(`Sourcing Approved — ${npdId}`, `[${npd.spoc}] NPD ${npdId} (${npd.itemName}) approved by sourcing. Vendor assignment unlocked.`, npdId, "check")
+    savePush(`Sourcing Approved — ${npdId}`, `[${npd.spoc}] ${moduleLabel(npd.typeOfWork)} ${npdId} (${npd.itemName}) approved by sourcing. Vendor assignment unlocked.`, npdId, "check")
   }
 
   const tatLabel =
@@ -1849,7 +1852,7 @@ export default function NpdDetailView() {
               disabled={bundleDownloading || children.length === 0}
               onClick={() => {
                 setBundleDownloading(true)
-                downloadMISReport([npd], `NPD_Bundle_${npd.id}.xlsx`, npds)
+                downloadMISReport([npd], `${reportPrefix([npd])}_Bundle_${npd.id}.xlsx`, npds)
                   .catch(console.error)
                   .finally(() => setBundleDownloading(false))
               }}
@@ -2045,7 +2048,7 @@ export default function NpdDetailView() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 w-[160px] h-[90px] overflow-hidden">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
               <p className="text-sm font-semibold text-blue-900 mt-0.5 leading-tight line-clamp-2">
-                {activeStage}. {NPD_STAGES[activeStage - 1] ?? getStageName(activeStage, npd.typeOfWork)}
+                {activeStage}. {getStageName(activeStage, npd.typeOfWork)}
               </p>
             </div>
           </div>
@@ -3324,7 +3327,7 @@ export default function NpdDetailView() {
                             const rndUser = npd.raisedBy === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name
                             const testList = tests.map(t => `${t.testName} (${t.durationDays}d)`).join(", ") || "Standard evaluation protocol"
                             const emailBody = (toName: string) =>
-                              `<p>Dear <strong>${toName}</strong>,</p><p>The samples for <em>${npd.itemName}</em> (${npdId}) have been received from <strong>${npd.supplier || "the supplier"}</strong>. The R&amp;D team has commenced evaluation and testing as per the defined protocol.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.supplier || "TBD"}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Tests Initiated</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${testList}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;color:#1e3a5f">Estimated TAT</td><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:700;color:#1e3a5f">${totalDays} working day${totalDays !== 1 ? "s" : ""} — Evaluation report expected by ${tatFormatted}</td></tr></table><p>The evaluation report will be shared with all stakeholders upon completion.</p><p>Regards,<br/><strong>${rndUser}</strong></p>`
+                              `<p>Dear <strong>${toName}</strong>,</p><p>The samples for <em>${npd.itemName}</em> (${npdId}) have been received from <strong>${npd.supplier || "the supplier"}</strong>. The R&amp;D team has commenced evaluation and testing as per the defined protocol.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.supplier || "TBD"}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Tests Initiated</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${testList}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;color:#1e3a5f">Estimated TAT</td><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:700;color:#1e3a5f">${totalDays} working day${totalDays !== 1 ? "s" : ""} — Evaluation report expected by ${tatFormatted}</td></tr></table><p>The evaluation report will be shared with all stakeholders upon completion.</p><p>Regards,<br/><strong>${rndUser}</strong></p>`
                             return (
                               <div className="space-y-3">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notifications Sent</p>
@@ -3361,7 +3364,7 @@ export default function NpdDetailView() {
                             const spocContact = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
                             const rndUser = npd.raisedBy === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name
                             const makeBody = (toName: string) =>
-                              `<p>Dear <strong>${toName}</strong>,</p><p>The samples for <em>${npd.itemName}</em> (${npdId}) from supplier <strong>${npd.supplier || "TBD"}</strong> have not yet been received as of today.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.supplier || "TBD"}</td></tr></table><p>Kindly follow up with the supplier to confirm dispatch status and expedite delivery at the earliest.</p><p>Regards,<br/><strong>${rndUser}</strong></p>`
+                              `<p>Dear <strong>${toName}</strong>,</p><p>The samples for <em>${npd.itemName}</em> (${npdId}) from supplier <strong>${npd.supplier || "TBD"}</strong> have not yet been received as of today.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.supplier || "TBD"}</td></tr></table><p>Kindly follow up with the supplier to confirm dispatch status and expedite delivery at the earliest.</p><p>Regards,<br/><strong>${rndUser}</strong></p>`
                             return (
                               <div className="space-y-3">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notifications Sent</p>
@@ -3507,7 +3510,7 @@ export default function NpdDetailView() {
                               <EmailCard
                                 to={rndUser}
                                 subject={`Re-testing Required — ${npd.itemName} (${npdId})`}
-                                body={`<p>Dear <strong>${rndUser}</strong>,</p><p>R&amp;D Head has reviewed the evaluation for <em>${npd.itemName}</em> (${npdId}) and has sent it back for additional testing.</p>${headActionReason ? `<div style="border-left:3px solid #d97706;margin:12px 0;padding:8px 14px;background:#fffbeb;color:#78350f;font-style:italic">${headActionReason}</div>` : ""}<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table><p>Please conduct the additional tests as specified and re-submit the evaluation for R&amp;D Head sign-off.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`}
+                                body={`<p>Dear <strong>${rndUser}</strong>,</p><p>R&amp;D Head has reviewed the evaluation for <em>${npd.itemName}</em> (${npdId}) and has sent it back for additional testing.</p>${headActionReason ? `<div style="border-left:3px solid #d97706;margin:12px 0;padding:8px 14px;background:#fffbeb;color:#78350f;font-style:italic">${headActionReason}</div>` : ""}<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table><p>Please conduct the additional tests as specified and re-submit the evaluation for R&amp;D Head sign-off.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`}
                               />
                             </div>
                           )
@@ -3523,7 +3526,7 @@ export default function NpdDetailView() {
                                 <textarea
                                   className="w-full mt-1 border border-slate-300 rounded-md p-2 text-sm focus:ring-red-500 focus:border-red-500"
                                   rows={3}
-                                  placeholder="Describe why the supplier is not suitable for this NPD..."
+                                  placeholder={"Describe why the supplier is not suitable for this " + moduleLabel(npd.typeOfWork) + "..."}
                                   value={headActionReason}
                                   onChange={e => setHeadActionReason(e.target.value)}
                                 />
@@ -3545,9 +3548,8 @@ export default function NpdDetailView() {
                         (() => {
                           const spocContact = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
                           const rndUser = npd.raisedBy === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name
-                          const allV = Object.values(VENDOR_CATALOG).flat()
-                          const vRec = allV.find(v => v.name === npd.supplier)
-                          const supplierSpoc = vRec?.spocName ?? (npd.supplier || "Supplier")
+                          const vRec = allVendors.find(v => v.company_name === npd.supplier)
+                          const supplierSpoc = vRec?.contact_person_name ?? (npd.supplier || "Supplier")
                           return (
                             <div className="space-y-4">
                               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
@@ -3564,17 +3566,17 @@ export default function NpdDetailView() {
                               <EmailCard
                                 to={supplierSpoc}
                                 subject={`Supplier Evaluation Closed — ${npd.itemName} (${npdId})`}
-                                body={`<p>Dear <strong>${supplierSpoc}</strong>,</p><p>After thorough review by our R&amp;D Head, we regret to inform you that <strong>${npd.supplier}</strong> has not been found suitable for the following NPD. The samples have failed the evaluation and the supplier will not be progressed further for this requirement.</p>${headActionReason ? `<div style="border-left:3px solid #dc2626;margin:12px 0;padding:8px 14px;background:#fff5f5;color:#7f1d1d;font-style:italic">${headActionReason}</div>` : ""}<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr></table><p>We appreciate your participation in the evaluation process. We may reach out for future opportunities.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`}
+                                body={`<p>Dear <strong>${supplierSpoc}</strong>,</p><p>After thorough review by our R&amp;D Head, we regret to inform you that <strong>${npd.supplier}</strong> has not been found suitable for the following ${moduleLabel(npd.typeOfWork)}. The samples have failed the evaluation and the supplier will not be progressed further for this requirement.</p>${headActionReason ? `<div style="border-left:3px solid #dc2626;margin:12px 0;padding:8px 14px;background:#fff5f5;color:#7f1d1d;font-style:italic">${headActionReason}</div>` : ""}<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr></table><p>We appreciate your participation in the evaluation process. We may reach out for future opportunities.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`}
                               />
                               <EmailCard
                                 to={rndUser}
                                 subject={`Evaluation Closed — Supplier Rejected: ${npd.itemName} (${npdId})`}
-                                body={`<p>Dear <strong>${rndUser}</strong>,</p><p>R&amp;D Head has closed the evaluation for <em>${npd.itemName}</em> (${npdId}). <strong>${npd.supplier}</strong> has been deemed not fit for this NPD.</p>${headActionReason ? `<div style="border-left:3px solid #dc2626;margin:12px 0;padding:8px 14px;background:#fff5f5;color:#7f1d1d;font-style:italic">${headActionReason}</div>` : ""}<p>No further action is required from your end for this evaluation round. Sourcing will be notified to explore alternative vendors.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`}
+                                body={`<p>Dear <strong>${rndUser}</strong>,</p><p>R&amp;D Head has closed the evaluation for <em>${npd.itemName}</em> (${npdId}). <strong>${npd.supplier}</strong> has been deemed not fit for this ${moduleLabel(npd.typeOfWork)}.</p>${headActionReason ? `<div style="border-left:3px solid #dc2626;margin:12px 0;padding:8px 14px;background:#fff5f5;color:#7f1d1d;font-style:italic">${headActionReason}</div>` : ""}<p>No further action is required from your end for this evaluation round. Sourcing will be notified to explore alternative vendors.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`}
                               />
                               <EmailCard
                                 to={spocContact.name}
                                 subject={`Supplier Not Fit — Alternative Vendor Required: ${npd.itemName} (${npdId})`}
-                                body={`<p>Dear <strong>${spocContact.name}</strong>,</p><p>R&amp;D Head has reviewed the evaluation for <em>${npd.itemName}</em> (${npdId}) and has determined that <strong>${npd.supplier || "the current supplier"}</strong> is not suitable for this NPD.</p>${headActionReason ? `<div style="border-left:3px solid #dc2626;margin:12px 0;padding:8px 14px;background:#fff5f5;color:#7f1d1d;font-style:italic">${headActionReason}</div>` : ""}<p><strong>Action Required:</strong> Please initiate alternative vendor selection and re-run the feasibility and sample evaluation process for a suitable supplier.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`}
+                                body={`<p>Dear <strong>${spocContact.name}</strong>,</p><p>R&amp;D Head has reviewed the evaluation for <em>${npd.itemName}</em> (${npdId}) and has determined that <strong>${npd.supplier || "the current supplier"}</strong> is not suitable for this ${moduleLabel(npd.typeOfWork)}.</p>${headActionReason ? `<div style="border-left:3px solid #dc2626;margin:12px 0;padding:8px 14px;background:#fff5f5;color:#7f1d1d;font-style:italic">${headActionReason}</div>` : ""}<p><strong>Action Required:</strong> Please initiate alternative vendor selection and re-run the feasibility and sample evaluation process for a suitable supplier.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`}
                               />
                             </div>
                           )
@@ -3630,16 +3632,15 @@ export default function NpdDetailView() {
                           {(() => {
                             const spocContact = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
                             const rndUser = npd.raisedBy === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name
-                            const allV = Object.values(VENDOR_CATALOG).flat()
-                            const vRec = allV.find(v => v.name === npd.supplier)
-                            const supplierSpoc = vRec?.spocName ?? (npd.supplier || "Supplier")
+                            const vRec = allVendors.find(v => v.company_name === npd.supplier)
+                            const supplierSpoc = vRec?.contact_person_name ?? (npd.supplier || "Supplier")
                             return (
                               <div className="space-y-3">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notifications Sent</p>
                                 <EmailCard
                                   to={npd.supplier ?? "Supplier"}
                                   subject={`Samples Failed Tests & Evaluation — Revised Submission Required: ${npd.itemName} (${npdId})`}
-                                  body={`<p>Dear <strong>${supplierSpoc}</strong>,</p><p>After thorough evaluation, the R&amp;D team has determined that the samples submitted for <em>${npd.itemName}</em> (${npdId}) have <strong style="color:#dc2626">failed the tests and evaluation</strong> and do not meet the required specifications.</p>${rejectReason ? `<div style="border-left:3px solid #dc2626;margin:12px 0;padding:8px 14px;background:#fff5f5;color:#7f1d1d;font-style:italic">${rejectReason}</div>` : ""}<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr></table><p>Kindly review the evaluation remarks and provide a revised sample submission timeline at the earliest. Our sourcing team will coordinate the next steps.</p><p>Regards,<br/><strong>${rndUser}</strong></p>`}
+                                  body={`<p>Dear <strong>${supplierSpoc}</strong>,</p><p>After thorough evaluation, the R&amp;D team has determined that the samples submitted for <em>${npd.itemName}</em> (${npdId}) have <strong style="color:#dc2626">failed the tests and evaluation</strong> and do not meet the required specifications.</p>${rejectReason ? `<div style="border-left:3px solid #dc2626;margin:12px 0;padding:8px 14px;background:#fff5f5;color:#7f1d1d;font-style:italic">${rejectReason}</div>` : ""}<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr></table><p>Kindly review the evaluation remarks and provide a revised sample submission timeline at the earliest. Our sourcing team will coordinate the next steps.</p><p>Regards,<br/><strong>${rndUser}</strong></p>`}
                                 />
                                 <EmailCard
                                   to={spocContact.name}
@@ -3661,12 +3662,12 @@ export default function NpdDetailView() {
                           <EmailCard
                             to={npd.supplier}
                             subject={`✓ Testing Complete — ${npdId}: ${npd.itemName}`}
-                            body={`<p>Dear <strong>${npd.supplier}</strong>,</p><p>We are pleased to inform you that the R&amp;D testing for the following part has been completed and approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Category</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ R&amp;D Testing Approved</td></tr></table><p>Our sourcing team will be in touch shortly with delivery location and sample quantity details. Please be ready to confirm your delivery date.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                            body={`<p>Dear <strong>${npd.supplier}</strong>,</p><p>We are pleased to inform you that the R&amp;D testing for the following part has been completed and approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Category</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ R&amp;D Testing Approved</td></tr></table><p>Our sourcing team will be in touch shortly with delivery location and sample quantity details. Please be ready to confirm your delivery date.</p><p style="color:#64748b;font-size:12px">Amber R&amp;D System</p>`}
                           />
                           <EmailCard
                             to={npd.spoc}
                             subject={`TQR Approved — Action Required: Set Delivery Details for ${npdId}`}
-                            body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The TQR evaluation for the following NPD has been fully approved by the R&amp;D Head.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table><p><strong>Next Step:</strong> Please log in to the NPD system and fill in the delivery location and required sample quantity (Stage 7 — Sample Dispatch &amp; R&D Acceptance). The supplier delivery date request will be sent automatically once you submit.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                            body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The TQR evaluation for the following ${moduleLabel(npd.typeOfWork)} has been fully approved by the R&amp;D Head.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table><p><strong>Next Step:</strong> Please log in to the NPD system and fill in the delivery location and required sample quantity (Stage 7 — Sample Dispatch &amp; R&D Acceptance). The supplier delivery date request will be sent automatically once you submit.</p><p style="color:#64748b;font-size:12px">Amber R&amp;D System</p>`}
                           />
                           <PushSentBadge to={npd.supplier} />
                           <PushSentBadge to={npd.spoc} />
@@ -3948,7 +3949,7 @@ export default function NpdDetailView() {
                                   <EmailCard
                                     to={DEFAULT_RND_HEAD.name}
                                     subject={`TQR Sign-off Required — ${npdId}: ${npd.itemName}`}
-                                    body={`<p>Dear <strong>${DEFAULT_RND_HEAD.name}</strong>,</p><p>The R&amp;D User has completed the TQR evaluation for the following NPD and it is awaiting your final sign-off.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Category</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table>${tests.length > 0 ? `<p><strong>Test Evaluation Results:</strong></p><table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px"><thead><tr style="background:#1e3a5f;color:#fff"><th style="padding:7px 10px;text-align:left">Test</th><th style="padding:7px 10px;text-align:left">Type</th><th style="padding:7px 10px;text-align:center">Unit</th><th style="padding:7px 10px;text-align:center">Expected</th><th style="padding:7px 10px;text-align:center">Result</th></tr></thead><tbody>${evalTableRows}</tbody></table>` : ""}<p>Please log in to review and provide your final approval or rejection.</p><p style="color:#64748b;font-size:12px">Amber Enterprises R&amp;D System</p>`}
+                                    body={`<p>Dear <strong>${DEFAULT_RND_HEAD.name}</strong>,</p><p>The R&amp;D User has completed the TQR evaluation for the following ${moduleLabel(npd.typeOfWork)} and it is awaiting your final sign-off.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Category</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr></table>${tests.length > 0 ? `<p><strong>Test Evaluation Results:</strong></p><table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px"><thead><tr style="background:#1e3a5f;color:#fff"><th style="padding:7px 10px;text-align:left">Test</th><th style="padding:7px 10px;text-align:left">Type</th><th style="padding:7px 10px;text-align:center">Unit</th><th style="padding:7px 10px;text-align:center">Expected</th><th style="padding:7px 10px;text-align:center">Result</th></tr></thead><tbody>${evalTableRows}</tbody></table>` : ""}<p>Please log in to review and provide your final approval or rejection.</p><p style="color:#64748b;font-size:12px">Amber R&amp;D System</p>`}
                                   />
                                   <PushSentBadge to={DEFAULT_RND_HEAD.name} />
                                 </div>
@@ -4545,10 +4546,10 @@ export default function NpdDetailView() {
                   )}
 
                   {(activeStage === 7 || activeStage > 7) && (() => {
-                    const s6supplierSpoc = Object.values(VENDOR_CATALOG).flat().find(v => v.name === npd.supplier)?.spocName ?? npd.supplier
+                    const s6supplierSpoc = allVendors.find(v => v.company_name === npd.supplier)?.contact_person_name ?? npd.supplier
                     const s6spocContact = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
-                    const toSourcingBody = `<p>Dear <strong>${s6spocContact.name}</strong>,</p><p>This is to inform you that R&amp;D testing for the following NPD has been successfully completed and approved by the R&amp;D Head. A part number has been assigned.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">TQR Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p><strong>Action Required:</strong> Kindly log in to the NPD portal and provide the <strong>delivery location</strong> and <strong>required sample quantity</strong> under Stage 7 — Sample Dispatch &amp; R&D Acceptance so we can proceed with the supplier delivery request.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`
-                    const toSupplierBody = `<p>Dear <strong>${s6supplierSpoc}</strong>,</p><p>We are pleased to inform you that the R&amp;D evaluation for your submitted samples has been successfully completed and approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Testing Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p>Our sourcing team will be in touch shortly with the delivery location and required sample quantity. Please be prepared to confirm your delivery date upon receiving the portal link.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`
+                    const toSourcingBody = `<p>Dear <strong>${s6spocContact.name}</strong>,</p><p>This is to inform you that R&amp;D testing for the following ${moduleLabel(npd.typeOfWork)} has been successfully completed and approved by the R&amp;D Head. A part number has been assigned.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">TQR Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p><strong>Action Required:</strong> Kindly log in to the portal and provide the <strong>delivery location</strong> and <strong>required sample quantity</strong> under Stage 7 — Sample Dispatch &amp; R&D Acceptance so we can proceed with the supplier delivery request.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`
+                    const toSupplierBody = `<p>Dear <strong>${s6supplierSpoc}</strong>,</p><p>We are pleased to inform you that the R&amp;D evaluation for your submitted samples has been successfully completed and approved.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Assigned Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-family:monospace;font-weight:700;color:#1e3a5f">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Testing Status</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#059669">✓ Approved</td></tr></table><p>Our sourcing team will be in touch shortly with the delivery location and required sample quantity. Please be prepared to confirm your delivery date upon receiving the portal link.</p><p>Regards,<br/><strong>${DEFAULT_RND_HEAD.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Head, Amber Enterprises</span></p>`
                     return (
                       <>
                         {activeStage === 7 && (
@@ -4644,12 +4645,12 @@ export default function NpdDetailView() {
                         <div className="space-y-2">
                           {(() => {
                             const spocContact8 = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
-                            const verdictTable = `<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:${plantVerdict === "accepted" ? "#059669" : "#dc2626"}">${plantVerdict === "accepted" ? "✓ Accepted — Approved for Production" : "✗ Not Good — Returned for Revision"}</td></tr>${plantRemarks ? `<tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table>`
+                            const verdictTable = `<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Part No.</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:${plantVerdict === "accepted" ? "#059669" : "#dc2626"}">${plantVerdict === "accepted" ? "✓ Accepted — Approved for Production" : "✗ Not Good — Returned for Revision"}</td></tr>${plantRemarks ? `<tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table>`
                             const rndBody = plantVerdict === "accepted"
-                              ? `<p>Dear <strong>${DEFAULT_RND_CONTACT.name}</strong>,</p><p>The R&amp;D testing verdict for the following NPD has been accepted. The part is approved for production and this NPD is now complete.</p>${verdictTable}<p>No further action is required from your end. Please archive the evaluation records accordingly.</p><p>Regards,<br/><strong>${spocContact8.name}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing SPOC, Amber Enterprises</span></p>`
-                              : `<p>Dear <strong>${DEFAULT_RND_CONTACT.name}</strong>,</p><p>The R&amp;D testing verdict for the following NPD has been returned for revision. The part did not meet the required standards.</p>${verdictTable}<p>This part number has been recorded. When raising a new revision request, please reference <strong>${assignedPartNumber}</strong> in the previous part number field.</p><p>Regards,<br/><strong>${spocContact8.name}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing SPOC, Amber Enterprises</span></p>`
+                              ? `<p>Dear <strong>${DEFAULT_RND_CONTACT.name}</strong>,</p><p>The R&amp;D testing verdict for the following ${moduleLabel(npd.typeOfWork)} has been accepted. The part is approved for production and this NPD is now complete.</p>${verdictTable}<p>No further action is required from your end. Please archive the evaluation records accordingly.</p><p>Regards,<br/><strong>${spocContact8.name}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing SPOC, Amber Enterprises</span></p>`
+                              : `<p>Dear <strong>${DEFAULT_RND_CONTACT.name}</strong>,</p><p>The R&amp;D testing verdict for the following ${moduleLabel(npd.typeOfWork)} has been returned for revision. The part did not meet the required standards.</p>${verdictTable}<p>This part number has been recorded. When raising a new revision request, please reference <strong>${assignedPartNumber}</strong> in the previous part number field.</p><p>Regards,<br/><strong>${spocContact8.name}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing SPOC, Amber Enterprises</span></p>`
                             const spocBody = plantVerdict === "accepted"
-                              ? `<p>Dear <strong>${spocContact8.name}</strong>,</p><p>The R&amp;D testing verdict for <em>${npd.itemName}</em> (${npdId}) has been accepted and approved for production. This NPD is now complete.</p>${verdictTable}<p>Please update your records and close out any pending sourcing actions for this NPD.</p><p>Regards,<br/><strong>${DEFAULT_RND_CONTACT.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Team, Amber Enterprises</span></p>`
+                              ? `<p>Dear <strong>${spocContact8.name}</strong>,</p><p>The R&amp;D testing verdict for <em>${npd.itemName}</em> (${npdId}) has been accepted and approved for production. This ${moduleLabel(npd.typeOfWork)} is now complete.</p>${verdictTable}<p>Please update your records and close out any pending sourcing actions for this ${moduleLabel(npd.typeOfWork)}.</p><p>Regards,<br/><strong>${DEFAULT_RND_CONTACT.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Team, Amber Enterprises</span></p>`
                               : `<p>Dear <strong>${spocContact8.name}</strong>,</p><p>The R&amp;D testing verdict for <em>${npd.itemName}</em> (${npdId}) has been returned for revision. The part did not meet the required standards.</p>${verdictTable}<p>Please coordinate with the supplier to initiate a revised sample submission at the earliest.</p><p>Regards,<br/><strong>${DEFAULT_RND_CONTACT.name}</strong><br/><span style="color:#64748b;font-size:12px">R&amp;D Team, Amber Enterprises</span></p>`
                             return (
                               <>
@@ -4757,12 +4758,12 @@ export default function NpdDetailView() {
                 </div>
               )}
 
-              {/* ── Stage 9: NPD Summary & Closure — NCD/NPD only ── */}
+              {/* ── Stage 9: Summary & Closure — NCD/NPD only ── */}
               {!isECN && !isAltSupplier && activeStage >= 9 && (
                 <div className="rounded-xl border border-emerald-300 bg-emerald-50/40 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <h4 className="font-bold text-slate-800 text-sm">Stage 9 — NPD Summary &amp; Closure</h4>
+                    <h4 className="font-bold text-slate-800 text-sm">Stage 9 — {getStageName(9, npd.typeOfWork)}</h4>
                     <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs ml-auto">
                       {plantVerdict === "accepted" ? "Part Accepted" : plantVerdict === "not_good" ? "Not Good" : "Complete"}
                     </Badge>
@@ -4771,8 +4772,8 @@ export default function NpdDetailView() {
                     {plantVerdict === "accepted"
                       ? `Part No. ${assignedPartNumber} accepted and approved for production. Full lifecycle record is available below.`
                       : plantVerdict === "not_good"
-                      ? `Part No. ${assignedPartNumber} marked not good. NPD closed — refer to summary below.`
-                      : "NPD lifecycle complete. View the full summary and MIS report below."}
+                      ? `Part No. ${assignedPartNumber} marked not good. ${moduleLabel(npd.typeOfWork)} closed — refer to summary below.`
+                      : `${moduleLabel(npd.typeOfWork)} lifecycle complete. View the full summary and MIS report below.`}
                   </p>
                 </div>
               )}
@@ -4888,9 +4889,8 @@ export default function NpdDetailView() {
                                   subject={`R&D Clarification — ${npdId}: ${npd.itemName}`}
                                   body={(() => {
                                     const portalUrl = `${baseUrl}/supplier/quote/${npdId}?vendor=${encodeURIComponent(vendorName)}`
-                                    const allVendors = Object.values(VENDOR_CATALOG).flat()
-                                    const vRec = allVendors.find(v => v.name === vendorName)
-                                    const vSpoc = vRec?.spocName ?? vendorName
+                                    const vRec = allVendors.find(v => v.company_name === vendorName)
+                                    const vSpoc = vRec?.contact_person_name ?? vendorName
                                     const rndUser = npd.raisedBy === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name
                                     return `<p>Dear <strong>${vSpoc}</strong>,</p><p>Thank you for your query regarding <strong>${npd.itemName}</strong> (${npdId}). Our R&amp;D team has reviewed it and provided the following clarification:</p><blockquote style="border-left:3px solid #1e3a5f;margin:12px 0;padding:8px 14px;background:#f8fafc;color:#1e293b;font-style:italic">${lq.query}</blockquote><p><strong>R&amp;D Response:</strong><br/>${lq.rndReply}</p>${lq.rndReplyDoc ? `<p style="font-size:12px;color:#64748b">Attached document: ${lq.rndReplyDoc}</p>` : ""}<p>Based on this clarification, kindly re-assess your feasibility and submit your updated response using the link below.</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Re-Assess &amp; Submit Response →</a></div><p>Regards,<br/><strong>${rndUser}</strong></p>`
                                   })()}
@@ -5153,14 +5153,14 @@ export default function NpdDetailView() {
         )
       })()}
 
-      {/* ═══════════════════ STAGE 9 — NPD SUMMARY & CLOSURE (NCD/NPD only) ═══════════════════ */}
+      {/* ═══════════════════ STAGE 9 — SUMMARY & CLOSURE (NCD/NPD only) ═══════════════════ */}
       {!isECN && !isAltSupplier && activeStage >= 9 && (
         <Card className="border-emerald-200 shadow-sm">
           <CardHeader className="bg-emerald-50 border-b border-emerald-200 pb-3">
             <CardTitle className="text-emerald-900 flex items-center gap-2 text-base">
-              <CheckCircle2 className="w-5 h-5" /> Stage 9 — NPD Summary &amp; Closure
+              <CheckCircle2 className="w-5 h-5" /> Stage 9 — {getStageName(9, npd.typeOfWork)}
             </CardTitle>
-            <p className="text-xs text-emerald-700 mt-0.5">Full lifecycle record for this NPD. View the complete MIS report.</p>
+            <p className="text-xs text-emerald-700 mt-0.5">Full lifecycle record for this {moduleLabel(npd.typeOfWork)}. View the complete MIS report.</p>
           </CardHeader>
           <CardContent className="pt-5 space-y-5">
 
@@ -5169,7 +5169,7 @@ export default function NpdDetailView() {
               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">A. Project Details</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                 {[
-                  { label: "NPD ID",      value: npdId },
+                  { label: `${moduleLabel(npd.typeOfWork)} ID`,      value: npdId },
                   { label: "Item",        value: npd.itemName },
                   { label: "Category",    value: npd.itemCategory },
                   { label: "Product Line",value: npd.productLine },
@@ -5346,7 +5346,7 @@ export default function NpdDetailView() {
             <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-slate-100">
               <Link href={`/report/${npdId}`}>
                 <Button className="bg-emerald-700 hover:bg-emerald-600 text-white">
-                  <FileText className="w-4 h-4 mr-2" /> View NPD Report
+                  <FileText className="w-4 h-4 mr-2" /> View {moduleLabel(npd.typeOfWork)} Report
                 </Button>
               </Link>
 
@@ -6345,8 +6345,8 @@ export default function NpdDetailView() {
             <Card className="transition-shadow duration-200 hover:shadow-md">
               <CardContent className="py-8 text-center text-slate-400">
                 <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-medium">Waiting for NPD request to be initiated</p>
-                <p className="text-xs mt-1">This section unlocks once the NPD reaches Stage 2.</p>
+                <p className="text-sm font-medium">Waiting for {moduleLabel(npd.typeOfWork)} request to be initiated</p>
+                <p className="text-xs mt-1">This section unlocks once the request reaches Stage 2.</p>
               </CardContent>
             </Card>
           ) : activeStage === 8 ? (
@@ -6675,19 +6675,14 @@ export default function NpdDetailView() {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {vendors.map(v => {
-                            const isSelected = selectedVendors.has(v.name)
-                            const scoreColor = v.isRequested ? "text-slate-400" :
-                              v.auditScore >= 85 ? "text-emerald-700" :
-                              v.auditScore >= 70 ? "text-blue-700" : "text-amber-700"
-                            const matchColor = v.commodityMatch >= 90 ? "text-emerald-600" :
-                              v.commodityMatch >= 75 ? "text-amber-600" : "text-red-500"
+                            const isSelected = selectedVendors.has(v.company_name)
                             return (
                               <tr
-                                key={v.name}
+                                key={v.company_name}
                                 onClick={() => setSelectedVendors(prev => {
                                   const next = new Set(prev)
-                                  if (next.has(v.name)) next.delete(v.name)
-                                  else next.add(v.name)
+                                  if (next.has(v.company_name)) next.delete(v.company_name)
+                                  else next.add(v.company_name)
                                   return next
                                 })}
                                 className={`cursor-pointer transition-colors ${isSelected ? "bg-blue-50 hover:bg-blue-50" : "hover:bg-slate-50"}`}
@@ -6699,24 +6694,17 @@ export default function NpdDetailView() {
                                 </td>
                                 <td className="px-3 py-3">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-slate-900 text-[13px]">{v.name}</span>
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                      v.isRequested ? "bg-purple-100 text-purple-700" :
-                                      v.tier === "Tier 1" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"
-                                    }`}>{v.isRequested ? "NEW" : v.tier}</span>
+                                    <span className="font-semibold text-slate-900 text-[13px]">{v.company_name}</span>
+                                    {v.isRequested && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">NEW</span>
+                                    )}
                                   </div>
-                                  {!v.isRequested && (
-                                    <p className="text-[11px] text-slate-400 mt-0.5">
-                                      Match: <span className={`font-bold ${matchColor}`}>{v.commodityMatch}%</span>
-                                      {v.certifications.length > 0 && <span className="ml-2 text-slate-400">· {v.certifications.slice(0, 2).join(" · ")}</span>}
-                                    </p>
-                                  )}
                                 </td>
                                 <td className="px-3 py-3">
-                                  {v.spocName ? (
+                                  {v.contact_person_name ? (
                                     <div>
-                                      <p className="text-[12px] font-semibold text-slate-800">{v.spocName}</p>
-                                      {v.spocPhone && <p className="text-[10px] text-slate-400 mt-0.5">{v.spocPhone}</p>}
+                                      <p className="text-[12px] font-semibold text-slate-800">{v.contact_person_name}</p>
+                                      {v.phone_number && <p className="text-[10px] text-slate-400 mt-0.5">{v.phone_number}</p>}
                                     </div>
                                   ) : <span className="text-[11px] text-slate-400 italic">—</span>}
                                 </td>
@@ -6724,16 +6712,7 @@ export default function NpdDetailView() {
                                   {v.isRequested ? (
                                     <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">Pending NDA</span>
                                   ) : (
-                                    <div className="flex flex-col gap-1">
-                                      <span className={`text-[11px] font-bold ${scoreColor}`}>{v.auditScore}/100</span>
-                                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full w-fit ${
-                                        v.status === "verified" ? "bg-emerald-50 text-emerald-700" :
-                                        v.status === "audit_overdue" ? "bg-amber-50 text-amber-700" :
-                                        "bg-blue-50 text-blue-600"
-                                      }`}>
-                                        {v.status === "verified" ? "Verified" : v.status === "audit_overdue" ? "Audit Due" : "New"}
-                                      </span>
-                                    </div>
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Active</span>
                                   )}
                                 </td>
                               </tr>
@@ -6855,16 +6834,15 @@ export default function NpdDetailView() {
                           {Array.from(selectedVendors).map(vName => {
                             const status = ndaStatuses[vName]
                             const ndaUrl = `${baseUrl}/supplier/nda/${npdId}?vendor=${encodeURIComponent(vName)}`
-                            const allCatalogVendors = Object.values(VENDOR_CATALOG).flat()
-                            const vendorRecord = allCatalogVendors.find(v => v.name === vName)
-                            const vendorSpocName = vendorRecord?.spocName ?? vName
-                            const vendorSpocEmail = vendorRecord?.spocEmail ?? ""
+                            const vendorRecord = allVendors.find(v => v.company_name === vName)
+                            const vendorSpocName = vendorRecord?.contact_person_name ?? vName
+                            const vendorSpocEmail = vendorRecord?.email ?? ""
 
                             // Email sent TO vendor asking them to sign (pending state)
                             const ndaInviteBody = `<p>Dear <strong>${vendorSpocName}</strong>,</p><p>Amber Enterprises India Limited is initiating a new development project and would like to engage <strong>${vName}</strong> as a potential partner.</p><p>Before we can share any technical specifications or project details, we require your organisation to sign a <strong>Non-Disclosure Agreement (NDA)</strong> to protect the confidentiality of the information involved.</p><p>Please use the link below to review and digitally sign the NDA at your earliest convenience to proceed with this project.</p><div style="margin:16px 0;"><a href="${ndaUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Review &amp; Sign NDA →</a></div><p>Should you have any questions before signing, please do not hesitate to reach out.</p><p>Regards,<br/><strong>${npd.spoc}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing Team, Amber Enterprises India Limited</span></p>`
 
                             // Email sent TO sourcing once vendor signs (internal notification)
-                            const ndaSignedToSourcingBody = `<p>Dear <strong>${npd.spoc}</strong>,</p><p>This is to inform you that <strong>${vName}</strong> has successfully signed the Non-Disclosure Agreement for the project referenced below.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">Vendor</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${vName}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Signed By</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${status?.signedBy ?? "—"}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Signed At</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${status?.signedAt ?? "—"}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">NPD Reference</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr></table><p>You may now proceed with sharing the project specifications with this vendor.</p><p>Regards,<br/><strong>Amber NPD Portal</strong><br/><span style="color:#64748b;font-size:12px">Automated notification — Amber Enterprises India Limited</span></p>`
+                            const ndaSignedToSourcingBody = `<p>Dear <strong>${npd.spoc}</strong>,</p><p>This is to inform you that <strong>${vName}</strong> has successfully signed the Non-Disclosure Agreement for the project referenced below.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:12px"><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;width:40%">Vendor</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${vName}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Signed By</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${status?.signedBy ?? "—"}</td></tr><tr style="background:#f8fafc"><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">Signed At</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${status?.signedAt ?? "—"}</td></tr><tr><td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">${moduleLabel(npd.typeOfWork)} Reference</td><td style="padding:7px 10px;border:1px solid #e2e8f0">${npdId}</td></tr></table><p>You may now proceed with sharing the project specifications with this vendor.</p><p>Regards,<br/><strong>Amber Portal</strong><br/><span style="color:#64748b;font-size:12px">Automated notification — Amber Enterprises India Limited</span></p>`
 
                             // Confirmation email sent TO vendor after signing
                             const ndaSignedToVendorBody = `<p>Dear <strong>${vendorSpocName}</strong>,</p><p>Thank you for signing the Non-Disclosure Agreement with <strong>Amber Enterprises India Limited</strong>. Your digital signature has been successfully recorded on <strong>${status?.signedAt ?? "—"}</strong>.</p><p>You are now authorised to receive confidential project specifications. Our sourcing team will be in touch with further details shortly.</p><p>We look forward to working with you on this project.</p><p>Regards,<br/><strong>${npd.spoc}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing Team, Amber Enterprises India Limited</span></p>`
@@ -7364,9 +7342,8 @@ export default function NpdDetailView() {
                               subject={`R&D Clarification — ${npdId}: ${npd.itemName}`}
                               body={(() => {
                                 const portalUrl = `${baseUrl}/supplier/quote/${npdId}?vendor=${encodeURIComponent(v.vendorName)}`
-                                const allVendors2 = Object.values(VENDOR_CATALOG).flat()
-                                const vRec2 = allVendors2.find(vv => vv.name === v.vendorName)
-                                const vSpoc2 = vRec2?.spocName ?? v.vendorName
+                                const vRec2 = allVendors.find(vv => vv.company_name === v.vendorName)
+                                const vSpoc2 = vRec2?.contact_person_name ?? v.vendorName
                                 const rndUser2 = npd.raisedBy === "rnd_head" ? DEFAULT_RND_HEAD.name : DEFAULT_RND_CONTACT.name
                                 return `<p>Dear <strong>${vSpoc2}</strong>,</p><p>Thank you for your query regarding <strong>${npd.itemName}</strong> (${npdId}). Our R&amp;D team has reviewed it and provided the following clarification:</p><blockquote style="border-left:3px solid #1e3a5f;margin:12px 0;padding:8px 14px;background:#f8fafc;color:#1e293b;font-style:italic">${live.query}</blockquote><p><strong>R&amp;D Response:</strong><br/>${live.rndReply}</p>${live.rndReplyDoc ? `<p style="font-size:12px;color:#64748b">Attached document: ${live.rndReplyDoc}</p>` : ""}<p>Based on this clarification, kindly re-assess your feasibility and submit your updated response using the link below.</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Re-Assess &amp; Submit Response →</a></div><p>Regards,<br/><strong>${rndUser2}</strong></p>`
                               })()}
@@ -7857,9 +7834,8 @@ export default function NpdDetailView() {
                 {sentVendors.map(vendor => {
                   const dispatch = multiDispatch[vendor]
                   const dispatchUrl = `${baseUrl}/supplier/dispatch/${npdId}?vendor=${encodeURIComponent(vendor)}`
-                  const allV = Object.values(VENDOR_CATALOG).flat()
-                  const vRec = allV.find(v => v.name === vendor)
-                  const vSpoc = vRec?.spocName ?? vendor
+                  const vRec = allVendors.find(v => v.company_name === vendor)
+                  const vSpoc = vRec?.contact_person_name ?? vendor
                   return (
                     <div key={vendor} className={`rounded-lg border p-4 ${dispatch ? "border-emerald-200 bg-emerald-50" : "border-orange-200 bg-white"}`}>
                       <div className="flex items-center justify-between gap-3 mb-3">
@@ -7934,7 +7910,7 @@ export default function NpdDetailView() {
           {/* ── Section 2b: Sample Dispatch (stage 7) — NCD/NPD only ─────── */}
           {!isECN && !isAltSupplier && activeStage >= 8 && activeStage < 9 && (() => {
             const supplier = npd.supplier && npd.supplier !== "Pending Assignment" ? npd.supplier : sentVendors[0] ?? ""
-            const supplierSpoc7 = Object.values(VENDOR_CATALOG).flat().find(v => v.name === supplier)?.spocName ?? supplier
+            const supplierSpoc7 = allVendors.find(v => v.company_name === supplier)?.contact_person_name ?? supplier
             const spocContact7 = SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }
             const portalUrl = supplier ? `${baseUrl}/supplier/plant-delivery/${npdId}?vendor=${encodeURIComponent(supplier)}` : ""
             return (
@@ -8021,7 +7997,7 @@ export default function NpdDetailView() {
                                   <EmailCard
                                     to={supplierSpoc7}
                                     subject={`Delivery Date Request — ${npdId}: ${npd.itemName}`}
-                                    body={`<p>Dear <strong>${supplierSpoc7}</strong>,</p><p>R&amp;D testing for <em>${npd.itemName}</em> (${npdId}) has been successfully completed and approved. We now require sample delivery to our facility at the details below.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#1e3a5f"><td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px;color:#fff;letter-spacing:0.04em">Part No. ${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Delivery Location</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${deliveryLocation}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Required Quantity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${deliveryReqQty} pcs</td></tr></table><p>Kindly confirm your delivery date at the earliest by clicking the link below:</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Confirm Delivery Date →</a></div><p>Regards,<br/><strong>${spocContact7.name}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing SPOC, Amber Enterprises</span></p>`}
+                                    body={`<p>Dear <strong>${supplierSpoc7}</strong>,</p><p>R&amp;D testing for <em>${npd.itemName}</em> (${npdId}) has been successfully completed and approved. We now require sample delivery to our facility at the details below.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#1e3a5f"><td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px;color:#fff;letter-spacing:0.04em">Part No. ${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Commodity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemCategory}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Delivery Location</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${deliveryLocation}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Required Quantity</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${deliveryReqQty} pcs</td></tr></table><p>Kindly confirm your delivery date at the earliest by clicking the link below:</p><div style="margin:16px 0;"><a href="${portalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;font-size:14px;padding:10px 24px;border-radius:8px;text-decoration:none;">Confirm Delivery Date →</a></div><p>Regards,<br/><strong>${spocContact7.name}</strong><br/><span style="color:#64748b;font-size:12px">Sourcing SPOC, Amber Enterprises</span></p>`}
                                   />
                                 </>
                               )}
@@ -8049,7 +8025,7 @@ export default function NpdDetailView() {
                               <EmailCard
                                 to={npd.spoc}
                                 subject={`[${plantVerdict === "accepted" ? "✓ Accepted" : "✗ Not Good"}] R&D Testing Verdict — ${npdId}`}
-                                body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The plant testing verdict for the following NPD has been submitted.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#1e3a5f"><td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px;color:#fff;letter-spacing:0.04em">Part No. ${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">NPD ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:${plantVerdict === "accepted" ? "#059669" : "#dc2626"}">${plantVerdict === "accepted" ? "✓ Accepted — Approved for Production" : "✗ Not Good — Returned for Revision"}</td></tr>${plantRemarks ? `<tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table><p style="color:#64748b;font-size:12px">Amber Enterprises R&D Team</p>`}
+                                body={`<p>Dear <strong>${npd.spoc}</strong>,</p><p>The plant testing verdict for the following ${moduleLabel(npd.typeOfWork)} has been submitted.</p><table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px"><tr style="background:#1e3a5f"><td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px;color:#fff;letter-spacing:0.04em">Part No. ${assignedPartNumber}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;width:40%">${moduleLabel(npd.typeOfWork)} ID</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npdId}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Item</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.itemName}</td></tr><tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${npd.supplier}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Verdict</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:${plantVerdict === "accepted" ? "#059669" : "#dc2626"}">${plantVerdict === "accepted" ? "✓ Accepted — Approved for Production" : "✗ Not Good — Returned for Revision"}</td></tr>${plantRemarks ? `<tr style="background:#f8fafc"><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">Remarks</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-style:italic">${plantRemarks}</td></tr>` : ""}</table><p style="color:#64748b;font-size:12px">Amber Enterprises R&D Team</p>`}
                               />
                               <PushSentBadge to={npd.spoc} />
                             </>

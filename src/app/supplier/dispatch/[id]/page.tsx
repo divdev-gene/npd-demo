@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import { mockNPDs, SPOC_CONTACTS, VENDOR_CATALOG, DEFAULT_RND_CONTACT, MULTI_DISPATCH_KEY, type NPDRecord } from "@/lib/mockData"
+import { fetchVendors, type VmsVendor } from "@/lib/vendors"
+import { mockNPDs, SPOC_CONTACTS, DEFAULT_RND_CONTACT, MULTI_DISPATCH_KEY, type NPDRecord } from "@/lib/mockData"
 import {
   CheckCircle, CheckCircle2, UploadCloud, Truck, UserCircle, Mail,
 } from "lucide-react"
@@ -18,6 +19,8 @@ export default function SupplierDispatchPage() {
   const [vendorName,   setVendorName]   = useState("")
   const [proofDoc,     setProofDoc]     = useState("")
   const [submitted,    setSubmitted]    = useState(false)
+  const [allVendors, setAllVendors] = useState<VmsVendor[]>([])
+  useEffect(() => { fetchVendors().then(setAllVendors) }, [])
   const [dispatchDate, setDispatchDate] = useState("")
 
   useEffect(() => {
@@ -71,9 +74,8 @@ export default function SupplierDispatchPage() {
 
   if (submitted) {
     const spocContact = npd ? (SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }) : { name: "", email: "", phone: "" }
-    const allCatalogV = Object.values(VENDOR_CATALOG).flat()
-    const vendorRec   = allCatalogV.find(v => v.name === vendorName)
-    const vendorSpoc  = vendorRec?.spocName ?? vendorName
+    const vendorRec   = allVendors.find(v => v.company_name === vendorName)
+    const vendorSpoc  = vendorRec?.contact_person_name ?? vendorName
     const etaFormatted = dispatchDate ? new Date(dispatchDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "Not specified"
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">

@@ -19,7 +19,8 @@ import {
   getActiveCommodities, allCommoditiesAcknowledged,
   allInspectionsSubmitted,
 } from "@/lib/ntd"
-import { VENDOR_CATALOG } from "@/lib/mockData"
+import { fetchVendors, type VmsVendor } from "@/lib/vendors"
+import { commodityCodeToName } from "@/lib/mockData"
 import { NTD_COMMODITIES, type NTDCommodity, type PriceCategory, type ComponentCategorySelection } from "@/types/ntd"
 import type { NTDRecord, NTDStage, NTDRole, NTDRFQData, NTDMfgData, NTDStage2Query } from "@/types/ntd"
 import { ActivityFeed } from "@/components/ntd/ActivityFeed"
@@ -151,6 +152,9 @@ export default function NTDDetailPage() {
     reader.onload = () => onDone(reader.result as string, file.name)
     reader.readAsDataURL(file)
   }
+
+  const [allVendors, setAllVendors] = useState<VmsVendor[]>([])
+  useEffect(() => { fetchVendors().then(setAllVendors) }, [])
 
   // Stage 11
   const [s11Step, setS11Step] = useState<1 | 2 | 3 | 4 | 5 | 6>(1)
@@ -977,7 +981,9 @@ export default function NTDDetailPage() {
         return (
           <div className="space-y-5">
             {activeCommodities.map(commodity => {
-              const catalogVendors = (VENDOR_CATALOG as Record<string, { name: string; tier: string; spocName?: string }[]>)[commodity] ?? []
+              const catalogVendors = allVendors.filter(v =>
+                v.commodity_code === commodity || v.business_vertical === commodity
+              )
 
               return (
                 <div key={commodity} className="border border-slate-200 rounded-xl overflow-hidden">
@@ -988,13 +994,13 @@ export default function NTDDetailPage() {
                   <div className="p-4 space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {catalogVendors.map(cv => {
-                        const existingEntry = Object.entries(vendors).find(([, v]) => v.vendor_name === cv.name && v.commodity === commodity)
+                        const existingEntry = Object.entries(vendors).find(([, v]) => v.vendor_name === cv.company_name && v.commodity === commodity)
                         const isAdded = !!existingEntry
                         const [existingId, existingVendor] = existingEntry ?? ["", null]
                         const rfqUrl = existingVendor ? `${baseUrl}/rfq/ntd/${id}/${existingVendor.token}` : ""
 
                         return (
-                          <div key={cv.name} className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${isAdded ? "border-indigo-200 bg-indigo-50" : "border-slate-200 bg-white"}`}>
+                          <div key={cv.company_name} className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${isAdded ? "border-indigo-200 bg-indigo-50" : "border-slate-200 bg-white"}`}>
                             <input type="checkbox" checked={isAdded}
                               onChange={() => {
                                 if (isAdded) {
@@ -1002,13 +1008,13 @@ export default function NTDDetailPage() {
                                   setNTDRFQ(id, { vendors: rest })
                                   reload()
                                 } else {
-                                  handleAddVendorToRFQ(cv.name, true, commodity)
+                                  handleAddVendorToRFQ(cv.company_name, true, commodity)
                                 }
                               }}
                               className="mt-0.5 rounded border-slate-300 accent-indigo-600" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-slate-800">{cv.name}</p>
-                              <p className="text-xs text-slate-400">{cv.tier}{cv.spocName ? ` · ${cv.spocName}` : ""}</p>
+                              <p className="text-xs font-semibold text-slate-800">{cv.company_name}</p>
+                              <p className="text-xs text-slate-400">{cv.business_vertical}{cv.contact_person_name ? ` · ${cv.contact_person_name}` : ""}</p>
                               {isAdded && existingVendor && (
                                 <div className="flex items-center gap-2 mt-1.5">
                                   {existingVendor.sent && (

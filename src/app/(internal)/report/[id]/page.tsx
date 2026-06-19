@@ -11,8 +11,8 @@ import { useNPDs } from "@/lib/npdContext"
 import {
   SUPPLIER_DISPATCH_KEY, DELIVERY_DETAILS_KEY, PLANT_SUPPLIER_RESP_KEY,
   PLANT_ACCEPTANCE_KEY, PART_ASSIGNMENT_KEY, RND_EVAL_KEY,
-  LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY, NPD_STAGES,
-  DEFAULT_RND_CONTACT, getTestsByCategory, getStageName,
+  LIVE_QUOTATIONS_KEY, ENQUIRY_SENT_KEY,   NPD_STAGES,
+  DEFAULT_RND_CONTACT, getTestsByCategory, getStageName, moduleLabel,
   ECN_STAGE1_KEY, ECN_RND_APPROVAL_KEY, ECN_NEGOTIATION_KEY,
   ECN_SOURCING_DISPATCH_KEY, ECN_PRICE_ESTIMATION_KEY,
   ECN_DQA_TESTS_KEY, ECN_HEAD_APPROVAL_KEY, ECN_PLANT_EVAL_KEY,
@@ -651,7 +651,7 @@ export default function ReportPage() {
         </button>
         <span className="text-slate-200">|</span>
         <span className="text-[12px] text-slate-400">
-          {isECN ? "ECN Report" : isAS ? "AS Report" : "NPD Sourcing Report"}
+          {isECN ? "ECN Report" : isAS ? "AS Report" : `${moduleLabel(npd.typeOfWork)} Sourcing Report`}
         </span>
         <ChevronRight className="w-3 h-3 text-slate-300" />
         <span className="text-[12px] font-bold text-slate-700">{npdId}</span>
@@ -672,7 +672,7 @@ export default function ReportPage() {
             <img src="/amber-logo.png" alt="Amber" className="h-8 w-auto object-contain brightness-0 invert opacity-90 mt-0.5 shrink-0" />
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.18em] mb-1">
-                {isECN ? "Engineering Change Notice Report" : isAS ? "Alternative Supplier Report" : "NPD Sourcing Report"}
+                {isECN ? "Engineering Change Notice Report" : isAS ? "Alternative Supplier Report" : `${moduleLabel(npd.typeOfWork)} Sourcing Report`}
               </p>
               <h1 className="text-[22px] font-black text-white leading-tight tracking-tight">
                 {isECN ? (npd.ecnPartName ?? npd.itemName) : npd.itemName}
@@ -764,7 +764,7 @@ export default function ReportPage() {
             )}
 
             {!data.dispatch && (
-              <p className="text-[12px] text-slate-400 italic mt-1">Dispatch not yet recorded for this NPD.</p>
+              <p className="text-[12px] text-slate-400 italic mt-1">Dispatch not yet recorded for this {moduleLabel(npd.typeOfWork)}.</p>
             )}
           </SectionCard>
 
@@ -883,7 +883,7 @@ export default function ReportPage() {
 
       {/* ── Footer ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 px-1">
-        <span>Amber Enterprises India Limited · NPD Sourcing Tracker MIS</span>
+        <span>Amber Enterprises India Limited · {moduleLabel(npd.typeOfWork)} Sourcing Tracker MIS</span>
         <span>Generated on {today} · {npdId}</span>
       </div>
 

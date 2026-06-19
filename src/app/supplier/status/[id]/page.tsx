@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import { mockNPDs, VENDOR_STATUS_KEY, LIVE_QUOTATIONS_KEY, SPOC_CONTACTS, VENDOR_CATALOG, DEFAULT_RND_CONTACT, type NPDRecord, type VendorStatusResponse, type LiveQuotation } from "@/lib/mockData"
+import { fetchVendors, type VmsVendor } from "@/lib/vendors"
+import { mockNPDs, VENDOR_STATUS_KEY, LIVE_QUOTATIONS_KEY, SPOC_CONTACTS, DEFAULT_RND_CONTACT, type NPDRecord, type VendorStatusResponse, type LiveQuotation } from "@/lib/mockData"
 import { CheckCircle2, Clock, AlertCircle, UserCircle, Mail, MessageSquare } from "lucide-react"
 import { SupplierPortalShell } from "@/components/SupplierPortalShell"
 
@@ -23,6 +24,9 @@ export default function VendorStatusPage() {
   const [counterAccepted, setCounterAccepted] = useState<boolean | null>(null)
   const [finalDate,       setFinalDate]       = useState("")
   const [finalNotes,      setFinalNotes]      = useState("")
+  const [allVendors, setAllVendors] = useState<VmsVendor[]>([])
+
+  useEffect(() => { fetchVendors().then(setAllVendors) }, [])
 
   useEffect(() => {
     const qs     = new URLSearchParams(window.location.search)
@@ -206,9 +210,8 @@ export default function VendorStatusPage() {
     const submissionCount = prevResponse?.submissionCount ?? (submitted ? 1 : 0)
     const canUpdate = submissionCount < 2 && !prevResponse?.negotiationStatus
     const spocContact = npd ? (SPOC_CONTACTS[npd.spoc] ?? { name: npd.spoc, email: "", phone: "" }) : { name: "", email: "", phone: "" }
-    const allCatalogV = Object.values(VENDOR_CATALOG).flat()
-    const vendorRec   = allCatalogV.find(v => v.name === vendorName)
-    const vendorSpoc  = vendorRec?.spocName ?? vendorName
+    const vendorRec   = allVendors.find(v => v.company_name === vendorName)
+    const vendorSpoc  = vendorRec?.contact_person_name ?? vendorName
     const revisedDate = resp.newDate ? new Date(resp.newDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : ""
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">

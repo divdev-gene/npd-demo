@@ -10,6 +10,7 @@ import {
   ECN_DQA_TESTS_KEY, ECN_HEAD_APPROVAL_KEY, ECN_PLANT_EVAL_KEY,
   ECN_INITIAL_QUOTE_KEY,
   AS_STAGE1_KEY, AS_RND_APPROVAL_KEY, AS_PLANT_EVAL_KEY,
+  moduleLabel,
 } from "./mockData"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ export const MIS_HEADERS = [
   "Desired Date (TAT)",
   "Desired Qty",
   "Trigger Request",
-  "Allocation to NPD",
+  "Allocation",
   "Enquiry Date",
   "Trigger Acceptance",
   "Allocated Supplier",
@@ -444,9 +445,23 @@ export function buildASRow(npd: NPDRecord): (string | number)[] {
 // ─────────────────────────────────────────────────────────────────────────────
 // Main export — ExcelJS loaded dynamically to avoid Next.js perf API conflict
 // ─────────────────────────────────────────────────────────────────────────────
+export function reportPrefix(npds: NPDRecord[]): string {
+  if (npds.length === 0) return "NPD"
+  const allEcn = npds.every(n => n.typeOfWork === "Engineering Change Notice (ECN)")
+  const allAs  = npds.every(n => n.typeOfWork?.includes("Alternative Supplier"))
+  const allNcd = npds.every(n => n.typeOfWork === "New Component Development (NCD)")
+  if (allEcn) return "ECN"
+  if (allAs)  return "AS"
+  if (allNcd) return "NCD"
+  // If all records have the same typeOfWork, use its module label
+  const firstType = npds[0].typeOfWork
+  if (npds.every(n => n.typeOfWork === firstType)) return moduleLabel(firstType)
+  return "NPD"
+}
+
 export async function downloadMISReport(
   npds: NPDRecord[],
-  filename = "NPD_Sourcing_Tracker_MIS.xlsx",
+  filename = `${reportPrefix(npds)}_Sourcing_Tracker_MIS.xlsx`,
   allNpds?: NPDRecord[],
 ) {
   // Dynamic import keeps exceljs out of the module-level bundle and avoids
@@ -454,7 +469,7 @@ export async function downloadMISReport(
   const ExcelJS = (await import("exceljs")).default
 
   const wb = new ExcelJS.Workbook()
-  wb.creator  = "Amber Enterprises — NPD Command"
+  wb.creator  = "Amber Enterprises — Sourcing Command"
   wb.created  = new Date()
   wb.modified = new Date()
 
@@ -530,12 +545,13 @@ export async function downloadMISReport(
   // Row 2 — report title
   sum.getRow(2).height = 22
   sum.mergeCells(2, 1, 2, W)
-  sc(sum.getCell(2, 1), { v: "NPD Sourcing MIS Report", bg: "FF1E293B", size: 11, color: "FF94A3B8", hAlign: "center" })
+  sc(sum.getCell(2, 1), { v: `${reportPrefix(npds)} Sourcing MIS Report`, bg: "FF1E293B", size: 11, color: "FF94A3B8", hAlign: "center" })
 
   // Row 3 — meta
   sum.getRow(3).height = 16
   sum.mergeCells(3, 1, 3, W)
-  sc(sum.getCell(3, 1), { v: `FY 2025–26   ·   Generated: ${todayStr()}   ·   ${npds.length} NPD records`, bg: "FFF1F5F9", size: 9, color: "FF64748B", hAlign: "center", italic: true })
+  const recLabel = npds.length === 1 ? `${reportPrefix(npds)} record` : `${reportPrefix(npds)} records`
+  sc(sum.getCell(3, 1), { v: `FY 2025–26   ·   Generated: ${todayStr()}   ·   ${npds.length} ${recLabel}`, bg: "FFF1F5F9", size: 9, color: "FF64748B", hAlign: "center", italic: true })
 
   // Row 4 — spacer
   sum.getRow(4).height = 10; fillRange(sum, 4, 1, 4, W, "FFFFFFFF")
@@ -550,7 +566,7 @@ export async function downloadMISReport(
   sum.getRow(6).height = 16; sum.getRow(7).height = 44; sum.getRow(8).height = 16; sum.getRow(9).height = 6
 
   const kpis = [
-    { c: 2,  label: "TOTAL RECORDS",  sub: "All NPDs",                    val: npds.length, bg: "FFF0F9FF", num: "FF0369A1" },
+    { c: 2,  label: "TOTAL RECORDS",  sub: `All ${reportPrefix(npds)}s`,   val: npds.length, bg: "FFF0F9FF", num: "FF0369A1" },
     { c: 6,  label: "ACTIVE",         sub: "In Progress",                 val: active,      bg: "FFF0FDF4", num: "FF15803D" },
     { c: 10, label: "GRADE A",        sub: "Priority Items",              val: gradeA,      bg: "FFF5F3FF", num: "FF6D28D9" },
     { c: 14, label: "OVERDUE",        sub: overdueAll > 0 ? "Needs Attention" : "All On Track",
@@ -616,7 +632,7 @@ export async function downloadMISReport(
   fillRange(sum, 18, 1, 18, W, "FFFFFFFF"); sum.getRow(18).height = 10
   sum.getRow(19).height = 14
   sum.mergeCells(19, 1, 19, W)
-  sc(sum.getCell(19, 1), { v: `Amber Enterprises India Limited  ·  NPD Sourcing Tracker MIS  ·  FY 2025–26  ·  ${todayStr()}`, bg: "FFF1F5F9", size: 8, color: "FF94A3B8", hAlign: "center", italic: true })
+  sc(sum.getCell(19, 1), { v: `Amber Enterprises India Limited  ·  ${reportPrefix(npds)} Sourcing Tracker MIS  ·  FY 2025–26  ·  ${todayStr()}`, bg: "FFF1F5F9", size: 8, color: "FF94A3B8", hAlign: "center", italic: true })
 
   // ══════════════════════════════════════════════════════════════════════════
   // Shared helper: builds a full MIS detail sheet for any set of NPD records
@@ -656,7 +672,7 @@ export async function downloadMISReport(
     det.mergeCells(2, 1, 2, N)
     const titleText = subtitle
       ? `${sheetName.toUpperCase()}  —  ${subtitle}`
-      : "NPD SOURCING TRACKER & MIS REPORT — FY 2025–26"
+      : `${reportPrefix(sheetNpds).toUpperCase()} SOURCING TRACKER & MIS REPORT — FY 2025–26`
     sc(det.getCell(2, 1), { v: titleText, bg: "FF1E293B", size: 11, color: "FF94A3B8", hAlign: "center" })
 
     // Row 3 — meta
